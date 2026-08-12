@@ -1,82 +1,189 @@
-import React from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Sparkles, Building2, LogIn, UserPlus, LogOut, LayoutDashboard } from 'lucide-react';
 
-function Navbar() {
-    const navigate = useNavigate();
-    // LocalStorage ውስጥ የተቀመጠ የተጠቃሚ መረጃ ካለ ያነባል
-    const user = JSON.parse(localStorage.getItem('user'));
+export default function Navbar() {
+  const location = useLocation();
+  const navigate = useNavigate();
 
-    const handleLogout = () => {
-        localStorage.clear();
-        navigate('/login');
-    };
+  const [user, setUser] = useState(null);
+  const [token, setToken] = useState(null);
 
-    return (
-        <nav className="bg-slate-900 border-b border-slate-800 px-6 py-4 flex justify-between items-center shadow-md sticky top-0 z-50">
-            {/* Logo */}
-            <h2 className="text-xl font-bold tracking-tight">
-                <Link to="/" className="text-white flex items-center gap-2 hover:opacity-90">
-                    <span className="text-blue-500 text-2xl">✦</span> AI JobMatch
-                </Link>
-            </h2>
+  // ገጹ Refresh ሲደረግ ወይም Route ሲቀየር የ Auth ሁኔታን መፈተሽ
+  useEffect(() => {
+    try {
+      const storedToken = localStorage.getItem('token');
+      const storedUser = localStorage.getItem('user');
 
-            {/* Navigation Links */}
-            <div className="flex items-center gap-6">
-                <Link to="/" className="text-slate-300 hover:text-white text-sm font-medium transition">
-                    Home
-                </Link>
-                <Link to="/jobs" className="text-slate-300 hover:text-white text-sm font-medium transition">
-                    Explore Jobs
-                </Link>
-                <Link to="/about" className="text-slate-300 hover:text-white text-sm font-medium transition">
-                    About
-                </Link>
-                <Link to="/contact" className="text-slate-300 hover:text-white text-sm font-medium transition">
-                    Contact
-                </Link>
+      if (storedToken && storedUser && storedUser !== 'undefined') {
+        setToken(storedToken);
+        setUser(JSON.parse(storedUser));
+      } else {
+        setToken(null);
+        setUser(null);
+      }
+    } catch (error) {
+      console.error("Error loading user state:", error);
+      setToken(null);
+      setUser(null);
+    }
+  }, [location]);
 
-                {/* Logged-in User Role Dashboard Links */}
-                {user ? (
-                    <>
-                        {user.role === 'job_seeker' && (
-                            <Link to="/seeker-dashboard" className="text-blue-400 hover:text-blue-300 text-sm font-semibold transition">
-                                My Dashboard
-                            </Link>
-                        )}
-                        {user.role === 'employer' && (
-                            <Link to="/employer-dashboard" className="text-blue-400 hover:text-blue-300 text-sm font-semibold transition">
-                                Employer Console
-                            </Link>
-                        )}
-                        {user.role === 'admin' && (
-                            <Link to="/admin-dashboard" className="text-purple-400 hover:text-purple-300 text-sm font-semibold transition">
-                                Admin Console
-                            </Link>
-                        )}
+  const handleLogout = () => {
+    localStorage.clear();
+    setUser(null);
+    setToken(null);
+    navigate('/login');
+  };
 
-                        <button
-                            onClick={handleLogout}
-                            className="bg-red-600/90 hover:bg-red-600 text-white text-sm font-semibold px-4 py-2 rounded-lg transition cursor-pointer"
-                        >
-                            Sign Out
-                        </button>
-                    </>
-                ) : (
-                    <div className="flex items-center gap-3">
-                        <Link to="/login" className="text-slate-300 hover:text-white text-sm font-medium transition">
-                            Sign In
-                        </Link>
-                        <Link
-                            to="/register"
-                            className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition shadow-sm"
-                        >
-                            Get Started
-                        </Link>
-                    </div>
-                )}
-            </div>
+  const isActive = (path) => location.pathname === path;
+
+  // የ Role ዓይነቶች ማረጋገጫ (ተለያዩ የስም አጻጻፎችን ይደግፋል)
+  const isSeeker = ['job_seeker', 'seeker', 'jobseeker', 'user'].includes(user?.role);
+  const isEmployer = ['employer', 'company', 'recruiter'].includes(user?.role);
+  const isAdmin = user?.role === 'admin';
+
+  // ተጠቃሚው ገብቷል የሚባለው Token እና User ሲኖር ብቻ ነው
+  const isAuthenticated = Boolean(token && user);
+
+  return (
+    <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-slate-200/80 shadow-xs transition-all">
+      <div className="w-full px-6 md:px-10 h-20 flex items-center justify-between">
+        
+        {/* BRAND LOGO */}
+        <Link to="/" className="flex items-center gap-3 group shrink-0">
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20 group-hover:scale-105 transition-transform duration-200">
+            <Sparkles className="w-5 h-5" />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-2xl font-black tracking-tight text-slate-900 group-hover:text-blue-600 transition-colors lowercase leading-none">
+              job <span className="text-blue-600">matching</span>
+            </span>
+            <span className="text-[10px] font-bold text-slate-400 tracking-wider uppercase mt-1">
+              AI Platform
+            </span>
+          </div>
+        </Link>
+
+        {/* NAVIGATION LINKS */}
+        <nav className="hidden md:flex items-center gap-7 ml-10 border-l border-slate-200/80 pl-8">
+          
+          <Link 
+            to="/" 
+            className={`relative py-1 text-sm font-bold tracking-wide transition-colors duration-200 group ${
+              isActive('/') ? 'text-blue-600' : 'text-slate-600 hover:text-blue-600'
+            }`}
+          >
+            Home
+            <span className={`absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 rounded-full transition-transform duration-300 origin-left ${
+              isActive('/') ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
+            }`} />
+          </Link>
+
+          <Link 
+            to="/jobs" 
+            className={`relative py-1 text-sm font-bold tracking-wide transition-colors duration-200 group ${
+              isActive('/jobs') || isActive('/explorejobs') ? 'text-blue-600' : 'text-slate-600 hover:text-blue-600'
+            }`}
+          >
+            Explore Jobs
+            <span className={`absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 rounded-full transition-transform duration-300 origin-left ${
+              isActive('/jobs') || isActive('/explorejobs') ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
+            }`} />
+          </Link>
+
+          <Link 
+            to="/companies" 
+            className={`relative py-1 text-sm font-bold tracking-wide transition-colors duration-200 flex items-center gap-1.5 group ${
+              isActive('/companies') ? 'text-blue-600' : 'text-slate-600 hover:text-blue-600'
+            }`}
+          >
+            <Building2 className="w-4 h-4 text-blue-500 group-hover:rotate-6 transition-transform" />
+            <span>Company</span>
+            <span className={`absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 rounded-full transition-transform duration-300 origin-left ${
+              isActive('/companies') ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
+            }`} />
+          </Link>
+
+          <Link 
+            to="/about" 
+            className={`relative py-1 text-sm font-bold tracking-wide transition-colors duration-200 group ${
+              isActive('/about') ? 'text-blue-600' : 'text-slate-600 hover:text-blue-600'
+            }`}
+          >
+            About
+            <span className={`absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 rounded-full transition-transform duration-300 origin-left ${
+              isActive('/about') ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
+            }`} />
+          </Link>
+
+          <Link 
+            to="/contact" 
+            className={`relative py-1 text-sm font-bold tracking-wide transition-colors duration-200 group ${
+              isActive('/contact') ? 'text-blue-600' : 'text-slate-600 hover:text-blue-600'
+            }`}
+          >
+            Contact
+            <span className={`absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 rounded-full transition-transform duration-300 origin-left ${
+              isActive('/contact') ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
+            }`} />
+          </Link>
+
+          {/* ተጠቃሚው Login ካደረገ የሚታዩ Dashboard Links */}
+          {isAuthenticated && isSeeker && (
+            <Link to="/seeker-dashboard" className="text-xs font-extrabold bg-blue-50 text-blue-600 px-3.5 py-1.5 rounded-full hover:bg-blue-100 transition flex items-center gap-1.5">
+              <LayoutDashboard className="w-3.5 h-3.5" />
+              <span>Seeker Console</span>
+            </Link>
+          )}
+
+          {isAuthenticated && isEmployer && (
+            <Link to="/employer-dashboard" className="text-xs font-extrabold bg-indigo-50 text-indigo-600 px-3.5 py-1.5 rounded-full hover:bg-indigo-100 transition flex items-center gap-1.5">
+              <LayoutDashboard className="w-3.5 h-3.5" />
+              <span>Employer Console</span>
+            </Link>
+          )}
+
+          {isAuthenticated && isAdmin && (
+            <Link to="/admin-dashboard" className="text-xs font-extrabold bg-purple-50 text-purple-600 px-3.5 py-1.5 rounded-full hover:bg-purple-100 transition flex items-center gap-1.5">
+              <LayoutDashboard className="w-3.5 h-3.5" />
+              <span>Admin Console</span>
+            </Link>
+          )}
         </nav>
-    );
-}
 
-export default Navbar;
+        {/* RIGHT BUTTONS */}
+        <div className="flex items-center gap-3 shrink-0 ml-auto">
+          {isAuthenticated ? (
+            <button
+              onClick={handleLogout}
+              className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200/80 text-sm font-bold px-4 py-2.5 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 flex items-center gap-2 cursor-pointer shadow-xs"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>Sign Out</span>
+            </button>
+          ) : (
+            <div className="flex items-center gap-3">
+              <Link
+                to="/login"
+                className="text-slate-700 hover:text-blue-600 bg-slate-100 hover:bg-slate-200/80 border border-slate-200/80 text-sm font-bold px-5 py-2.5 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 flex items-center gap-2"
+              >
+                <LogIn className="w-4 h-4 text-blue-600" />
+                <span>Log In</span>
+              </Link>
+
+              <Link
+                to="/register"
+                className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-6 py-2.5 rounded-xl transition-all duration-200 hover:scale-105 hover:shadow-lg hover:shadow-blue-500/25 active:scale-95 flex items-center gap-2 shadow-xs"
+              >
+                <UserPlus className="w-4 h-4" />
+                <span>Sign Up</span>
+              </Link>
+            </div>
+          )}
+        </div>
+
+      </div>
+    </header>
+  );
+}

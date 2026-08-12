@@ -1,1 +1,55 @@
 @import "tailwindcss";
+
+:root {
+  /* --- existing variables --- */
+  --bg-main: #F8FAFC;
+  --text-main: #0F172A;
+  --primary: #2563EB;
+  --secondary: #4F46E5;
+  --accent: #06B6D4;
+}
+
+body {
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* =========================================================
+   🆕 Hero Image Horizontal Slide & Pause Animation 
+   ========================================================= */
+
+@keyframes slideAndPause {
+  /* 1. ከግራ በኩል (100px ገባ ብሎ) በለስላሳ መታየት ይጀምራል */
+  0% {
+    transform: translateX(-100px);
+    opacity: 0.3;
+  }
+  
+  /* 2. ወደ ትክክለኛ ቦታው ገብቶ ሙሉ በሙሉ ይታያል */
+  15% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  
+  /* 3. ለረጅም ጊዜ (ከአኒሜሽኑ 85%) በቦታው ላይ ጸንቶ ይቆያል (ሳይጠፋ) */
+  85% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  
+  /* 4. አኒሜሽኑ ሲደግም ባዶ ቦታ ሳይተው በለስላሳ ወደ መጀመሪያው ይሸጋገራል */
+  100% {
+    transform: translateX(-100px);
+    opacity: 0.3;
+  }
+}
+
+/* 🔄 አኒሜሽኑን ያለማቋረጥ የሚደግመው ክላስ */
+.animate-slide-infinite {
+  /* 10 ሴኮንድ ይወስዳል፣ cubic-bezier ለስላሳ እንቅስቃሴ ይሰጠዋል፣ infinite ደግሞ ይደግመዋል */
+  animation: slideAndPause 10s cubic-bezier(0.25, 1, 0.5, 1) infinite;
+}

@@ -1,0 +1,658 @@
+import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { 
+  Sparkles, ShieldCheck, Cpu, User, Mail, Lock, KeyRound, 
+  ArrowRight, ArrowLeft, Eye, EyeOff, UserCheck, Building2, 
+  Check, Target
+} from 'lucide-react';
+
+import CvUploader from '../components/CvUploader';
+import Profile from '../components/Profile';
+
+const Register = () => {
+  const navigate = useNavigate();
+
+  // Step Control
+  const [step, setStep] = useState(1);
+  
+  const [formData, setFormData] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    password: '',
+    confirmPassword: '',
+    userType: '', // 'seeker' or 'employer'
+    preferredJob: '',
+    salaryExpectation: '',
+    careerGoals: ''
+  });
+
+  // UI States
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [errors, setErrors] = useState({});
+  const [isLoading, setIsLoading] = useState(false);
+
+  // OTP State
+  const [otp, setOtp] = useState(['', '', '', '', '', '']);
+  const [otpError, setOtpError] = useState('');
+  const [timer, setTimer] = useState(30);
+  const otpInputRefs = useRef([]);
+
+  // CV Analysis State
+  const [cvFile, setCvFile] = useState(null);
+  const [isParsing, setIsParsing] = useState(false);
+  const [parsedAnalysis, setParsedAnalysis] = useState(null);
+
+  // Dynamic step display calculation
+  const isEmployer = formData.userType === 'employer';
+  const totalSteps = isEmployer ? 4 : 5;
+  const displayStep = (isEmployer && step === 5) ? 4 : step;
+
+  // Optimized Timer Effect for Step 2
+  useEffect(() => {
+    if (step !== 2) return;
+
+    const interval = setInterval(() => {
+      setTimer((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [step]);
+
+  // Input Handlers
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+    if (errors[name]) setErrors((prev) => ({ ...prev, [name]: null }));
+  };
+
+  const validateForm = () => {
+    const newErrors = {};
+    if (!formData.firstName.trim()) newErrors.firstName = 'First Name is required';
+    if (!formData.lastName.trim()) newErrors.lastName = 'Last Name is required';
+    
+    if (!formData.email.trim()) {
+      newErrors.email = 'Email address is required';
+    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+      newErrors.email = 'Please enter a valid email address';
+    }
+
+    if (!formData.password) {
+      newErrors.password = 'Password is required';
+    } else if (formData.password.length < 6) {
+      newErrors.password = 'Password must be at least 6 characters';
+    }
+
+    if (formData.password !== formData.confirmPassword) {
+      newErrors.confirmPassword = 'Passwords do not match';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmitStep1 = (e) => {
+    e.preventDefault();
+    if (!validateForm()) return;
+    setIsLoading(true);
+
+    setTimeout(() => {
+      setIsLoading(false);
+      setStep(2);
+      setTimer(30);
+    }, 800);
+  };
+
+  const handleOtpChange = (text, index) => {
+    const value = text.slice(-1);
+    if (value && isNaN(Number(value))) return;
+
+    setOtp((prev) => {
+      const updated = [...prev];
+      updated[index] = value;
+      return updated;
+    });
+    setOtpError('');
+
+    if (value !== '' && index < 5) {
+      otpInputRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleOtpKeyDown = (e, index) => {
+    if (e.key === 'Backspace' && !otp[index] && index > 0) {
+      otpInputRefs.current[index - 1]?.focus();
+    } else if (e.key === 'ArrowLeft' && index > 0) {
+      otpInputRefs.current[index - 1]?.focus();
+    } else if (e.key === 'ArrowRight' && index < 5) {
+      otpInputRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleOtpPaste = (e) => {
+    e.preventDefault();
+    const pastedData = e.clipboardData.getData('text').trim();
+    if (/^\d{6}$/.test(pastedData)) {
+      setOtp(pastedData.split(''));
+      otpInputRefs.current[5]?.focus();
+    }
+  };
+
+  const handleResendOtp = () => {
+    setOtp(['', '', '', '', '', '']);
+    setOtpError('');
+    setTimer(30);
+    otpInputRefs.current[0]?.focus();
+  };
+
+  const handleVerifyOtp = (e) => {
+    e.preventDefault();
+    if (otp.join('').length < 6) {
+      setOtpError('Please enter a valid 6-digit OTP code.');
+      return;
+    }
+    setStep(3);
+  };
+
+  const handleRoleSubmit = () => {
+    if (!formData.userType) {
+      setErrors({ role: 'Please select account role to continue' });
+      return;
+    }
+    setErrors({});
+    if (formData.userType === 'seeker') {
+      setStep(4);
+    } else {
+      setStep(5);
+    }
+  };
+
+  const handleFinalFinish = () => {
+    const userData = {
+      fullName: `${formData.firstName} ${formData.lastName}`,
+      email: formData.email,
+      role: formData.userType,
+      preferredJob: formData.preferredJob,
+      salaryExpectation: formData.salaryExpectation,
+      careerGoals: formData.careerGoals,
+      cvAnalysis: parsedAnalysis || null,
+      registeredAt: new Date().toISOString()
+    };
+    localStorage.setItem('user', JSON.stringify(userData));
+
+    if (formData.userType === 'employer') {
+      navigate('/employer-dashboard');
+    } else {
+      navigate('/dashboard');
+    }
+  };
+
+  return (
+    <div className="min-h-screen w-full bg-slate-100/80 bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] [background-size:16px_16px] flex items-center justify-center p-4 md:p-8 font-sans">
+      <div className="w-full max-w-5xl grid md:grid-cols-12 rounded-3xl overflow-hidden shadow-2xl bg-white border border-slate-200/80">
+        
+        {/* Left Side Info Section */}
+        <div className="md:col-span-5 bg-gradient-to-br from-[#0A0F1D] via-[#0F172A] to-[#1E1B4B] p-8 flex flex-col justify-between relative overflow-hidden">
+          <div className="flex items-center justify-between z-10">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-blue-500/30">
+                <Sparkles className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h3 className="text-white font-bold text-sm leading-tight tracking-wide">
+                  SmartRecruit <span className="text-blue-400">AI</span>
+                </h3>
+                <p className="text-[10px] text-slate-400">Deep CV Inspector</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-800/80 border border-slate-700/80 text-[11px] text-slate-200 shadow-sm backdrop-blur-md">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Step {displayStep} of {totalSteps}</span>
+            </div>
+          </div>
+
+          <div className="my-8 z-10">
+            <h1 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight leading-snug mb-3">
+              {step === 1 && <>Create Account <br /><span className="bg-gradient-to-r from-blue-400 to-indigo-300 bg-clip-text text-transparent">Smart Registration</span></>}
+              {step === 2 && <>Verify Email <br /><span className="bg-gradient-to-r from-blue-400 to-indigo-300 bg-clip-text text-transparent">Security Check</span></>}
+              {step === 3 && <>Select Role <br /><span className="bg-gradient-to-r from-blue-400 to-indigo-300 bg-clip-text text-transparent">Account Type</span></>}
+              {step === 4 && <>AI CV Parsing <br /><span className="bg-gradient-to-r from-blue-400 to-indigo-300 bg-clip-text text-transparent">& Career Matching</span></>}
+              {step === 5 && <>Profile Ready <br /><span className="bg-gradient-to-r from-blue-400 to-indigo-300 bg-clip-text text-transparent">Account Overview</span></>}
+            </h1>
+            <p className="text-slate-400 text-xs leading-relaxed mb-6">
+              Our AI platform matches top talents with top companies automatically using dynamic CV parsing.
+            </p>
+
+            <div className="space-y-4">
+              <div className="flex items-start gap-3 p-2.5 rounded-xl bg-slate-800/40 border border-slate-700/50">
+                <div className="p-2 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20 shrink-0">
+                  <Cpu className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-semibold text-slate-100">AI Match Score & Skill Extraction</h4>
+                  <p className="text-[11px] text-slate-400">Scans CV text to score compatibility & list missing skills.</p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 p-2.5 rounded-xl bg-slate-800/40 border border-slate-700/50">
+                <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 shrink-0">
+                  <Target className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-semibold text-slate-100">Career Goals Alignment</h4>
+                  <p className="text-[11px] text-slate-400">Tailors job recommendations based on salary & title goals.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-slate-800/50 backdrop-blur-md p-3.5 rounded-2xl border border-slate-700/60 flex items-center gap-3 z-10">
+            <div className="w-10 h-10 rounded-full bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center font-bold text-emerald-400 text-xs shrink-0">
+              100%
+            </div>
+            <div>
+              <p className="text-[11px] text-slate-200 font-medium leading-snug">
+                "Instant parsing & high-precision skill verification active."
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Side Step Forms */}
+        <div className="md:col-span-7 bg-white p-6 md:p-8 flex flex-col justify-center relative overflow-y-auto max-h-[90vh]">
+          
+          {step === 1 && (
+            <>
+              <div className="mb-6">
+                <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Create Account</h2>
+                <p className="text-xs text-slate-500 mt-1">Enter your credentials to get started</p>
+              </div>
+
+              <form onSubmit={handleSubmitStep1} noValidate className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">First Name</label>
+                    <div className="relative flex items-center">
+                      <User className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none" />
+                      <input
+                        type="text"
+                        name="firstName"
+                        value={formData.firstName}
+                        onChange={handleChange}
+                        placeholder="First name"
+                        className={`w-full text-sm pl-10 pr-4 py-2.5 rounded-xl border bg-slate-50/50 text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all ${
+                          errors.firstName ? 'border-red-500 bg-red-50/30' : 'border-slate-200'
+                        }`}
+                      />
+                    </div>
+                    {errors.firstName && <p className="text-[10px] text-red-500 mt-1">{errors.firstName}</p>}
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">Last Name</label>
+                    <div className="relative flex items-center">
+                      <User className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none" />
+                      <input
+                        type="text"
+                        name="lastName"
+                        value={formData.lastName}
+                        onChange={handleChange}
+                        placeholder="Last name"
+                        className={`w-full text-sm pl-10 pr-4 py-2.5 rounded-xl border bg-slate-50/50 text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all ${
+                          errors.lastName ? 'border-red-500 bg-red-50/30' : 'border-slate-200'
+                        }`}
+                      />
+                    </div>
+                    {errors.lastName && <p className="text-[10px] text-red-500 mt-1">{errors.lastName}</p>}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">Email Address</label>
+                  <div className="relative flex items-center">
+                    <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none" />
+                    <input
+                      type="email"
+                      name="email"
+                      value={formData.email}
+                      onChange={handleChange}
+                      placeholder="name@example.com"
+                      className={`w-full text-sm pl-10 pr-4 py-2.5 rounded-xl border bg-slate-50/50 text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all ${
+                        errors.email ? 'border-red-500 bg-red-50/30' : 'border-slate-200'
+                      }`}
+                    />
+                  </div>
+                  {errors.email && <p className="text-[10px] text-red-500 mt-1">{errors.email}</p>}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">Password</label>
+                  <div className="relative flex items-center">
+                    <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none" />
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      name="password"
+                      value={formData.password}
+                      onChange={handleChange}
+                      placeholder="At least 6 characters"
+                      className={`w-full text-sm pl-10 pr-10 py-2.5 rounded-xl border bg-slate-50/50 text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all ${
+                        errors.password ? 'border-red-500 bg-red-50/30' : 'border-slate-200'
+                      }`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3.5 text-slate-400 hover:text-slate-600 transition"
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  {errors.password && <p className="text-[10px] text-red-500 mt-1">{errors.password}</p>}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">Confirm Password</label>
+                  <div className="relative flex items-center">
+                    <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none" />
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      name="confirmPassword"
+                      value={formData.confirmPassword}
+                      onChange={handleChange}
+                      placeholder="Repeat password"
+                      className={`w-full text-sm pl-10 pr-10 py-2.5 rounded-xl border bg-slate-50/50 text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all ${
+                        errors.confirmPassword ? 'border-red-500 bg-red-50/30' : 'border-slate-200'
+                      }`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-3.5 text-slate-400 hover:text-slate-600 transition"
+                    >
+                      {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  {errors.confirmPassword && <p className="text-[10px] text-red-500 mt-1">{errors.confirmPassword}</p>}
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl font-semibold text-xs flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-500/25 cursor-pointer mt-5 active:scale-[0.99]"
+                >
+                  {isLoading ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <span>Continue to Email Verification</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
+              </form>
+
+              <p className="mt-6 text-center text-xs text-slate-500">
+                Already have an account?{' '}
+                <Link to="/login" className="font-bold text-blue-600 hover:underline">
+                  Login
+                </Link>
+              </p>
+            </>
+          )}
+
+          {step === 2 && (
+            <div className="py-2">
+              <div className="text-center mb-6">
+                <div className="w-12 h-12 rounded-2xl bg-blue-600/10 text-blue-600 flex items-center justify-center mx-auto mb-3">
+                  <KeyRound className="w-6 h-6" />
+                </div>
+                <h2 className="text-2xl font-bold text-slate-900 mb-1">Verify Email Address</h2>
+                <p className="text-xs text-slate-500">
+                  Enter 6-digit code sent to <span className="font-semibold text-slate-800">{formData.email}</span>
+                </p>
+              </div>
+
+              {otpError && (
+                <div className="mb-4 p-3 bg-red-50 text-red-600 text-xs rounded-xl font-medium text-center border border-red-200">
+                  {otpError}
+                </div>
+              )}
+
+              <form onSubmit={handleVerifyOtp} className="space-y-6">
+                <div className="flex justify-center gap-2">
+                  {otp.map((digit, index) => (
+                    <input
+                      key={index}
+                      ref={(el) => (otpInputRefs.current[index] = el)}
+                      type="text"
+                      maxLength={1}
+                      value={digit}
+                      onChange={(e) => handleOtpChange(e.target.value, index)}
+                      onKeyDown={(e) => handleOtpKeyDown(e, index)}
+                      onPaste={handleOtpPaste}
+                      className="w-11 h-12 text-center text-lg font-bold border border-slate-300 rounded-xl bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all shadow-sm"
+                    />
+                  ))}
+                </div>
+
+                <div className="text-center">
+                  <p className="text-xs text-slate-500">
+                    {timer > 0 ? (
+                      <span>Resend code in <strong className="text-blue-600 font-semibold">{timer}s</strong></span>
+                    ) : (
+                      <button 
+                        type="button" 
+                        onClick={handleResendOtp} 
+                        className="text-blue-600 font-semibold hover:underline cursor-pointer"
+                      >
+                        Resend Code
+                      </button>
+                    )}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-3 pt-4 border-t border-slate-100">
+                  <button 
+                    type="button"
+                    onClick={() => setStep(1)}
+                    className="w-1/3 py-3 border-2 border-slate-200 hover:bg-slate-100 text-slate-700 font-semibold rounded-xl text-xs flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95"
+                  >
+                    <ArrowLeft className="w-4 h-4 text-slate-600" />
+                    <span>Back</span>
+                  </button>
+
+                  <button 
+                    type="submit" 
+                    className="w-2/3 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-xs flex items-center justify-center gap-2 transition shadow-lg shadow-blue-500/25 cursor-pointer active:scale-95"
+                  >
+                    <span>Verify Code</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {step === 3 && (
+            <div className="py-2">
+              <div className="mb-5">
+                <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Select Account Role</h2>
+                <p className="text-xs text-slate-500 mt-1">Choose how you plan to use SmartRecruit AI.</p>
+              </div>
+
+              {errors.role && (
+                <div className="mb-4 p-3 bg-red-50 text-red-600 text-xs rounded-xl font-medium text-center border border-red-200">
+                  {errors.role}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+                <div
+                  onClick={() => {
+                    setFormData((prev) => ({ ...prev, userType: 'seeker' }));
+                    setErrors({});
+                  }}
+                  className={`p-4 rounded-2xl border-2 cursor-pointer transition-all flex flex-col justify-between ${
+                    formData.userType === 'seeker'
+                      ? 'border-blue-600 bg-blue-50/40 shadow-md shadow-blue-500/10'
+                      : 'border-slate-200 bg-slate-50/50 hover:border-slate-300'
+                  }`}
+                >
+                  <div>
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${
+                      formData.userType === 'seeker' ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600'
+                    }`}>
+                      <UserCheck className="w-5 h-5" />
+                    </div>
+                    <h3 className="font-bold text-slate-900 text-sm mb-1">Job Seeker</h3>
+                    <p className="text-[11px] text-slate-500 leading-relaxed">
+                      I want to upload my CV, extract skills, and apply for AI-matched jobs.
+                    </p>
+                  </div>
+                  <div className="mt-4 flex items-center justify-between pt-2 border-t border-slate-200/60">
+                    <span className={`text-[11px] font-bold ${formData.userType === 'seeker' ? 'text-blue-600' : 'text-slate-400'}`}>
+                      {formData.userType === 'seeker' ? 'Selected' : 'Select'}
+                    </span>
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                      formData.userType === 'seeker' ? 'border-blue-600 bg-blue-600' : 'border-slate-300'
+                    }`}>
+                      {formData.userType === 'seeker' && <Check className="w-3 h-3 text-white" />}
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  onClick={() => {
+                    setFormData((prev) => ({ ...prev, userType: 'employer' }));
+                    setErrors({});
+                  }}
+                  className={`p-4 rounded-2xl border-2 cursor-pointer transition-all flex flex-col justify-between ${
+                    formData.userType === 'employer'
+                      ? 'border-blue-600 bg-blue-50/40 shadow-md shadow-blue-500/10'
+                      : 'border-slate-200 bg-slate-50/50 hover:border-slate-300'
+                  }`}
+                >
+                  <div>
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${
+                      formData.userType === 'employer' ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600'
+                    }`}>
+                      <Building2 className="w-5 h-5" />
+                    </div>
+                    <h3 className="font-bold text-slate-900 text-sm mb-1">Employer</h3>
+                    <p className="text-[11px] text-slate-500 leading-relaxed">
+                      I am hiring talent and want to post job vacancies and analyze applicant CVs.
+                    </p>
+                  </div>
+                  <div className="mt-4 flex items-center justify-between pt-2 border-t border-slate-200/60">
+                    <span className={`text-[11px] font-bold ${formData.userType === 'employer' ? 'text-blue-600' : 'text-slate-400'}`}>
+                      {formData.userType === 'employer' ? 'Selected' : 'Select'}
+                    </span>
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                      formData.userType === 'employer' ? 'border-blue-600 bg-blue-600' : 'border-slate-300'
+                    }`}>
+                      {formData.userType === 'employer' && <Check className="w-3 h-3 text-white" />}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 pt-4 border-t border-slate-100">
+                <button 
+                  type="button"
+                  onClick={() => setStep(2)}
+                  className="w-1/3 py-3 border-2 border-slate-200 hover:bg-slate-100 text-slate-700 font-semibold rounded-xl text-xs flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95"
+                >
+                  <ArrowLeft className="w-4 h-4 text-slate-600" />
+                  <span>Back</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleRoleSubmit}
+                  className="w-2/3 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold rounded-xl text-xs flex items-center justify-center gap-2 transition shadow-lg shadow-blue-500/25 cursor-pointer active:scale-95"
+                >
+                  <span>Continue</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 4: Render Independent CV Uploader Component */}
+          {step === 4 && (
+            <div>
+              <CvUploader
+                cvFile={cvFile}
+                setCvFile={setCvFile}
+                isParsing={isParsing}
+                setIsParsing={setIsParsing}
+                parsedAnalysis={parsedAnalysis}
+                setParsedAnalysis={setParsedAnalysis}
+                formData={formData}
+                handleChange={handleChange}
+              />
+
+              <div className="flex items-center gap-3 pt-4 border-t border-slate-100 mt-4">
+                <button
+                  type="button"
+                  onClick={() => setStep(3)}
+                  className="w-1/3 py-3 border-2 border-slate-200 hover:bg-slate-100 text-slate-700 font-semibold rounded-xl text-xs flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95"
+                >
+                  <ArrowLeft className="w-4 h-4 text-slate-600" />
+                  <span>Back</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setStep(5)}
+                  className="w-2/3 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold rounded-xl text-xs flex items-center justify-center gap-2 transition shadow-lg shadow-blue-500/25 cursor-pointer active:scale-95"
+                >
+                  <span>Review Profile</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 5: Render Profile Component */}
+          {step === 5 && (
+            <div className="space-y-4">
+              <Profile userData={formData} cvFile={cvFile} />
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setStep(formData.userType === 'employer' ? 3 : 4)}
+                  className="w-1/3 py-3 border-2 border-slate-200 hover:bg-slate-100 text-slate-700 font-semibold rounded-xl text-xs flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95"
+                >
+                  <ArrowLeft className="w-4 h-4 text-slate-600" />
+                  <span>Back</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleFinalFinish}
+                  className="w-2/3 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-semibold rounded-xl text-xs flex items-center justify-center gap-2 transition shadow-lg shadow-emerald-500/25 cursor-pointer active:scale-95"
+                >
+                  <span>Complete & Go to Dashboard</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Register;

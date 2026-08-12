@@ -1,122 +1,189 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { CheckCircle, Upload, X, FileText } from 'lucide-react';
+import React, { useState, useEffect } from "react";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
+import { CheckCircle, Building, MapPin, Briefcase, DollarSign, Calendar, ArrowLeft, LogIn, Send } from "lucide-react";
+import api from "../api/axiosConfig";
+import { useAuth } from "../context/AuthContext";
 
-const JobDetails = ({ job }) => {
+const JobDetails = () => {
+  const { id } = useParams();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const location = useLocation();
+  const { user, isAuthenticated } = useAuth();
 
-  const [showApplyModal, setShowApplyModal] = useState(false);
-  const [cvFile, setCvFile] = useState(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isApplied, setIsApplied] = useState(false);
+  const [job, setJob] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // 🟢 Login አድርጎ ሲመለስ Modal በቀጥታ እንዲከፈት ማድረጊያ
+  // 1. Fetch Job Details
   useEffect(() => {
-    const user = localStorage.getItem('user');
-    // ከ Login ገጽ የተመለሰ ከሆነና User ካለ በራሱ Modal ይከፍታል
-    if (user && searchParams.get('autoApply') === 'true') {
-      setShowApplyModal(true);
+    const fetchJobDetails = async () => {
+      try {
+        setLoading(true);
+        const response = await api.get(`/jobs/${id}`);
+        setJob(response.data);
+      } catch (err) {
+        console.error("Error fetching job details:", err);
+        setError("የስራ ዝርዝሩን መጫን አልተቻለም።");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (id) {
+      fetchJobDetails();
     }
-  }, [searchParams]);
+  }, [id]);
 
-  // 🟢 Quick Apply Button Click Handler
-  const handleQuickApply = () => {
-    const user = localStorage.getItem('user');
-
-    if (!user) {
-      // 1. User ከሌለ ወደ Login ይመራዋል (autoApply=true በመጨመር)
-      navigate('/login?redirect=apply');
-      return;
+  // 2. Click Logic for "Login to Apply" / "Apply Now"
+  const handleApplyAction = () => {
+    if (!isAuthenticated) {
+      // Login ካላደረገ -> ወደ Login ገጽ ይወስደዋል (የነበረበትን path በ state ይይዛል)
+      navigate("/login", { state: { from: location.pathname } });
+    } else {
+      // Login ካደረገ -> ቀጥታ ወደ CV Upload ገጽ ይወስደዋል
+      navigate(`/upload-cv?jobId=${id}`);
     }
-
-    // 2. User ካለ Modal ይከፈታል
-    setShowApplyModal(true);
   };
 
-  const handleSubmitApplication = (e) => {
-    e.preventDefault();
-    if (!cvFile) return;
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center min-h-[60vh]">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
 
-    setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
-      setShowApplyModal(false);
-      setIsApplied(true);
-    }, 1200);
-  };
+  if (error || !job) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 py-12 text-center">
+        <p className="text-red-500 mb-4">{error || "ስራው አልተገኘም።"}</p>
+        <button 
+          onClick={() => navigate("/jobs")}
+          className="inline-flex items-center gap-2 text-blue-600 hover:underline"
+        >
+          <ArrowLeft size={16} /> ወደ Explore Jobs ተመለስ
+        </button>
+      </div>
+    );
+  }
 
   return (
-    <div className="p-6">
-      {!isApplied ? (
-        <button
-          onClick={handleQuickApply}
-          className="px-6 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-semibold shadow-sm transition"
-        >
-          Quick Apply
-        </button>
-      ) : (
-        <div className="flex items-center gap-2 text-emerald-600 bg-emerald-50 px-4 py-2 rounded-xl text-xs font-medium border border-emerald-200">
-          <CheckCircle className="w-4 h-4" />
-          Application Submitted Successfully!
-        </div>
-      )}
+    <div className="max-w-5xl mx-auto px-4 py-8">
+      {/* Back Button */}
+      <button 
+        onClick={() => navigate(-1)}
+        className="flex items-center gap-2 text-slate-600 hover:text-slate-900 mb-6 transition-colors"
+      >
+        <ArrowLeft size={18} /> ወደ ኋላ ተመለስ
+      </button>
 
-      {/* CV Upload Modal */}
-      {showApplyModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl relative">
+      {/* Header Section */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 md:p-8 mb-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div>
+            <span className="inline-block px-3 py-1 bg-blue-50 text-blue-700 text-xs font-semibold rounded-full mb-3">
+              {job.type || "Full-time"}
+            </span>
+            <h1 className="text-2xl md:text-3xl font-bold text-slate-900">{job.title}</h1>
+            <p className="text-slate-600 flex items-center gap-2 mt-2">
+              <Building size={16} /> {job.companyName || "Company Name"}
+            </p>
+          </div>
+
+          {/* Dynamic Action Button (Login to Apply / Apply Now) */}
+          <div>
             <button
-              onClick={() => setShowApplyModal(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"
+              onClick={handleApplyAction}
+              className={`w-full md:w-auto px-8 py-3.5 font-medium rounded-lg shadow-sm transition-all flex items-center justify-center gap-2 ${
+                !isAuthenticated 
+                  ? "bg-amber-600 hover:bg-amber-700 text-white"  // Login ላላደረገ
+                  : "bg-blue-600 hover:bg-blue-700 text-white"    // Login ላደረገ
+              }`}
             >
-              <X className="w-5 h-5" />
+              {!isAuthenticated ? (
+                <>
+                  <LogIn size={18} /> Login to Apply
+                </>
+              ) : (
+                <>
+                  <Send size={18} /> Apply Now
+                </>
+              )}
             </button>
-
-            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-1">
-              Apply for Job
-            </h3>
-            <p className="text-xs text-slate-500 mb-4">Upload your resume/CV to submit your application.</p>
-
-            <form onSubmit={handleSubmitApplication} className="space-y-4">
-              <div className="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-6 text-center hover:border-slate-500 transition cursor-pointer relative">
-                <input
-                  type="file"
-                  accept=".pdf,.doc,.docx"
-                  onChange={(e) => setCvFile(e.target.files[0])}
-                  className="absolute inset-0 opacity-0 cursor-pointer"
-                  required
-                />
-                <div className="flex flex-col items-center justify-center gap-2">
-                  <Upload className="w-6 h-6 text-slate-500" />
-                  {cvFile ? (
-                    <p className="text-xs text-emerald-600 font-medium">{cvFile.name}</p>
-                  ) : (
-                    <p className="text-xs text-slate-600">Click or drag CV here to upload</p>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowApplyModal(false)}
-                  className="flex-1 py-2 rounded-xl border border-slate-200 text-xs font-medium"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting || !cvFile}
-                  className="flex-1 py-2 rounded-xl bg-slate-800 text-white text-xs font-medium disabled:opacity-50"
-                >
-                  {isSubmitting ? 'Submitting...' : 'Send Application'}
-                </button>
-              </div>
-            </form>
           </div>
         </div>
-      )}
+
+        {/* Quick Meta Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8 pt-6 border-t border-slate-100 text-sm">
+          <div className="flex items-center gap-2 text-slate-600">
+            <MapPin size={18} className="text-slate-400" />
+            <span>{job.location || "N/A"}</span>
+          </div>
+          <div className="flex items-center gap-2 text-slate-600">
+            <Briefcase size={18} className="text-slate-400" />
+            <span>{job.site || "On-site"}</span>
+          </div>
+          <div className="flex items-center gap-2 text-slate-600">
+            <DollarSign size={18} className="text-slate-400" />
+            <span>{job.salary ? `${job.salary} ETB` : "Negotiable"}</span>
+          </div>
+          <div className="flex items-center gap-2 text-slate-600">
+            <Calendar size={18} className="text-slate-400" />
+            <span>{job.deadline ? `Deadline: ${job.deadline}` : "Open"}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content & Requirements (በግራ በኩል የሚታይ) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-6">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+            <h2 className="text-lg font-semibold text-slate-900 mb-4">Job Overview</h2>
+            <p className="text-slate-600 leading-relaxed whitespace-pre-line">
+              {job.description || "ምንም መግለጫ አልተካተተም።"}
+            </p>
+          </div>
+
+          {job.requirements && (
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+              <h2 className="text-lg font-semibold text-slate-900 mb-4">Requirements</h2>
+              <ul className="space-y-2 text-slate-600">
+                {Array.isArray(job.requirements) ? (
+                  job.requirements.map((req, index) => (
+                    <li key={index} className="flex items-start gap-2">
+                      <CheckCircle size={16} className="text-green-500 mt-1 shrink-0" />
+                      <span>{req}</span>
+                    </li>
+                  ))
+                ) : (
+                  <p className="whitespace-pre-line">{job.requirements}</p>
+                )}
+              </ul>
+            </div>
+          )}
+        </div>
+
+        {/* Summary Side Panel (በቀኝ በኩል የሚታይ) */}
+        <div className="space-y-6">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+            <h3 className="text-base font-semibold text-slate-900 mb-4">Job Summary</h3>
+            <div className="space-y-3 text-sm text-slate-600">
+              <div className="flex justify-between border-b pb-2">
+                <span>Sector</span>
+                <span className="font-medium text-slate-900">{job.sector || "Tech"}</span>
+              </div>
+              <div className="flex justify-between border-b pb-2">
+                <span>Experience</span>
+                <span className="font-medium text-slate-900">{job.experienceLevel || "Mid Level"}</span>
+              </div>
+              <div className="flex justify-between pb-2">
+                <span>Education</span>
+                <span className="font-medium text-slate-900">{job.educationLevel || "Bachelor's"}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

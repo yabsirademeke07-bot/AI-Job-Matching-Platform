@@ -1,0 +1,90 @@
+/* Register.css - Modern Slate Gray Theme */
+
+/* Main Page Container Background */
+.register-page-container {
+  min-height: 100vh;
+  background-color: #f1f5f9 !important; /* Cool Slate Gray Background */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1rem;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  position: relative;
+}
+
+/* Glassmorphic Container Card */
+.register-card-container {
+  width: 100%;
+  max-width: 64rem;
+  background-color: #ffffff !important;
+  border: 1px solid #e2e8f0;
+  border-radius: 1.5rem;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
+  overflow: hidden;
+  position: relative;
+  z-index: 10;
+}
+
+/* Left Showcase Panel - Slate Gray Theme */
+.register-left-panel {
+  background: linear-gradient(135deg, #1e293b 0%, #334155 100%) !important;
+  color: #ffffff;
+  padding: 2.5rem 2rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+/* Right Form Interactive Section */
+.register-right-panel {
+  padding: 2.5rem 2rem;
+  background-color: #ffffff !important;
+}
+
+/* Styled Input Fields */
+.register-input {
+  width: 100%;
+  padding-top: 0.625rem;
+  padding-bottom: 0.625rem;
+  border-radius: 0.75rem;
+  border: 1px solid #cbd5e1 !important;
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+  font-size: 0.875rem;
+  outline: none;
+  transition: all 0.2s ease-in-out;
+}
+
+.register-input:focus {
+  border-color: #475569 !important;
+  box-shadow: 0 0 0 3px rgba(71, 85, 105, 0.15);
+  background-color: #ffffff !important;
+}
+
+/* Fix Browser Auto-fill Yellow/Dark Background */
+input:-webkit-autofill,
+input:-webkit-autofill:hover, 
+input:-webkit-autofill:focus, 
+input:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0 30px #f8fafc inset !important;
+    -webkit-text-fill-color: #0f172a !important;
+    transition: background-color 5000s ease-in-out 0s;
+}
+
+/* Primary Submit Button */
+.register-btn-primary {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  background: linear-gradient(135deg, #334155 0%, #1e293b 100%) !important;
+  color: #ffffff !important;
+  font-weight: 600;
+  font-size: 0.875rem;
+  transition: all 0.2s;
+  box-shadow: 0 4px 6px -1px rgba(51, 65, 85, 0.2);
+}
+
+.register-btn-primary:hover {
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%) !important;
+  transform: translateY(-1px);
+}

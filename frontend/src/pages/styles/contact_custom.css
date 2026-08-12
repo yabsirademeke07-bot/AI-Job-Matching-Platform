@@ -1,0 +1,26 @@
+/* Custom Animations for AI Platform Floating Visuals */
+@keyframes heroFloat {
+  0% {
+    transform: translateY(0px) scale(1);
+  }
+  50% {
+    transform: translateY(-8px) scale(1.02);
+  }
+  100% {
+    transform: translateY(0px) scale(1);
+  }
+}
+
+.hero-floating-img {
+  animation: heroFloat 6s ease-in-out infinite;
+}
+
+/* Custom Scrollbar for Textarea */
+textarea::-webkit-scrollbar {
+  width: 6px;
+}
+
+textarea::-webkit-scrollbar-thumb {
+  background-color: #334155;
+  border-radius: 4px;
+}
