@@ -1,13 +1,11 @@
-import React, { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import {
   Building2, Briefcase, Users, UserCheck, Calendar, CheckCircle2,
-  XCircle, Search, Plus, Edit3, Trash2, PauseCircle, PlayCircle,
-  Download, Moon, Sun, Sparkles, Eye, X, Loader2
+  XCircle, Search, Edit3, Trash2, PauseCircle, PlayCircle,
+  Download, Sparkles, Eye, X, LayoutDashboard, Settings,
+  Bell, UserRoundCheck, Target, FilePlus2
 } from 'lucide-react';
-
-const API_BASE = 'http://localhost:5000/api';
 
 const EmployerDashboard = () => {
   const navigate = useNavigate();
@@ -17,76 +15,44 @@ const EmployerDashboard = () => {
     const savedUser = localStorage.getItem('user');
     return savedUser ? JSON.parse(savedUser) : null;
   });
-  const token = localStorage.getItem('token');
 
   // 2. Dashboard UI States
   const [activeTab, setActiveTab] = useState('overview');
-  const [darkMode, setDarkMode] = useState(false);
+  const [darkMode] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [loading, setLoading] = useState(false);
 
   // 3. Company Profile State
   const [companyProfile, setCompanyProfile] = useState({
-    name: user?.full_name || 'TechSolve Ethiopia',
-    industry: 'Software & AI Development',
-    location: 'Addis Ababa, Ethiopia',
-    website: 'https://techsolve.et'
+    name: '',
+    industry: '',
+    location: '',
+    website: ''
   });
   const [editCompanyMode, setEditCompanyMode] = useState(false);
-
-  // Mock Fallback Data
-  const defaultJobs = [
-    {
-      id: 1,
-      title: 'Senior React Developer',
-      category: 'Software Development',
-      location: 'Addis Ababa',
-      salary: '$1,500/mo',
-      status: 'active',
-      applicantsCount: 12,
-      created_at: '2026-07-28'
-    },
-    {
-      id: 2,
-      title: 'Full Stack Node.js Engineer',
-      category: 'Software Development',
-      location: 'Remote',
-      salary: 'Negotiable',
-      status: 'active',
-      applicantsCount: 8,
-      created_at: '2026-08-01'
-    }
-  ];
-
-  const defaultApplicants = [
-    {
-      id: 'app-1',
-      name: 'Kaleab Tadesse',
-      email: 'kaleab@example.com',
-      jobTitle: 'Senior React Developer',
-      matchScore: 94,
-      status: 'Shortlisted',
-      skills: ['React', 'JavaScript', 'Tailwind CSS', 'Redux'],
-      resumeUrl: '/uploads/kaleab_cv.pdf'
-    },
-    {
-      id: 'app-2',
-      name: 'Bethlehem Worku',
-      email: 'bethlehem@example.com',
-      jobTitle: 'Full Stack Node.js Engineer',
-      matchScore: 82,
-      status: 'Under Review',
-      skills: ['Node.js', 'Express', 'React', 'MongoDB'],
-      resumeUrl: '/uploads/bethlehem_cv.pdf'
-    }
-  ];
+  const [companySaving, setCompanySaving] = useState(false);
+  const [publishMessage, setPublishMessage] = useState('');
 
   // 4. Job Posts State
-  const [jobs, setJobs] = useState([]);
+  const [jobs, setJobs] = useState(() => JSON.parse(localStorage.getItem('employerJobs') || '[]'));
 
   // 5. Applicants State
-  const [applicants, setApplicants] = useState([]);
+  const [applicants, setApplicants] = useState(() => JSON.parse(localStorage.getItem('employerApplications') || '[]'));
+  const [interviews] = useState(() => JSON.parse(localStorage.getItem('employerInterviews') || '[]'));
+
+  const navigationItems = [
+    { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+    { id: 'company', label: 'Company Profile', icon: Building2 },
+    { id: 'post', label: 'Post Job', icon: FilePlus2 },
+    { id: 'jobs', label: 'My Jobs', icon: Briefcase },
+    { id: 'applications', label: 'Applications', icon: Users },
+    { id: 'matching', label: 'AI Candidate Matching', icon: Target },
+    { id: 'shortlisted', label: 'Shortlisted', icon: UserRoundCheck },
+    { id: 'interviews', label: 'Interviews', icon: Calendar },
+    { id: 'hired', label: 'Hired Candidates', icon: CheckCircle2 },
+    { id: 'notifications', label: 'Notifications', icon: Bell },
+    { id: 'settings', label: 'Settings', icon: Settings }
+  ];
 
   // Modals State
   const [selectedApplicant, setSelectedApplicant] = useState(null);
@@ -99,106 +65,92 @@ const EmployerDashboard = () => {
     location: '',
     salary: '',
     required_skills: '',
-    description: ''
+    description: '',
+    job_type: 'full-time',
+    work_mode: 'hybrid',
+    required_education: 'any',
+    years_of_experience_min: 0,
+    application_deadline: ''
   });
 
   // Headers config for Auth
-  const authHeader = {
-    headers: { Authorization: `Bearer ${token}` }
-  };
-
-  // Protect Route & Initial Data Fetching
   useEffect(() => {
-    if (!token || !user || (user.role && user.role.toLowerCase() !== 'employer')) {
-      // Fallback local testing behavior or navigate
-      // navigate('/login?redirect=employer-dashboard');
-    }
+    localStorage.setItem('employerJobs', JSON.stringify(jobs));
+  }, [jobs]);
 
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const [jobsRes, applicantsRes] = await Promise.all([
-          axios.get(`${API_BASE}/jobs/employer`, authHeader).catch(() => ({ data: null })),
-          axios.get(`${API_BASE}/applicants/employer`, authHeader).catch(() => ({ data: null }))
-        ]);
-
-        if (jobsRes.data && jobsRes.data.length > 0) {
-          setJobs(jobsRes.data);
-        } else {
-          setJobs(defaultJobs);
-        }
-
-        if (applicantsRes.data && applicantsRes.data.length > 0) {
-          setApplicants(applicantsRes.data);
-        } else {
-          setApplicants(defaultApplicants);
-        }
-      } catch (err) {
-        console.error("Data fetching error:", err);
-        setJobs(defaultJobs);
-        setApplicants(defaultApplicants);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [token, user]);
+  useEffect(() => {
+    localStorage.setItem('employerApplications', JSON.stringify(applicants));
+  }, [applicants]);
 
   // Dynamic Dashboard Stats
   const stats = {
-    totalJobs: jobs.length,
+    activeJobs: jobs.filter(a => a.status === 'published').length,
     totalApplicants: applicants.length,
-    interviews: applicants.filter(a => a.status === 'Interview Scheduled').length,
-    hired: applicants.filter(a => a.status === 'Hired').length
+    shortlisted: applicants.filter(a => ['shortlisted', 'Shortlisted'].includes(a.status)).length,
+    interviews: interviews.length,
+    hired: applicants.filter(a => ['hired', 'Hired'].includes(a.status)).length
   };
 
   // Job Actions
   const toggleJobStatus = async (id) => {
     const jobToUpdate = jobs.find(j => j.id === id);
     if (!jobToUpdate) return;
-    const newStatus = jobToUpdate.status === 'active' ? 'paused' : 'active';
+    const newStatus = jobToUpdate.status === 'published' ? 'closed' : 'published';
     
     setJobs(jobs.map(j => j.id === id ? { ...j, status: newStatus } : j));
-
-    try {
-      await axios.patch(`${API_BASE}/jobs/${id}/status`, { status: newStatus }, authHeader);
-    } catch {
-      // Retain optimistic state update
-    }
   };
 
   const deleteJob = async (id) => {
     if (window.confirm('Are you sure you want to delete this job post?')) {
       setJobs(jobs.filter(j => j.id !== id));
-      try {
-        await axios.delete(`${API_BASE}/jobs/${id}`, authHeader);
-      } catch {
-        // Retain local update
-      }
     }
+  };
+
+  const saveCompanyProfile = async () => {
+    setCompanySaving(true);
+    const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+    localStorage.setItem('user', JSON.stringify({ ...storedUser, companyInfo: { ...storedUser.companyInfo, company_name: companyProfile.name, industry: companyProfile.industry, location: companyProfile.location, website: companyProfile.website } }));
+    setEditCompanyMode(false);
+    setCompanySaving(false);
   };
 
   // Create Job Handler
   const handleCreateJob = async (e) => {
     e.preventDefault();
-    const fallbackJob = {
-      id: Date.now(),
-      ...newJob,
-      status: 'active',
-      applicantsCount: 0,
-      created_at: new Date().toISOString().split('T')[0]
-    };
-
     try {
-      const res = await axios.post(`${API_BASE}/jobs`, newJob, authHeader);
-      const createdJob = res.data || fallbackJob;
+      const today = new Date().toISOString().slice(0, 10);
+      const createdJob = {
+        ...newJob,
+        id: Date.now(),
+        company: companyProfile.name || user?.full_name || 'Employer company',
+        locationValue: newJob.location,
+        type: newJob.job_type,
+        workplace: newJob.work_mode,
+        experienceLevel: `${newJob.years_of_experience_min || 0}+ years`,
+        education: newJob.required_education,
+        sector: newJob.category,
+        tags: newJob.required_skills.split(',').map((skill) => skill.trim()).filter(Boolean),
+        shortDescription: newJob.description,
+        fullDescription: newJob.description,
+        deadline: newJob.application_deadline || 'No deadline',
+        deadlineDate: newJob.application_deadline || '',
+        postedAt: 'Just now',
+        postedHoursAgo: 0,
+        priorityRank: 1,
+        salaryValue: Number.parseInt(String(newJob.salary).replace(/[^0-9]/g, ''), 10) || 0,
+        aiMatchScore: null,
+        status: 'published',
+        created_at: today,
+        applicantsCount: 0
+      };
       setJobs([createdJob, ...jobs]);
-    } catch {
-      setJobs([fallbackJob, ...jobs]);
+      setPublishMessage('Job published successfully. It is now visible in Explore Jobs.');
+      window.setTimeout(() => setPublishMessage(''), 4000);
+    } catch (error) {
+      console.error('Unable to create local job:', error);
     } finally {
       setShowJobModal(false);
-      setNewJob({ title: '', category: 'Software Development', location: '', salary: '', required_skills: '', description: '' });
+      setNewJob({ title: '', category: 'Software Development', location: '', salary: '', required_skills: '', description: '', job_type: 'full-time', work_mode: 'hybrid', required_education: 'any', years_of_experience_min: 0, application_deadline: '' });
     }
   };
 
@@ -209,11 +161,6 @@ const EmployerDashboard = () => {
       setSelectedApplicant({ ...selectedApplicant, status: newStatus });
     }
 
-    try {
-      await axios.patch(`${API_BASE}/applicants/${applicantId}`, { status: newStatus }, authHeader);
-    } catch (err) {
-      console.warn("Backend update skipped or failed:", err);
-    }
   };
 
   // Safe Filter Applicants
@@ -226,37 +173,20 @@ const EmployerDashboard = () => {
 
   return (
     <div className={`min-h-screen transition-colors duration-300 font-sans ${darkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'}`}>
-      
-      {/* Top Header */}
-      <header className={`sticky top-0 z-30 border-b backdrop-blur-md ${darkMode ? 'bg-slate-900/80 border-slate-800' : 'bg-white/80 border-slate-200'}`}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-sm">
-              ES
-            </div>
-            <div>
-              <span className="font-bold text-base block leading-tight">EthioSolve AI</span>
-              <span className="text-[10px] text-blue-500 font-semibold tracking-wider uppercase">Employer Portal</span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <button onClick={() => setDarkMode(!darkMode)} className="p-2 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-800 transition">
-              {darkMode ? <Sun className="w-5 h-5 text-amber-400" /> : <Moon className="w-5 h-5 text-slate-600" />}
-            </button>
-
-            <button 
-              onClick={() => setShowJobModal(true)}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition shadow-sm cursor-pointer"
-            >
-              <Plus className="w-4 h-4" /> Post New Job
-            </button>
-          </div>
-        </div>
-      </header>
 
       {/* Main Container */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="mb-6 flex flex-col gap-4 rounded-3xl border border-blue-100 bg-blue-50/70 p-6 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-blue-600">Employer workspace</p>
+            <h1 className="mt-1 text-2xl font-black text-slate-900">Welcome to your Employer Dashboard</h1>
+            <p className="mt-1 text-sm text-slate-600">Manage your company, publish jobs, and connect with the right candidates.</p>
+          </div>
+          <button type="button" onClick={() => setShowJobModal(true)} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700">
+            <FilePlus2 className="h-4 w-4" /> Post New Job
+          </button>
+        </div>
+        {publishMessage && <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{publishMessage}</div>}
         
         {/* Company Banner & Profile Edit */}
         <div className={`p-6 rounded-3xl border shadow-sm ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
@@ -291,19 +221,21 @@ const EmployerDashboard = () => {
             </div>
 
             <button 
-              onClick={() => setEditCompanyMode(!editCompanyMode)}
+              onClick={() => editCompanyMode ? saveCompanyProfile() : setEditCompanyMode(true)}
+              disabled={companySaving}
               className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-semibold flex items-center gap-1.5 hover:bg-slate-200 transition cursor-pointer"
             >
-              <Edit3 className="w-3.5 h-3.5" /> {editCompanyMode ? 'Save Profile' : 'Edit Company Info'}
+              <Edit3 className="w-3.5 h-3.5" /> {companySaving ? 'Saving...' : editCompanyMode ? 'Save Profile' : 'Edit Company Info'}
             </button>
           </div>
         </div>
 
         {/* Dynamic Analytics Stats */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
           {[
-            { label: 'Total Jobs Posted', value: stats.totalJobs, icon: Briefcase, color: 'text-blue-500', bg: 'bg-blue-50 dark:bg-blue-950/40' },
+            { label: 'Active Jobs', value: stats.activeJobs, icon: Briefcase, color: 'text-blue-500', bg: 'bg-blue-50 dark:bg-blue-950/40' },
             { label: 'Total Applicants', value: stats.totalApplicants, icon: Users, color: 'text-emerald-500', bg: 'bg-emerald-50 dark:bg-emerald-950/40' },
+            { label: 'Shortlisted Candidates', value: stats.shortlisted, icon: CheckCircle2, color: 'text-cyan-500', bg: 'bg-cyan-50 dark:bg-cyan-950/40' },
             { label: 'Interviews Scheduled', value: stats.interviews, icon: Calendar, color: 'text-purple-500', bg: 'bg-purple-50 dark:bg-purple-950/40' },
             { label: 'Hired Candidates', value: stats.hired, icon: UserCheck, color: 'text-amber-500', bg: 'bg-amber-50 dark:bg-amber-950/40' }
           ].map((s, idx) => (
@@ -320,35 +252,33 @@ const EmployerDashboard = () => {
         </div>
 
         {/* Dashboard Navigation Tabs */}
-        <div className="flex gap-2 p-1 bg-slate-200/60 dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 w-fit">
-          {[
-            { id: 'overview', label: 'AI Applicants Ranking' },
-            { id: 'jobs', label: 'Manage Job Listings' }
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`px-5 py-2.5 text-xs font-bold rounded-xl transition cursor-pointer ${
-                activeTab === tab.id 
-                  ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm' 
-                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        <div className="grid gap-8 lg:grid-cols-[240px_minmax(0,1fr)]">
+          <aside className="h-fit rounded-2xl border border-slate-200 bg-white p-3 shadow-sm lg:sticky lg:top-28">
+            <div className="mb-3 border-b border-slate-100 px-3 pb-3">
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-blue-600">Employer workspace</p>
+              <p className="mt-1 truncate text-sm font-bold text-slate-900">{companyProfile.name || user?.full_name || 'Your company'}</p>
+            </div>
+            <nav className="space-y-1">
+              {navigationItems.map(({ id, label, icon: Icon }) => (
+                <button key={id} type="button" onClick={() => {
+                  if (id === 'company') navigate('/employee-profile-completion');
+                  else if (id === 'post') setShowJobModal(true);
+                  else setActiveTab(id);
+                }} className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition ${activeTab === id ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}>
+                  <Icon className="h-4 w-4" />
+                  <span>{label}</span>
+                </button>
+              ))}
+            </nav>
+          </aside>
 
-        {/* Loading Indicator */}
-        {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-          </div>
-        ) : (
-          <>
+          <section className="min-w-0 space-y-8">
+
+        <>
             {/* TAB 1: AI APPLICANTS RANKING TABLE */}
-            {activeTab === 'overview' && (
+            {['overview', 'applications', 'matching', 'shortlisted', 'hired'].includes(activeTab) && (
               <div className={`p-6 rounded-3xl border shadow-sm space-y-4 ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+                <h3 className="text-lg font-bold">{activeTab === 'overview' ? 'Recent Applications' : activeTab === 'matching' ? 'AI Candidate Matching' : activeTab === 'shortlisted' ? 'Shortlisted Candidates' : activeTab === 'hired' ? 'Hired Candidates' : 'Applications'}</h3>
                 
                 {/* Search & Filter Header */}
                 <div className="flex flex-col sm:flex-row gap-3 justify-between">
@@ -393,8 +323,8 @@ const EmployerDashboard = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
-                      {filteredApplicants.length > 0 ? (
-                        filteredApplicants.map(applicant => (
+                      {(activeTab === 'shortlisted' ? filteredApplicants.filter((applicant) => ['shortlisted', 'Shortlisted'].includes(applicant.status)) : activeTab === 'hired' ? filteredApplicants.filter((applicant) => ['hired', 'Hired'].includes(applicant.status)) : filteredApplicants).length > 0 ? (
+                        (activeTab === 'shortlisted' ? filteredApplicants.filter((applicant) => ['shortlisted', 'Shortlisted'].includes(applicant.status)) : activeTab === 'hired' ? filteredApplicants.filter((applicant) => ['hired', 'Hired'].includes(applicant.status)) : filteredApplicants).map(applicant => (
                           <tr key={applicant.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition">
                             <td className="py-3.5 px-4 font-semibold">
                               <div>
@@ -466,7 +396,7 @@ const EmployerDashboard = () => {
                         <h4 className="font-bold text-base">{job.title}</h4>
                         <p className="text-xs text-slate-400 mt-0.5">{job.category} • {job.location}</p>
                       </div>
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${job.status === 'active' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${job.status === 'published' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
                         {job.status?.toUpperCase() || 'ACTIVE'}
                       </span>
                     </div>
@@ -481,8 +411,8 @@ const EmployerDashboard = () => {
                         onClick={() => toggleJobStatus(job.id)}
                         className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-semibold flex items-center gap-1 cursor-pointer"
                       >
-                        {job.status === 'active' ? <PauseCircle className="w-4 h-4" /> : <PlayCircle className="w-4 h-4" />}
-                        {job.status === 'active' ? 'Pause' : 'Activate'}
+                        {job.status === 'published' ? <PauseCircle className="w-4 h-4" /> : <PlayCircle className="w-4 h-4" />}
+                        {job.status === 'published' ? 'Close' : 'Publish'}
                       </button>
                       <button 
                         onClick={() => deleteJob(job.id)}
@@ -495,8 +425,25 @@ const EmployerDashboard = () => {
                 ))}
               </div>
             )}
+
+            {activeTab === 'interviews' && (
+              <div className={`rounded-3xl border p-6 shadow-sm ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+                <h3 className="text-lg font-bold">Upcoming Interviews</h3>
+                {interviews.length === 0 ? <p className="py-8 text-center text-sm text-slate-400">No interviews scheduled.</p> : <div className="mt-4 space-y-3">{interviews.map((interview) => <div key={interview.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 p-4"><div><p className="font-semibold">{interview.candidate_name}</p><p className="text-xs text-slate-500">{interview.job_title}</p></div><div className="text-right text-xs text-slate-500"><p>{new Date(interview.scheduled_at).toLocaleString()}</p><p className="capitalize">{interview.interview_status}</p></div></div>)}</div>}
+              </div>
+            )}
+
+            {!['overview', 'jobs', 'applications', 'matching', 'shortlisted', 'hired', 'interviews'].includes(activeTab) && (
+              <div className={`p-10 rounded-3xl border text-center shadow-sm ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+                <h3 className="text-lg font-bold">{activeTab === 'applications' ? 'Applications' : activeTab === 'matching' ? 'AI Candidate Matching' : activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}</h3>
+                <p className="mt-2 text-sm text-slate-500">This view will show your real employer data when records are available.</p>
+                {activeTab === 'applications' && applicants.length === 0 && <p className="mt-4 text-sm font-semibold text-slate-400">No applications yet.</p>}
+                {activeTab === 'interviews' && <p className="mt-4 text-sm font-semibold text-slate-400">No interviews scheduled.</p>}
+              </div>
+            )}
           </>
-        )}
+          </section>
+        </div>
 
       </div>
 
@@ -536,7 +483,7 @@ const EmployerDashboard = () => {
 
             <div className="flex gap-2 pt-4 border-t border-slate-100 dark:border-slate-800">
               <a 
-                href={`${API_BASE}${selectedApplicant.resumeUrl}`} 
+                href={selectedApplicant.resumeUrl || '#'} 
                 target="_blank" 
                 rel="noreferrer"
                 className="flex-1 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-semibold flex items-center justify-center gap-1.5"
@@ -611,6 +558,39 @@ const EmployerDashboard = () => {
                     className="w-full p-2.5 rounded-xl border dark:bg-slate-800 dark:border-slate-700 outline-none"
                   />
                 </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-semibold block mb-1">Employment Type</label>
+                  <select value={newJob.job_type} onChange={(e) => setNewJob({ ...newJob, job_type: e.target.value })} className="w-full p-2.5 rounded-xl border dark:bg-slate-800 dark:border-slate-700 outline-none">
+                    <option value="full-time">Full-time</option><option value="part-time">Part-time</option><option value="contract">Contract</option><option value="internship">Internship</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="font-semibold block mb-1">Work Mode</label>
+                  <select value={newJob.work_mode} onChange={(e) => setNewJob({ ...newJob, work_mode: e.target.value })} className="w-full p-2.5 rounded-xl border dark:bg-slate-800 dark:border-slate-700 outline-none">
+                    <option value="on-site">On-site</option><option value="remote">Remote</option><option value="hybrid">Hybrid</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-semibold block mb-1">Education</label>
+                  <select value={newJob.required_education} onChange={(e) => setNewJob({ ...newJob, required_education: e.target.value })} className="w-full p-2.5 rounded-xl border dark:bg-slate-800 dark:border-slate-700 outline-none">
+                    <option value="any">Any</option><option value="high-school">High school</option><option value="associate">Associate</option><option value="bachelor">Bachelor</option><option value="master">Master</option><option value="phd">PhD</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="font-semibold block mb-1">Minimum Experience (years)</label>
+                  <input type="number" min="0" value={newJob.years_of_experience_min} onChange={(e) => setNewJob({ ...newJob, years_of_experience_min: e.target.value })} className="w-full p-2.5 rounded-xl border dark:bg-slate-800 dark:border-slate-700 outline-none" />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-semibold block mb-1">Application Deadline</label>
+                <input type="date" value={newJob.application_deadline} onChange={(e) => setNewJob({ ...newJob, application_deadline: e.target.value })} className="w-full p-2.5 rounded-xl border dark:bg-slate-800 dark:border-slate-700 outline-none" />
               </div>
 
               <div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   Sparkles, CheckCircle2, AlertCircle, Briefcase, 
   MapPin, Building2, ArrowRight, ArrowLeft, ExternalLink, 
@@ -8,6 +8,8 @@ import {
 
 const MatchResults = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const sourceJob = location.state?.sourceJob;
   const [filterScore, setFilterScore] = useState('all'); 
   const [searchQuery, setSearchQuery] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -119,6 +121,7 @@ const MatchResults = () => {
               </span>
             </h1>
             <p className="text-xs text-slate-500 mt-1">
+              {sourceJob ? `Matching your CV against ${sourceJob.title} at ${sourceJob.companyName || sourceJob.company}. ` : ""}
               Matched against extracted skills from your CV: <strong className="text-slate-800">{userCvData.detectedSkills.join(', ')}</strong>
             </p>
           </div>

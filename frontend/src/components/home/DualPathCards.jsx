@@ -1,4 +1,4 @@
-import React from 'react';
+ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { UserCheck, Building2, ArrowRight, Sparkles, CheckCircle } from 'lucide-react';
 
@@ -68,8 +68,7 @@ export default function DualPathCards() {
               </button>
             </div>
           </div>
-
-          {/* Path 2: For Employers */}
+ {/* Path 2: For Employers */}
           <div className="bg-white rounded-3xl p-8 border border-slate-200/90 shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col justify-between group hover:-translate-y-1">
             <div className="space-y-6">
               <div className="flex items-center justify-between">

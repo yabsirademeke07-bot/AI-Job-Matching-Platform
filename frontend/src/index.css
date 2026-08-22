@@ -1,55 +1,514 @@
 @import "tailwindcss";
 
 :root {
-  /* --- existing variables --- */
-  --bg-main: #F8FAFC;
-  --text-main: #0F172A;
-  --primary: #2563EB;
-  --secondary: #4F46E5;
-  --accent: #06B6D4;
+  color-scheme: light;
+
+  --background: #ffffff;
+  --brand-primary: #56a2d8;
+  --brand-primary-hover: #4692c8;
+  --brand-deep: #2b73a4;
+  --brand-soft: #f0f7fc;
+  --brand-soft-hover: #eaf4fb;
+  --brand-border: #d0e5f5;
+  --primary: var(--brand-primary);
+  --primary-hover: var(--brand-primary-hover);
+  --heading: #0f172a;
+  --body: #475569;
+  --accent-bg: var(--brand-soft);
+  --accent-soft: var(--brand-soft-hover);
+  --accent-text: var(--brand-deep);
+  --border: var(--brand-border);
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  margin: 0;
+  background: var(--background);
+}
+
+html {
+  font-size: 17px;
+  scroll-behavior: smooth;
 }
 
 body {
-  background-color: var(--bg-main);
-  color: var(--text-main);
-  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  margin: 0;
-  padding: 0;
+  font-family: Inter, "Segoe UI", sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--body);
+  background: #ffffff;
+  text-rendering: optimizeLegibility;
+}
+
+* {
   box-sizing: border-box;
 }
 
-/* =========================================================
-   🆕 Hero Image Horizontal Slide & Pause Animation 
-   ========================================================= */
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
 
-@keyframes slideAndPause {
-  /* 1. ከግራ በኩል (100px ገባ ብሎ) በለስላሳ መታየት ይጀምራል */
-  0% {
-    transform: translateX(-100px);
-    opacity: 0.3;
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 3px solid rgba(86, 162, 216, 0.45);
+  outline-offset: 3px;
+}
+
+::selection {
+  color: #ffffff;
+  background: var(--primary);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #b8d8ed;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--accent-bg);
+}
+
+@layer utilities {
+  .brand-gradient {
+    background-image: linear-gradient(135deg, var(--brand-primary), var(--brand-deep));
   }
-  
-  /* 2. ወደ ትክክለኛ ቦታው ገብቶ ሙሉ በሙሉ ይታያል */
-  15% {
-    transform: translateX(0);
-    opacity: 1;
+
+  .brand-gradient-soft {
+    background-image: linear-gradient(135deg, #f0f7fc, #eaf4fb);
   }
-  
-  /* 3. ለረጅም ጊዜ (ከአኒሜሽኑ 85%) በቦታው ላይ ጸንቶ ይቆያል (ሳይጠፋ) */
-  85% {
-    transform: translateX(0);
-    opacity: 1;
+
+  .brand-text {
+    color: var(--brand-deep);
   }
-  
-  /* 4. አኒሜሽኑ ሲደግም ባዶ ቦታ ሳይተው በለስላሳ ወደ መጀመሪያው ይሸጋገራል */
-  100% {
-    transform: translateX(-100px);
-    opacity: 0.3;
+
+  .brand-border {
+    border-color: var(--brand-border);
+  }
+
+  .hover-brand-border:hover {
+    border-color: var(--brand-primary);
+  }
+
+  .hover-brand-bg:hover {
+    background-color: var(--brand-primary) !important;
+  }
+
+  .group:hover .group-hover-brand-text {
+    color: var(--brand-deep) !important;
+  }
+
+  .brand-soft {
+    background-color: var(--brand-soft);
+  }
+
+  .text-brand {
+    color: var(--brand-deep);
+  }
+
+  .glass {
+    @apply border border-[#D0E5F5] bg-white shadow-sm;
+  }
+
+  .section-heading {
+    @apply text-2xl font-semibold tracking-tight text-[#0F172A] sm:text-3xl;
+  }
+
+  .primary-button {
+    @apply rounded-xl px-5 py-3 font-bold text-white transition-colors;
+    background-color: var(--brand-primary);
+  }
+
+  .brand-button {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 font-bold text-white shadow-sm transition-all duration-200;
+    background-color: var(--brand-primary);
+  }
+
+  .brand-button:hover {
+    background-color: var(--brand-primary-hover);
+    box-shadow: 0 8px 18px rgb(86 162 216 / 22%);
+    transform: translateY(-1px);
+  }
+
+  .brand-button:active {
+    transform: translateY(0);
+  }
+
+  .accent-card {
+    @apply rounded-2xl;
+    border: 1px solid var(--brand-border);
+    background-color: var(--brand-soft);
   }
 }
 
-/* 🔄 አኒሜሽኑን ያለማቋረጥ የሚደግመው ክላስ */
-.animate-slide-infinite {
-  /* 10 ሴኮንድ ይወስዳል፣ cubic-bezier ለስላሳ እንቅስቃሴ ይሰጠዋል፣ infinite ደግሞ ይደግመዋል */
-  animation: slideAndPause 10s cubic-bezier(0.25, 1, 0.5, 1) infinite;
+/* Public brand layer: shared by Tailwind-based pages and components. */
+.brand-bg {
+  background-color: var(--brand-primary) !important;
+}
+
+.brand-bg-soft {
+  background-color: var(--brand-soft) !important;
+}
+
+.contact-input {
+  display: block;
+  width: 100%;
+  margin-top: 0.5rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.75rem;
+  background: #ffffff;
+  padding: 0.75rem 0.875rem;
+  color: var(--heading);
+  font-size: 0.875rem;
+  font-weight: 600;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.contact-input:focus {
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 3px rgb(86 162 216 / 16%);
+}
+
+/* The contact page keeps only the direct support panel beside the form. */
+main > section:nth-of-type(3) aside > div:last-child {
+  display: none;
+}
+
+.group:hover .group-hover\:brand-bg {
+  background-color: var(--brand-primary) !important;
+}
+
+/* Keep existing public Tailwind markup on the same brand without editing every page. */
+.bg-blue-600,
+.bg-indigo-600,
+.bg-indigo-700,
+.bg-indigo-800,
+.bg-purple-600,
+.bg-purple-700,
+.bg-fuchsia-600 {
+  background-color: var(--brand-primary) !important;
+}
+
+.hover\:bg-blue-700:hover,
+.hover\:bg-indigo-700:hover,
+.hover\:bg-indigo-800:hover,
+.hover\:bg-purple-700:hover,
+.hover\:bg-fuchsia-700:hover {
+  background-color: var(--brand-deep) !important;
+}
+
+.text-blue-600,
+.text-blue-700,
+.text-indigo-500,
+.text-indigo-600,
+.text-indigo-700,
+.text-purple-500,
+.text-purple-600,
+.text-purple-700,
+.text-fuchsia-500,
+.text-fuchsia-600,
+.text-fuchsia-700 {
+  color: var(--brand-deep) !important;
+}
+
+.bg-blue-50,
+.bg-indigo-50,
+.bg-purple-50,
+.bg-fuchsia-50 {
+  background-color: var(--brand-soft) !important;
+}
+
+.hover\:bg-blue-100:hover,
+.hover\:bg-indigo-100:hover,
+.hover\:bg-purple-100:hover,
+.hover\:bg-fuchsia-100:hover {
+  background-color: var(--brand-soft-hover) !important;
+}
+
+.border-blue-100,
+.border-blue-200,
+.border-indigo-100,
+.border-indigo-200,
+.border-purple-100,
+.border-purple-200,
+.border-fuchsia-100,
+.border-fuchsia-200 {
+  border-color: var(--brand-border) !important;
+}
+
+.brand-how-it-works .brand-cta {
+  background-image: linear-gradient(135deg, var(--brand-primary), var(--brand-deep)) !important;
+}
+
+.brand-how-it-works .bg-indigo-50\/70,
+.brand-how-it-works .bg-indigo-50\/80,
+.brand-how-it-works .bg-purple-50\/70,
+.brand-how-it-works .bg-violet-50,
+.brand-how-it-works .bg-fuchsia-50 {
+  background-color: var(--brand-soft) !important;
+}
+
+.brand-how-it-works .bg-gradient-to-br {
+  background-image: linear-gradient(135deg, var(--brand-soft), #ffffff) !important;
+}
+
+.brand-how-it-works .from-indigo-500,
+.brand-how-it-works .from-indigo-600,
+.brand-how-it-works .from-indigo-700,
+.brand-how-it-works .from-purple-500,
+.brand-how-it-works .from-fuchsia-500 {
+  --tw-gradient-from: var(--brand-primary) !important;
+}
+
+.brand-how-it-works .to-blue-500,
+.brand-how-it-works .to-indigo-600,
+.brand-how-it-works .to-purple-600,
+.brand-how-it-works .to-purple-900,
+.brand-how-it-works .to-fuchsia-600 {
+  --tw-gradient-to: var(--brand-deep) !important;
+}
+
+.brand-how-it-works .text-indigo-400,
+.brand-how-it-works .text-indigo-500,
+.brand-how-it-works .text-indigo-600,
+.brand-how-it-works .text-indigo-700,
+.brand-how-it-works .text-purple-600,
+.brand-how-it-works .text-fuchsia-600,
+.brand-how-it-works .text-violet-600 {
+  color: var(--brand-deep) !important;
+}
+
+.from-blue-600,
+.from-indigo-500,
+.from-indigo-600,
+.from-purple-500,
+.from-fuchsia-500 {
+  --tw-gradient-from: var(--brand-primary) var(--tw-gradient-from-position) !important;
+  --tw-gradient-to: rgb(86 162 216 / 0) var(--tw-gradient-to-position) !important;
+}
+
+.to-blue-700,
+.to-indigo-500,
+.to-indigo-600,
+.to-purple-600,
+.to-purple-900,
+.to-fuchsia-600 {
+  --tw-gradient-to: var(--brand-deep) var(--tw-gradient-to-position) !important;
+}
+
+/* Keep compact labels readable across every page. */
+[class~="text-xs"],
+[class*="text-xs"] {
+  font-size: 0.8125rem !important;
+  line-height: 1.45 !important;
+}
+
+[class~="text-sm"],
+[class*="text-sm"] {
+  font-size: 0.9375rem !important;
+  line-height: 1.5 !important;
+}
+
+[class*="text-[10px]"],
+[class*="text-[11px]"] {
+  font-size: 0.8125rem !important;
+  line-height: 1.45 !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.profile-readable .text-xs {
+  font-size: 0.875rem !important;
+  line-height: 1.4;
+}
+
+.profile-readable .text-sm {
+  font-size: 1rem !important;
+  line-height: 1.5;
+}
+
+/* Keep information-entry screens crisp and consistent with the brand. */
+.information-page {
+  color: var(--heading);
+  background-color: #ffffff;
+}
+
+.information-page input,
+.information-page textarea,
+.information-page select {
+  background-color: #ffffff !important;
+  color: var(--heading) !important;
+  border-color: var(--brand-border) !important;
+  font-size: 1rem;
+  opacity: 1;
+}
+
+.information-page input::placeholder,
+.information-page textarea::placeholder {
+  color: #64748b !important;
+  opacity: 1;
+}
+
+.information-page input:focus,
+.information-page textarea:focus,
+.information-page select:focus {
+  border-color: var(--brand-primary) !important;
+  box-shadow: 0 0 0 3px rgb(86 162 216 / 16%);
+}
+
+.information-page .bg-slate-50,
+.information-page .bg-slate-50\/50,
+.information-page .bg-slate-50\/90,
+.information-page .bg-slate-100 {
+  background-color: #ffffff !important;
+}
+
+/* Dashboard surfaces use the same brand tokens as the public auth and onboarding UI. */
+.seeker-dashboard {
+  --dashboard-surface: #ffffff;
+  --dashboard-sidebar: #0f172a;
+  --dashboard-ink: var(--brand-deep);
+  --dashboard-accent: var(--brand-primary);
+  --dashboard-soft: var(--brand-soft);
+}
+
+.seeker-dashboard .dashboard-sidebar {
+  width: 16rem;
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border-right: 1px solid var(--brand-border);
+}
+
+.seeker-dashboard .dashboard-sidebar-header {
+  background: #ffffff;
+  border-color: var(--brand-border) !important;
+}
+
+.seeker-dashboard .dashboard-sidebar nav {
+  background: #ffffff;
+}
+
+.seeker-dashboard .dashboard-nav-item {
+  min-height: 44px;
+  color: #0f172a !important;
+}
+
+.seeker-dashboard .dashboard-nav-item:hover {
+  background: var(--brand-soft) !important;
+  color: var(--brand-deep) !important;
+}
+
+.seeker-dashboard .dashboard-nav-item svg {
+  color: #334155;
+}
+
+.seeker-dashboard .dashboard-nav-item:hover svg {
+  color: var(--brand-primary);
+}
+
+.seeker-dashboard .dashboard-nav-item.dashboard-active {
+  background: var(--brand-primary) !important;
+  color: #ffffff !important;
+  box-shadow: 0 8px 20px rgb(86 162 216 / 25%) !important;
+}
+
+.seeker-dashboard .dashboard-nav-item.dashboard-active svg {
+  color: #ffffff !important;
+}
+
+.seeker-dashboard .dashboard-sidebar .border-slate-800 {
+  border-color: var(--brand-border) !important;
+}
+
+.seeker-dashboard .dashboard-sidebar .text-slate-400 {
+  color: #334155 !important;
+}
+
+.seeker-dashboard .dashboard-sidebar .text-white {
+  color: #0f172a !important;
+}
+
+.seeker-dashboard .dashboard-active,
+.seeker-dashboard .bg-blue-600,
+.seeker-dashboard .bg-indigo-600 {
+  background-color: var(--dashboard-accent) !important;
+}
+
+.seeker-dashboard .dashboard-hero {
+  background-image: linear-gradient(135deg, var(--brand-deep), var(--brand-primary)) !important;
+}
+
+.seeker-dashboard .text-blue-600,
+.seeker-dashboard .text-blue-700,
+.seeker-dashboard .text-indigo-500,
+.seeker-dashboard .text-indigo-600,
+.seeker-dashboard .text-indigo-700 {
+  color: var(--dashboard-ink) !important;
+}
+
+.seeker-dashboard .bg-blue-50,
+.seeker-dashboard .bg-indigo-50,
+.seeker-dashboard .bg-blue-100,
+.seeker-dashboard .bg-indigo-100 {
+  background-color: var(--dashboard-soft) !important;
+}
+
+.seeker-dashboard .hover\:bg-blue-700:hover,
+.seeker-dashboard .hover\:bg-blue-500:hover {
+  background-color: var(--brand-deep) !important;
+}
+
+.seeker-module-page .bg-slate-900 {
+  background-color: #ffffff !important;
+  color: var(--heading) !important;
+  border-color: var(--brand-border) !important;
+}
+
+.seeker-module-page .bg-slate-950,
+.seeker-module-page .bg-slate-800 {
+  background-color: var(--brand-soft) !important;
+}
+
+.seeker-module-page .text-white {
+  color: var(--heading) !important;
+}
+
+.seeker-module-page .bg-sky-500 {
+  background-color: var(--brand-primary) !important;
+}
+
+.seeker-module-page .hover\:bg-sky-400:hover {
+  background-color: var(--brand-deep) !important;
+}
+
+.seeker-module-page .text-sky-300,
+.seeker-module-page .text-sky-400 {
+  color: var(--brand-deep) !important;
+}
+
+.seeker-module-page .border-slate-700,
+.seeker-module-page .border-slate-800 {
+  border-color: var(--brand-border) !important;
 }

@@ -1,20 +1,72 @@
-import React from 'react';
+import { useState } from "react";
+import Sidebar from "../components/about/Sidebar";
+import Header from "../components/about/Header";
+import AboutView from "../components/about/AboutView";
 
-function About() {
-    return (
-        <div className="max-w-4xl mx-auto py-12 px-6">
-            <h1 className="text-3xl font-bold text-slate-900 mb-4">About AI JobMatch</h1>
-            <p className="text-slate-600 text-lg leading-relaxed mb-6">
-                AI JobMatch is an asynchronous web-based job matching platform designed to bridge the gap between skilled software developers and prospective employers.
-            </p>
-            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
-                <h2 className="text-xl font-semibold text-slate-800">Our Core Mission</h2>
-                <p className="text-slate-600">
-                    Traditional recruitment often relies on manual resume screening, leading to delays and mismatched expectations. By leveraging intelligent skill algorithms, we automate candidate recommendation and streamline early recruitment stages.
-                </p>
-            </div>
+const navItems = [
+  { id: "overview", label: "Overview" },
+  { id: "experience", label: "Experience" },
+  { id: "skills", label: "Skills" },
+  { id: "projects", label: "Projects" },
+  { id: "services", label: "Services" },
+  { id: "jobs", label: "Jobs" },
+  { id: "prompts", label: "Prompt Studio" },
+  { id: "contact", label: "Contact" },
+];
+
+export default function AboutPage({ initialSection = "services" }) {
+  const [activeTab, setActiveTab] = useState(initialSection);
+  const [lang, setLang] = useState("en");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const handleSectionChange = (section) => {
+    setActiveTab(section);
+    setSidebarOpen(false);
+  };
+
+  return (
+    <div className="min-h-screen bg-[#F8FAFC] text-slate-900">
+      <Header
+        currentSection={activeTab}
+        onSelectSection={handleSectionChange}
+        lang={lang}
+        onToggleLang={setLang}
+        accent="indigo"
+        onOpenMobileMenu={() => setSidebarOpen(true)}
+        onOpenResumeModal={() => {}}
+      />
+
+      <div className="w-full pt-6 pb-12">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-0">
+          <div className="flex items-start gap-6">
+            {sidebarOpen && (
+              <button
+                type="button"
+                aria-label="Close navigation menu"
+                onClick={() => setSidebarOpen(false)}
+                className="fixed inset-0 z-40 bg-slate-950/40 md:hidden"
+              />
+            )}
+
+            <aside className={`${sidebarOpen ? "fixed left-4 top-20 z-50 block w-72" : "hidden"} shrink-0 self-start md:sticky md:top-24 md:block md:w-64`}>
+              <Sidebar
+                navItems={navItems}
+                currentSection={activeTab}
+                setCurrentSection={handleSectionChange}
+                language={lang}
+                sidebarOpen={sidebarOpen}
+                onCloseSidebar={() => setSidebarOpen(false)}
+              />
+            </aside>
+
+            <main className="min-w-0 flex-1">
+              <AboutView activeTab={activeTab} onNavigate={setActiveTab} lang={lang} />
+            </main>
+          </div>
         </div>
-    );
+      </div>
+    </div>
+  );
 }
 
-export default About;
+

@@ -107,11 +107,11 @@ export default function Companies() {
   });
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-800 pt-8 pb-20">
+    <div className="min-h-screen bg-brand-soft text-slate-800 pt-8 pb-20">
       <div className="max-w-7xl mx-auto px-6">
         
         {/* Header / Hero Banner */}
-        <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-3xl p-8 md:p-12 text-white shadow-xl shadow-blue-500/10 mb-12 relative overflow-hidden">
+        <div className="brand-gradient rounded-3xl p-8 md:p-12 text-white shadow-xl shadow-[#56a2d8]/20 mb-12 relative overflow-hidden">
           {/* Subtle Background Particle Shapes */}
           <div className="absolute -right-10 -bottom-10 w-64 h-64 bg-white/10 rounded-full blur-2xl pointer-events-none" />
           <div className="absolute top-0 right-1/3 w-32 h-32 bg-blue-400/20 rounded-full blur-xl pointer-events-none" />
@@ -155,7 +155,7 @@ export default function Companies() {
                 onClick={() => setSelectedIndustry(industry)}
                 className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
                   selectedIndustry === industry 
-                    ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' 
+                    ? 'brand-bg text-white shadow-md shadow-[#56a2d8]/20' 
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200/80'
                 }`}
               >
@@ -167,53 +167,53 @@ export default function Companies() {
         </div>
 
         {/* Company Cards Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {filteredCompanies.map((company) => (
             <div 
               key={company.id}
-              className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all duration-300 flex flex-col justify-between group relative overflow-hidden"
+              className="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-7 shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all duration-300 flex flex-col justify-between group relative overflow-hidden min-h-[430px]"
             >
               {/* AI Match Score Badge (Top Right) */}
-              <div className="absolute top-4 right-4 bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-1 rounded-full text-xs font-extrabold flex items-center gap-1.5 shadow-sm">
+              <div className="absolute top-5 right-5 bg-emerald-50 border border-emerald-200 text-emerald-700 px-2.5 py-1.5 rounded-full text-[11px] font-extrabold flex items-center gap-1.5 shadow-sm">
                 <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
                 <span>{company.matchScore}% Match</span>
               </div>
 
               <div>
                 {/* Company Logo Header */}
-                <div className="flex items-center gap-4 mb-4">
-                  <div className={`w-14 h-14 rounded-2xl ${company.logoBg} text-white flex items-center justify-center text-xl font-black shadow-md shrink-0`}>
+                <div className="flex items-start gap-4 mb-5 pr-24">
+                  <div className={`w-16 h-16 rounded-2xl ${company.logoBg} text-white flex items-center justify-center text-2xl font-black shadow-md ring-4 ring-slate-50 shrink-0`}>
                     {company.name.charAt(0)}
                   </div>
                   
-                  <div className="pr-16">
+                  <div className="min-w-0 pt-1">
                     <div className="flex items-center gap-1.5">
-                      <h3 className="text-base font-bold text-slate-900 group-hover:text-blue-600 transition-colors line-clamp-1">
+                      <h3 className="text-xl font-extrabold text-slate-900 group-hover-brand-text transition-colors line-clamp-2 leading-tight">
                         {company.name}
                       </h3>
                       {company.verified && (
-                        <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" title="Verified Employer" />
+                        <CheckCircle2 className="w-4 h-4 brand-text shrink-0" title="Verified Employer" />
                       )}
                     </div>
                     
-                    <span className="text-xs text-slate-500 font-medium block">
+                    <span className="text-sm text-slate-600 font-semibold block mt-1 line-clamp-2 leading-5">
                       {company.industry}
                     </span>
                   </div>
                 </div>
 
                 {/* Description */}
-                <p className="text-slate-600 text-xs leading-relaxed mb-6 line-clamp-3">
+                <p className="text-base text-slate-700 leading-7 mb-7 line-clamp-3">
                   {company.description}
                 </p>
 
                 {/* Company Meta Info */}
-                <div className="grid grid-cols-2 gap-3 pt-4 border-t border-slate-100 text-xs text-slate-500 font-medium mb-6">
-                  <div className="flex items-center gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-4 border-t border-slate-100 text-sm text-slate-600 font-semibold mb-6">
+                  <div className="flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2.5 min-w-0">
                     <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
                     <span className="truncate">{company.location}</span>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2.5 min-w-0">
                     <Users className="w-4 h-4 text-slate-400 shrink-0" />
                     <span>{company.employees}</span>
                   </div>
@@ -221,15 +221,15 @@ export default function Companies() {
               </div>
 
               {/* Action Footer */}
-              <div className="flex items-center justify-between pt-2">
-                <div className="flex items-center gap-1 text-amber-500 text-xs font-bold">
+              <div className="flex items-center justify-between gap-3 pt-4 border-t border-slate-100">
+                <div className="flex items-center gap-1 text-amber-500 text-sm font-extrabold">
                   <Star className="w-4 h-4 fill-amber-400 stroke-amber-400" />
                   <span>{company.rating}</span>
                 </div>
 
                 <Link
                   to={`/jobs?company=${encodeURIComponent(company.name)}`}
-                  className="inline-flex items-center gap-1.5 bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 group/btn"
+                  className="inline-flex items-center gap-1.5 bg-brand-soft hover-brand-bg brand-text hover:text-white px-4 py-2.5 rounded-xl text-sm font-extrabold transition-all duration-200 group/btn"
                 >
                   <span>{company.openJobs} Open Jobs</span>
                   <ArrowUpRight className="w-4 h-4 group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5 transition-transform" />

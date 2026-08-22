@@ -17,7 +17,7 @@ const sendOtpEmail = async (email, otp) => {
       <div style="font-family: Arial, sans-serif; padding: 20px;">
         <h2>Welcome to SmartRecruit AI</h2>
         <p>Your OTP verification code is:</p>
-        <h1 style="color: #2563eb; letter-spacing: 4px;">${otp}</h1>
+        <h1 style="color: #56a2d8; letter-spacing: 4px;">${otp}</h1>
         <p>This code will expire in 10 minutes.</p>
       </div>
     `,

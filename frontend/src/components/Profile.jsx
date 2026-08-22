@@ -1,13 +1,16 @@
 import React, { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   User, Mail, Phone, GraduationCap, 
   Briefcase, Plus, Trash2, Award, Languages, Link as LinkIcon, 
   Target, CheckCircle2, Sparkles, X, Globe, Save, Check, ArrowRight
 } from 'lucide-react';
+import { getApplicationJobId } from '../utils/applicationFlow';
 
 const Profile = ({ userData = {}, cvFile = null }) => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const applicationJobId = searchParams.get('jobId') || getApplicationJobId();
 
   // Helper to retrieve persisted profile or user state
   const getInitialState = () => {
@@ -158,25 +161,25 @@ const Profile = ({ userData = {}, cvFile = null }) => {
     setTimeout(() => {
       setIsSaved(false);
       if (redirect) {
-        navigate('/seeker-dashboard');
+        navigate(applicationJobId ? `/job-details/${applicationJobId}` : '/seeker-dashboard');
       }
     }, 600);
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300 max-w-4xl mx-auto p-4 pb-12">
+    <div className="information-page profile-readable space-y-7 animate-in fade-in duration-300 max-w-5xl mx-auto p-4 pb-12 sm:p-6">
       
       {/* 1. Header Bar (Back button ተወግዶ Save Button ብቻ ወደ ቀኝ ተደርጓል) */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-bold text-slate-900">Job Seeker Profile</h1>
-          <p className="text-xs text-slate-500">Manage your profile details and preferences</p>
+          <h1 className="text-2xl font-bold text-slate-900">Job Seeker Profile</h1>
+          <p className="text-base text-slate-500">Manage your profile details and preferences</p>
         </div>
 
         <button
           type="button"
           onClick={() => handleSaveProfile(false)}
-          className={`flex items-center gap-2 px-5 py-2.5 text-white font-semibold text-xs rounded-xl shadow-md transition cursor-pointer ${
+          className={`flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold text-white shadow-md transition cursor-pointer ${
             isSaved ? 'bg-emerald-600' : 'bg-blue-600 hover:bg-blue-700'
           }`}
         >
@@ -187,7 +190,7 @@ const Profile = ({ userData = {}, cvFile = null }) => {
 
       {/* Profile Progress Bar */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm space-y-2">
-        <div className="flex items-center justify-between text-xs font-semibold">
+        <div className="flex items-center justify-between text-sm font-semibold">
           <span className="text-slate-700 flex items-center gap-1.5">
             <Sparkles className="w-4 h-4 text-blue-600" /> Profile Completion
           </span>
@@ -206,19 +209,19 @@ const Profile = ({ userData = {}, cvFile = null }) => {
         <div className="w-12 h-12 rounded-full bg-emerald-500/10 text-emerald-600 flex items-center justify-center mx-auto mb-2 border border-emerald-500/20 shadow-sm">
           <CheckCircle2 className="w-6 h-6" />
         </div>
-        <h2 className="text-xl font-bold text-slate-900">User Profile Setup</h2>
-        <p className="text-xs text-slate-500">
+        <h2 className="text-2xl font-bold text-slate-900">User Profile Setup</h2>
+        <p className="text-base text-slate-500">
           Complete your information to get AI-matched job recommendations.
         </p>
       </div>
 
       {/* Personal Information */}
-      <div className="bg-slate-50/90 rounded-2xl border border-slate-200/80 p-5 space-y-4 shadow-sm">
-        <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 border-b pb-2 border-slate-200">
+      <div className="bg-slate-50/90 rounded-2xl border border-slate-200/80 p-6 space-y-5 shadow-sm">
+        <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 border-b pb-3 border-slate-200">
           <User className="w-4 h-4 text-blue-600" /> Personal Information
         </h3>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-sm">
           <div>
             <label className="block text-slate-600 mb-1 font-medium">First Name</label>
             <input 
@@ -624,14 +627,14 @@ const Profile = ({ userData = {}, cvFile = null }) => {
         </div>
       </div>
 
-      {/* 2. Bottom Action Bar (ከታች የተቀመጠው Go to Dashboard Button) */}
+      {/* 2. Bottom Action Bar */}
       <div className="mt-8 flex items-center justify-end pt-6 border-t border-slate-200/80">
         <button
           type="button"
           onClick={() => handleSaveProfile(true)}
-          className="px-6 py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-blue-500/25 transition cursor-pointer active:scale-[0.98]"
+          className="primary-button flex items-center gap-2 rounded-xl px-6 py-3.5 shadow-lg shadow-[#56a2d8]/25 hover:bg-[#f0f7fc] hover:text-[#2b73a4] hover:shadow-[#56a2d8]/30 active:scale-[0.98]"
         >
-          <span>Go to Dashboard</span>
+          <span>Continue to Dashboard</span>
           <ArrowRight className="w-4 h-4" />
         </button>
       </div>

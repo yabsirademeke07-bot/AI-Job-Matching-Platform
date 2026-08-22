@@ -1,4 +1,4 @@
-import React from 'react';
+ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Building2, MapPin, Sparkles, ArrowRight, Briefcase } from 'lucide-react';
 
@@ -88,8 +88,7 @@ export default function FeaturedJobs() {
                   <span>{job.location}</span>
                 </p>
               </div>
-
-              {/* Skills Tags */}
+ {/* Skills Tags */}
               <div className="flex flex-wrap gap-1.5 mb-6">
                 {job.skills.map((s) => (
                   <span 

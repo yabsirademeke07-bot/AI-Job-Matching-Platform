@@ -1,4 +1,4 @@
-import React from 'react';
+ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Sparkles, ArrowRight, Briefcase } from 'lucide-react';
 import { TypeAnimation } from 'react-type-animation';
@@ -40,21 +40,21 @@ export default function HeroSection({ searchTitle = '', setSearchTitle, handleSe
       <div className="absolute top-0 right-1/4 w-[500px] h-[500px] bg-blue-400/15 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-0 left-1/4 w-[400px] h-[400px] bg-indigo-400/10 rounded-full blur-3xl pointer-events-none" />
 
-      <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 items-center relative z-10">
+      <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-14 items-center relative z-10">
         
         {/* Left Side Content */}
         <div className="lg:col-span-6 xl:col-span-5">
-          <span className="inline-flex items-center gap-2 bg-blue-100/80 text-blue-700 border border-blue-200/80 text-xs font-semibold px-4 py-2 rounded-full mb-6 shadow-xs">
+          <span className="inline-flex items-center gap-2 bg-blue-100/80 text-blue-700 border border-blue-200/80 text-xs font-bold px-4 py-2 rounded-full mb-6 shadow-xs">
             <Sparkles className="w-4 h-4 text-blue-600" />
             #1 Ethiopian AI-Powered Tech Career Platform
           </span>
 
-          <div className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight mb-6 leading-tight text-slate-900 min-h-[140px] sm:min-h-[160px]">
+          <div className="max-w-2xl text-3xl sm:text-4xl lg:text-[3.25rem] font-extrabold tracking-tight mb-6 leading-[1.08] text-slate-950 min-h-[112px] sm:min-h-[132px]">
             <TypeAnimation
               sequence={[
                 'Find Your Dream Tech Job With AI Matching Precision',
                 2000,
-                '',
+                'Connect With Better Tech Opportunities Faster',
                 500,
               ]}
               wrapper="h1"
@@ -65,7 +65,7 @@ export default function HeroSection({ searchTitle = '', setSearchTitle, handleSe
             />
           </div>
 
-          <p className="text-slate-600 text-base md:text-lg mb-8 leading-relaxed font-normal">
+          <p className="max-w-xl text-slate-700 text-base md:text-lg mb-8 leading-8 font-medium">
             Welcome to the modern way of tech hiring in Ethiopia. Upload your CV to get an instant AI-powered compatibility analysis for top developer roles, or search active job opportunities across leading technology companies directly.
           </p>
 
@@ -79,8 +79,7 @@ export default function HeroSection({ searchTitle = '', setSearchTitle, handleSe
               <span>Start Now</span>
               <ArrowRight className="w-4 h-4" />
             </button>
-
-            {/* Explore All Jobs Button - ቀጥታ Navbar ላይ ወዳለው /jobs ይወስዳል */}
+ {/* Explore All Jobs Button - ቀጥታ Navbar ላይ ወዳለው /jobs ይወስዳል */}
             <button
               onClick={handleExploreJobs}
               className="bg-white hover:bg-slate-100 text-slate-700 font-bold text-sm sm:text-base px-7 py-3.5 rounded-2xl transition border border-slate-200/90 shadow-xs flex items-center justify-center gap-2 cursor-pointer active:scale-95"
@@ -91,8 +90,8 @@ export default function HeroSection({ searchTitle = '', setSearchTitle, handleSe
           </div>
 
           {/* Quick Search Input */}
-          <form onSubmit={onSearchSubmit} className="bg-white p-2 rounded-2xl border border-slate-200/90 shadow-lg shadow-slate-200/60 flex gap-2 w-full">
-            <div className="flex items-center pl-3 text-slate-400">
+          <form onSubmit={onSearchSubmit} className="bg-white p-2 rounded-2xl border border-slate-300 shadow-lg shadow-slate-200/60 flex flex-col sm:flex-row gap-2 w-full">
+            <div className="hidden sm:flex items-center pl-3 text-slate-400">
               <Search className="w-4 h-4" />
             </div>
             <input
@@ -100,11 +99,11 @@ export default function HeroSection({ searchTitle = '', setSearchTitle, handleSe
               placeholder="Search title or skill (e.g. React, Python, Node)..."
               value={searchTitle}
               onChange={(e) => setSearchTitle && setSearchTitle(e.target.value)}
-              className="w-full bg-transparent px-2 py-2 text-sm text-slate-800 placeholder-slate-400 focus:outline-none"
+              className="w-full min-w-0 bg-transparent px-3 py-3 text-sm text-slate-900 placeholder-slate-500 focus:outline-none"
             />
             <button
               type="submit"
-              className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-6 py-2.5 rounded-xl text-sm transition cursor-pointer whitespace-nowrap shadow-sm"
+              className="bg-slate-900 hover:bg-blue-700 text-white font-bold px-6 py-3 rounded-xl text-sm transition cursor-pointer whitespace-nowrap shadow-sm"
             >
               Search
             </button>

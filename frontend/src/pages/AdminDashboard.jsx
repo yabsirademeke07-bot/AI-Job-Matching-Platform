@@ -1,52 +1,52 @@
 import React, { useState, useEffect } from 'react';
+import api from '../services/api';
 
 function AdminDashboard() {
-    // 1. ከ LocalStorage ወይም Auth State የገባውን ተጠቃሚ መረጃ መውሰድ
-    const [currentUser, setCurrentUser] = useState(null);
+    const [currentUser] = useState(() => {
+        try {
+            return JSON.parse(localStorage.getItem('user')) || null;
+        } catch {
+            return null;
+        }
+    });
+    const [users, setUsers] = useState([]);
+    const [pendingJobs, setPendingJobs] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
 
     useEffect(() => {
-        // በ Login ወቅት የተቀመጠውን user detail ያነባል
-        const savedUser = JSON.parse(localStorage.getItem('user')) || {
-            email: 'tekebaaweke32@gmail.com', // ለቴስት የሚሆን default value
-            role: 'super_admin',
-            is_super_admin: 1
+        const loadAdminData = async () => {
+            try {
+                const { data } = await api.get('/admin/overview');
+                setUsers(data.users || []);
+                setPendingJobs(data.pendingJobs || []);
+            } catch (loadError) {
+                setError(loadError.response?.data?.message || 'Unable to load admin data.');
+            } finally {
+                setLoading(false);
+            }
         };
-        setCurrentUser(savedUser);
+        loadAdminData();
     }, []);
 
-    // 2. ተጠቃሚው Super Admin (ዋናው ባለቤት) መሆኑን ማረጋገጫ
-    const isSuperAdmin = currentUser?.role === 'super_admin' || currentUser?.is_super_admin === 1;
+    const isAdmin = currentUser?.role === 'admin';
 
-    const [users, setUsers] = useState([
-        { id: 1, name: 'Abebe Bikila', email: 'abebe@gmail.com', role: 'job_seeker', status: 'Active' },
-        { id: 2, name: 'Tech Ethiopia PLC', email: 'hr@tech.et', role: 'employer', status: 'Active' },
-        { id: 3, name: 'John Doe', email: 'john@yahoo.com', role: 'job_seeker', status: 'Pending' },
-    ]);
-
-    const [pendingJobs, setPendingJobs] = useState([
-        { id: 101, title: 'Senior React Developer', company: 'Tech Ethiopia PLC', status: 'Pending Review' },
-        { id: 102, title: 'Python Data Scientist', company: 'AI Solutions Ltd', status: 'Pending Review' },
-    ]);
-
-    const toggleUserStatus = (id) => {
-        // Super Admin ካልሆነ ይከለክላል
-        if (!isSuperAdmin) {
-            alert("⛔ Access Denied: Only the Main Super Admin can suspend/activate users!");
-            return;
+    const toggleUserStatus = async (id) => {
+        try {
+            await api.patch(`/admin/users/${id}/status`);
+            setUsers((currentUsers) => currentUsers.map((user) => user.id === id ? { ...user, status: user.status === 'Active' ? 'Suspended' : 'Active' } : user));
+        } catch (actionError) {
+            setError(actionError.response?.data?.message || 'Unable to update user status.');
         }
-
-        setUsers(users.map(u => u.id === id ? { ...u, status: u.status === 'Active' ? 'Suspended' : 'Active' } : u));
     };
 
-    const handleJobAction = (id, newStatus) => {
-        // Super Admin ካልሆነ የ Job approval ስራውን ይከለክላል
-        if (!isSuperAdmin) {
-            alert("⛔ Access Denied: Only the Main Super Admin (Tekeba) can approve or reject jobs!");
-            return;
+    const handleJobAction = async (id, newStatus) => {
+        try {
+            await api.patch(`/admin/jobs/${id}/status`, { status: newStatus });
+            setPendingJobs((jobs) => jobs.filter((job) => job.id !== id));
+        } catch (actionError) {
+            setError(actionError.response?.data?.message || 'Unable to update job status.');
         }
-
-        setPendingJobs(pendingJobs.filter(job => job.id !== id));
-        alert(`Job post has been ${newStatus.toLowerCase()}!`);
     };
 
     return (
@@ -61,7 +61,7 @@ function AdminDashboard() {
                 </div>
 
                 {/* Role Badge Status */}
-                {isSuperAdmin ? (
+                {isAdmin ? (
                     <span className="bg-purple-100 text-purple-800 text-xs font-bold px-3 py-1.5 rounded-full border border-purple-200 shadow-sm flex items-center gap-1">
                         👑 Main Super Admin (Owner)
                     </span>
@@ -91,7 +91,11 @@ function AdminDashboard() {
             {/* Pending Job Approvals Section */}
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm mb-8 p-6">
                 <h2 className="text-lg font-bold text-slate-900 mb-4">Pending Job Post Approvals</h2>
-                {pendingJobs.length === 0 ? (
+                {loading ? (
+                    <p className="text-slate-500 text-sm">Loading admin data...</p>
+                ) : error ? (
+                    <p className="text-red-600 text-sm">{error}</p>
+                ) : pendingJobs.length === 0 ? (
                     <p className="text-slate-500 text-sm">No pending jobs requiring review.</p>
                 ) : (
                     <div className="divide-y divide-slate-100">
@@ -104,7 +108,7 @@ function AdminDashboard() {
 
                                 {/* Action Buttons - Restricted by Super Admin Role */}
                                 <div className="flex gap-2">
-                                    {isSuperAdmin ? (
+                                    {isAdmin ? (
                                         <>
                                             <button 
                                                 onClick={() => handleJobAction(job.id, 'Approved')}
@@ -159,7 +163,7 @@ function AdminDashboard() {
                                         </span>
                                     </td>
                                     <td className="p-3 text-right">
-                                        {isSuperAdmin ? (
+                                        {isAdmin ? (
                                             <button
                                                 onClick={() => toggleUserStatus(u.id)}
                                                 className="text-xs font-medium text-blue-600 hover:underline cursor-pointer"

@@ -1,17 +1,19 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, User, FileText, Target, Search, Bookmark,
   ClipboardList, Brain, Mic, Bell, Settings, LogOut, Sparkles, CheckCircle2,
   AlertTriangle, MapPin, Briefcase, DollarSign, Send, Globe, Menu, X, Lightbulb
 } from 'lucide-react';
+import heroBannerImg from '../assets/hero.png';
 
 // የተስተካከለ Import Path (ከ pages ፎልደር ወጥቶ ወደ components/seeker ይሄዳል)
 import CvAnalysisPage from '../components/seeker/CvAnalysis';
 
 export default function SeekerDashboard() {
   const [language, setLanguage] = useState('EN'); // 'EN' or 'AM'
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const location = useLocation();
+  const [activeTab, setActiveTab] = useState(() => location.state?.activeTab || 'dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [aiMessage, setAiMessage] = useState('');
   const navigate = useNavigate();
@@ -79,6 +81,23 @@ export default function SeekerDashboard() {
         "Preferred employment type matches"
       ],
       posted: "1 day ago"
+    },
+    {
+      id: 3,
+      title: "Full Stack Engineer",
+      company: "Kacha Digital Financial",
+      location: "Addis Ababa (Hybrid)",
+      workMode: "Hybrid",
+      salary: "35,000 - 50,000 ETB",
+      type: "Full-time",
+      matchScore: 91,
+      skillsBreakdown: { skills: 92, experience: 88, location: 95, salary: 90 },
+      whyMatch: [
+        "Your Node.js and MongoDB skills are a strong match",
+        "Hybrid work fits your preferred location",
+        "Salary is within your preferred range"
+      ],
+      posted: "3 hours ago"
     }
   ];
 
@@ -92,10 +111,18 @@ export default function SeekerDashboard() {
   };
 
   // Application Tracking
-  const applications = [
+  const defaultApplications = [
     { company: "Gebeya Inc.", position: "Frontend Engineer", status: "Shortlisted", date: "Aug 02, 2026", step: 3 },
     { company: "Kacha Digital Financial", position: "Full Stack Dev", status: "Under Review", date: "Jul 28, 2026", step: 2 }
   ];
+  const applications = (() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('mockApplications') || '[]');
+      return [...saved, ...defaultApplications];
+    } catch {
+      return defaultApplications;
+    }
+  })();
 
   const handleSendMessage = (e) => {
     e.preventDefault();
@@ -119,20 +146,20 @@ export default function SeekerDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 flex font-sans">
+    <div className="seeker-dashboard min-h-screen bg-slate-50 text-slate-800 flex font-sans">
 
       {/* SIDEBAR NAVIGATION */}
-      <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-slate-300 transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-auto ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="p-6 flex items-center justify-between border-b border-slate-800">
-          <div className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/30">
-              <Sparkles className="w-5 h-5" />
+      <aside className={`dashboard-sidebar fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-slate-300 transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-auto ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="dashboard-sidebar-header p-6 flex items-center justify-between border-b border-slate-800">
+          <div className="flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-xl overflow-hidden border border-[var(--brand-border)] shadow-sm shadow-blue-500/10 shrink-0">
+              <img src={heroBannerImg} alt="Job Matching" className="w-full h-full object-cover" />
             </div>
             <div>
-              <span className="text-lg font-black tracking-tight text-white leading-none block">
-                lemesrat <span className="text-blue-500">AI</span>
+              <span className="text-lg font-black tracking-tight text-slate-900 leading-none block lowercase">
+                job <span className="brand-text">matching</span>
               </span>
-              <span className="text-[10px] font-semibold text-slate-400 tracking-wider uppercase">Job Platform</span>
+              <span className="text-[10px] font-extrabold text-slate-400 tracking-wider uppercase">AI Platform</span>
             </div>
           </div>
           <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden text-slate-400 hover:text-white">
@@ -142,27 +169,36 @@ export default function SeekerDashboard() {
 
         {/* Navigation Menu */}
         <nav className="p-4 space-y-1.5 overflow-y-auto max-h-[calc(100vh-80px)] text-sm font-medium">
-          {[
-            { id: 'dashboard', label: language === 'EN' ? 'Dashboard' : 'ዳሽቦርድ', icon: LayoutDashboard },
-            { id: 'profile', label: language === 'EN' ? 'My Profile' : 'የግል መረጃ', icon: User },
-            { id: 'cv', label: language === 'EN' ? 'My CV & Analysis' : 'CV እና AI ትንተና', icon: FileText },
-            { id: 'matches', label: language === 'EN' ? 'AI Job Matches' : 'የተጣጣሙ ስራዎች', icon: Target },
-            { id: 'explore', label: language === 'EN' ? 'Explore Jobs' : 'ስራዎችን ፈልግ', icon: Search },
-            { id: 'saved', label: language === 'EN' ? 'Saved Jobs' : 'የተቀመጡ ስራዎች', icon: Bookmark },
-            { id: 'applications', label: language === 'EN' ? 'My Applications' : 'የማመልከቻዎች ሁኔታ', icon: ClipboardList },
-            { id: 'skillgap', label: language === 'EN' ? 'Skill Gap Analysis' : 'የክህሎት ክፍተት ትንተና', icon: Brain },
-            { id: 'interview', label: language === 'EN' ? 'AI Interview Prep' : 'AI የቃለ-መጠይቅ ዝግጅት', icon: Mic },
-            { id: 'notifications', label: language === 'EN' ? 'Notifications' : 'ማሳወቂያዎች', icon: Bell }
-          ].map(item => {
+          {[{
+            id: 'dashboard', path: '/dashboard', label: language === 'EN' ? 'Dashboard' : 'ዳሽቦርድ', icon: LayoutDashboard
+          }, {
+            id: 'profile', path: '/profile', label: language === 'EN' ? 'My Profile' : 'የግል መረጃ', icon: User
+          }, {
+            id: 'cv', path: '/cv-analysis', label: language === 'EN' ? 'My CV & Analysis' : 'CV እና AI ትንተና', icon: FileText
+          }, {
+            id: 'matches', path: '/ai-matches', label: language === 'EN' ? 'AI Job Matches' : 'የተጣጣሙ ስራዎች', icon: Target
+          }, {
+            id: 'explore', path: '/explore-jobs', label: language === 'EN' ? 'Explore Jobs' : 'ስራዎችን ፈልግ', icon: Search
+          }, {
+            id: 'saved', path: '/saved-jobs', label: language === 'EN' ? 'Saved Jobs' : 'የተቀመጡ ስራዎች', icon: Bookmark
+          }, {
+            id: 'applications', path: '/applications', label: language === 'EN' ? 'My Applications' : 'የማመልከቻዎች ሁኔታ', icon: ClipboardList
+          }, {
+            id: 'skillgap', path: '/skill-gap', label: language === 'EN' ? 'Skill Gap Analysis' : 'የክህሎት ክፍተት ትንተና', icon: Brain
+          }, {
+            id: 'interview', path: '/interview-prep', label: language === 'EN' ? 'AI Interview Prep' : 'AI የቃለ-መጠይቅ ዝግጅት', icon: Mic
+          }, {
+            id: 'notifications', path: '/notifications', label: language === 'EN' ? 'Notifications' : 'ማሳወቂያዎች', icon: Bell
+          }].map(item => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
             return (
               <button
                 key={item.id}
-                onClick={() => { setActiveTab(item.id); setIsSidebarOpen(false); }}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
+                onClick={() => { setActiveTab(item.id); setIsSidebarOpen(false); navigate(item.path); }}
+                className={`dashboard-nav-item w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
                   isActive
-                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30 font-semibold'
+                    ? 'dashboard-active text-white shadow-lg font-semibold'
                     : 'hover:bg-slate-800 text-slate-400 hover:text-slate-200'
                 }`}
               >
@@ -173,11 +209,11 @@ export default function SeekerDashboard() {
           })}
 
           <div className="pt-6 mt-6 border-t border-slate-800 space-y-1">
-            <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition">
+            <button onClick={() => navigate('/settings')} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition">
               <Settings className="w-5 h-5" />
               <span>{language === 'EN' ? 'Settings' : 'ማስተካከያዎች'}</span>
             </button>
-            <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-400 hover:bg-red-500/10 transition">
+            <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-400 hover:bg-red-500/10 transition">
               <LogOut className="w-5 h-5" />
               <span>{language === 'EN' ? 'Logout' : 'ውጣ'}</span>
             </button>
@@ -244,7 +280,7 @@ export default function SeekerDashboard() {
             /* activeTab ሌላ (ለምሳሌ 'dashboard') ሲሆን ዋናው Dashboard ይታያል */
             <>
               {/* WELCOME BANNER & PROFILE COMPLETION */}
-              <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 rounded-3xl p-6 md:p-8 text-white shadow-xl relative overflow-hidden">
+              <div className="dashboard-hero rounded-3xl p-6 md:p-8 text-white shadow-xl relative overflow-hidden">
                 <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
                   <div className="space-y-2">
                     <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/30 text-blue-300 text-xs font-semibold">
@@ -252,7 +288,7 @@ export default function SeekerDashboard() {
                       <span>{language === 'EN' ? 'AI Career Dashboard' : 'የ AI የሥራ እድል ዳሽቦርድ'}</span>
                     </div>
                     <h1 className="text-2xl md:text-3xl font-black tracking-tight">
-                      {language === 'EN' ? `Good morning, ${user.name.split(' ')[0]} 👋` : `እንኳን ደህና መጡ፣ ${user.name.split(' ')[0]} 👋`}
+                      {language === 'EN' ? `Welcome, ${user.name.split(' ')[0]} 👋` : `እንኳን ደህና መጡ፣ ${user.name.split(' ')[0]} 👋`}
                     </h1>
                     <p className="text-slate-300 text-sm max-w-xl">
                       {language === 'EN'
@@ -267,11 +303,14 @@ export default function SeekerDashboard() {
                       <p className="text-xs text-slate-300 font-medium">{language === 'EN' ? 'Profile Completion' : 'የመረጃ ምልአት'}</p>
                       <div className="flex items-baseline gap-2">
                         <span className="text-2xl font-black text-white">{user.profileCompletion}%</span>
-                        <span className="text-xs text-emerald-400 font-semibold">Good</span>
+                        <span className="text-xs text-emerald-400 font-semibold">{language === 'EN' ? 'Complete' : 'ተጠናቋል'}</span>
                       </div>
                       <div className="w-32 bg-slate-700 h-2 rounded-full overflow-hidden mt-1">
                         <div className="bg-emerald-400 h-full rounded-full" style={{ width: `${user.profileCompletion}%` }} />
                       </div>
+                      <button onClick={() => navigate('/profile')} className="text-[11px] font-bold text-blue-200 hover:text-white hover:underline">
+                        {language === 'EN' ? 'Add your CV' : 'CVዎን ይጨምሩ'}
+                      </button>
                     </div>
 
                     <div className="border-l border-white/20 pl-6 space-y-1">
@@ -290,22 +329,23 @@ export default function SeekerDashboard() {
               {/* STATS OVERVIEW CARDS */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {[
-                  { title: language === 'EN' ? 'AI Matches' : 'የተጣጣሙ ስራዎች', count: '12', icon: Target, color: 'text-blue-600', bg: 'bg-blue-50' },
-                  { title: language === 'EN' ? 'Applied Jobs' : 'የማመልክቷቸው', count: '5', icon: ClipboardList, color: 'text-indigo-600', bg: 'bg-indigo-50' },
-                  { title: language === 'EN' ? 'Saved Jobs' : 'የተቀመጡ ስራዎች', count: '8', icon: Bookmark, color: 'text-amber-600', bg: 'bg-amber-50' },
-                  { title: language === 'EN' ? 'Interviews' : 'ቃለ-መጠይቆች', count: '1', icon: Mic, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+                  { title: language === 'EN' ? 'AI Job Matches' : 'የ AI የተጣጣሙ ስራዎች', count: '14', detail: language === 'EN' ? 'new matches' : 'አዲስ', icon: Target, color: 'text-blue-600', bg: 'bg-blue-50', path: '/ai-matches' },
+                  { title: language === 'EN' ? 'Applied Jobs' : 'ያመለከቱባቸው ስራዎች', count: '6', detail: language === 'EN' ? 'applications' : 'ማመልከቻዎች', icon: ClipboardList, color: 'text-indigo-600', bg: 'bg-indigo-50', path: '/applications' },
+                  { title: language === 'EN' ? 'Interviews' : 'ቃለ-መጠይቆች', count: '2', detail: language === 'EN' ? 'scheduled' : 'የተያዙ', icon: Mic, color: 'text-emerald-600', bg: 'bg-emerald-50', path: '/interview-prep' },
+                  { title: language === 'EN' ? 'Saved Jobs' : 'ያስቀመጧቸው ስራዎች', count: '4', detail: language === 'EN' ? 'saved jobs' : 'የተቀመጡ', icon: Bookmark, color: 'text-amber-600', bg: 'bg-amber-50', path: '/saved-jobs' },
                 ].map((stat, idx) => {
                   const Icon = stat.icon;
                   return (
-                    <div key={idx} className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+                    <button key={idx} onClick={() => navigate(stat.path)} className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between text-left hover:border-blue-300 hover:shadow-md transition">
                       <div>
                         <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{stat.title}</p>
                         <p className="text-2xl font-black text-slate-900 mt-1">{stat.count}</p>
+                        <p className="text-xs text-slate-400 mt-1">{stat.detail}</p>
                       </div>
                       <div className={`p-3 rounded-xl ${stat.bg} ${stat.color}`}>
                         <Icon className="w-6 h-6" />
                       </div>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
@@ -325,15 +365,15 @@ export default function SeekerDashboard() {
                           {language === 'EN' ? 'Recommended For You' : 'ለእርስዎ የተመከሩ ስራዎች'}
                         </h2>
                       </div>
-                      <button className="text-xs font-bold text-blue-600 hover:underline">
+                      <button onClick={() => navigate('/ai-matches')} className="text-xs font-bold text-blue-600 hover:underline">
                         {language === 'EN' ? 'View All Matches' : 'ሁሉንም ተመልከት'}
                       </button>
                     </div>
 
                     {/* Job Cards */}
-                    <div className="space-y-4">
-                      {recommendedJobs.map((job) => (
-                        <div key={job.id} className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm hover:border-blue-500/50 hover:shadow-md transition-all space-y-5">
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                      {recommendedJobs.filter((job) => job.matchScore > 90).map((job) => (
+                        <div key={job.id} className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm hover:border-blue-500/50 hover:shadow-md transition-all space-y-4">
                           
                           <div className="flex items-start justify-between gap-4">
                             <div className="flex gap-4">
@@ -382,8 +422,8 @@ export default function SeekerDashboard() {
                               <button className="px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 font-bold text-slate-700 transition">
                                 {language === 'EN' ? 'Save' : 'አስቀምጥ'}
                               </button>
-                              <button className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold transition shadow-sm">
-                                {language === 'EN' ? 'Apply Now' : 'አሁን አመልክት'}
+                              <button onClick={() => navigate('/explore-jobs')} className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold transition shadow-sm">
+                                {language === 'EN' ? 'Quick Apply' : 'በፍጥነት አመልክት'}
                               </button>
                             </div>
                           </div>

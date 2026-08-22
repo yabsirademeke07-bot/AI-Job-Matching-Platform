@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { UploadCloud, Sparkles, Loader2, ArrowRight } from 'lucide-react';
+import { getApplicationJobId, getNextApplicationStep, hasCompletedPersonalInfo, hasCompletedProfile, hasCompletedCv } from '../utils/applicationFlow';
 
 const CvUploader = ({
   cvFile: externalCvFile,
@@ -14,6 +15,8 @@ const CvUploader = ({
   onNext
 }) => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const applicationJobId = searchParams.get('jobId') || getApplicationJobId();
 
   // Internal state handlers (Props ካልተላኩ በራሱ እንዲሰራ)
   const [internalCvFile, setInternalCvFile] = useState(null);
@@ -23,6 +26,7 @@ const CvUploader = ({
     preferredJob: '',
     salaryExpectation: ''
   });
+  const [continueError, setContinueError] = useState('');
 
   // Controlled vs Uncontrolled Props logic
   const cvFile = externalCvFile !== undefined ? externalCvFile : internalCvFile;
@@ -44,6 +48,12 @@ const CvUploader = ({
     const file = e.target.files[0];
     if (file) {
       setCvFile(file);
+      try {
+        const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+        localStorage.setItem('user', JSON.stringify({ ...storedUser, cvFileName: file.name }));
+      } catch (error) {
+        console.error('Unable to save CV filename:', error);
+      }
       simulateCvParsing(file);
     }
   };
@@ -68,6 +78,15 @@ const CvUploader = ({
   // ወደ Profile ገጽ የሚመራው አዝራር (Continue Button) ሲነካ
   const handleContinue = (e) => {
     e.preventDefault();
+    if (applicationJobId && !cvFile && !hasCompletedCv()) {
+      setContinueError('Please upload your CV before continuing.');
+      return;
+    }
+    if (applicationJobId) {
+      if (!hasCompletedPersonalInfo()) navigate(`/personal-info?jobId=${encodeURIComponent(applicationJobId)}`);
+      else navigate(hasCompletedProfile() ? getNextApplicationStep(applicationJobId) : `/profile?jobId=${encodeURIComponent(applicationJobId)}`);
+      return;
+    }
     if (onNext) {
       onNext();
     } else {
@@ -75,17 +94,24 @@ const CvUploader = ({
     }
   };
 
+  // Read user role from localStorage for role-aware messaging
+  const savedUser = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
+  const parsedUser = savedUser ? JSON.parse(savedUser) : null;
+  const welcomeName = parsedUser?.full_name || parsedUser?.name || parsedUser?.email || null;
+  const isSeeker = ['job_seeker','seeker','jobseeker','user','employee'].includes((parsedUser?.role || '').toString().toLowerCase());
+
   return (
-    <div className="max-w-2xl mx-auto p-6 bg-white rounded-3xl shadow-sm border border-slate-100 space-y-6 my-8">
+    <div className="information-page w-full max-w-4xl mx-auto my-6 px-4 sm:px-6 lg:my-10">
+      <div className="space-y-8 rounded-3xl border border-slate-200 bg-white px-5 py-9 shadow-lg shadow-slate-900/5 sm:px-8 sm:py-11 lg:px-10 lg:py-14">
       <div>
-        <h2 className="text-xl font-bold text-slate-900 tracking-tight">Upload Your CV</h2>
-        <p className="text-xs text-slate-500 mt-0.5">
-          Upload your resume to automatically extract skills & preferences.
+        <h2 className="text-3xl font-extrabold leading-tight text-slate-900 tracking-tight sm:text-4xl">{isSeeker ? 'Welcome, ' + (welcomeName ? welcomeName : 'Job Seeker') : 'Upload Your CV'}</h2>
+        <p className="mt-3 text-lg leading-7 text-slate-600">
+          {isSeeker ? 'Upload your CV to extract skills, generate a match score with available roles, and complete your candidate profile.' : 'Upload a resume to analyze skills & preferences.'}
         </p>
       </div>
 
       {/* Upload Box */}
-      <div className="border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-2xl p-6 bg-slate-50/50 hover:bg-blue-50/20 transition-all text-center relative cursor-pointer">
+      <div className="border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-2xl p-12 sm:p-14 bg-slate-50/50 hover:bg-blue-50/20 transition-all text-center relative cursor-pointer">
         <input
           type="file"
           accept=".pdf,.doc,.docx"
@@ -97,86 +123,62 @@ const CvUploader = ({
           <div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center mb-3">
             <UploadCloud className="w-6 h-6" />
           </div>
-          <p className="text-xs font-semibold text-slate-800 mb-1">
+          <p className="text-base font-semibold text-slate-800 mb-2">
             {cvFile ? cvFile.name : "Click to upload or drag & drop"}
           </p>
-          <p className="text-[11px] text-slate-400">PDF, DOC, DOCX (Max 10MB)</p>
+          <p className="text-base text-slate-400">PDF, DOC, DOCX (Max 10MB)</p>
         </div>
       </div>
 
       {/* Parsing Loader */}
+      {continueError && <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{continueError}</p>}
       {isParsing && (
         <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 flex items-center gap-3">
           <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
           <div>
-            <h4 className="text-xs font-bold text-blue-900">AI is analyzing your CV...</h4>
-            <p className="text-[10px] text-blue-700">Extracting skills, experience, and match score.</p>
+            <h4 className="text-sm font-bold text-blue-900">AI is analyzing your CV...</h4>
+            <p className="text-xs text-blue-700">Extracting skills, experience, and match score.</p>
           </div>
         </div>
       )}
 
       {/* Analysis Output */}
       {parsedAnalysis && !isParsing && (
-        <div className="p-4 rounded-2xl bg-emerald-50/60 border border-emerald-200 space-y-3">
+        <div className="p-5 rounded-2xl bg-emerald-50/60 border border-emerald-200 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-emerald-600" />
-              <span className="text-xs font-bold text-emerald-900">AI CV Analysis Results</span>
+              <span className="text-sm font-bold text-emerald-900">AI CV Analysis Results</span>
             </div>
-            <span className="px-2.5 py-0.5 bg-emerald-600 text-white rounded-full text-[10px] font-extrabold">
+            <span className="px-3 py-1 bg-emerald-600 text-white rounded-full text-xs font-extrabold">
               {parsedAnalysis.matchScore}% Match
             </span>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 text-[11px]">
-            <div className="bg-white p-2 rounded-lg border border-emerald-100">
-              <span className="text-slate-400 block text-[9px]">Extracted Skills:</span>
+          <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+            <div className="bg-white p-3 rounded-lg border border-emerald-100">
+              <span className="text-slate-400 block text-xs">Extracted Skills:</span>
               <span className="font-semibold text-slate-800">{parsedAnalysis.skillsMatched.join(', ')}</span>
             </div>
-            <div className="bg-white p-2 rounded-lg border border-emerald-100">
-              <span className="text-slate-400 block text-[9px]">Recommended Role:</span>
+            <div className="bg-white p-3 rounded-lg border border-emerald-100">
+              <span className="text-slate-400 block text-xs">Recommended Role:</span>
               <span className="font-semibold text-slate-800">{parsedAnalysis.recommendedRole}</span>
             </div>
           </div>
         </div>
       )}
 
-      {/* Preferred Job Inputs */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-        <div>
-          <label className="block text-xs font-semibold text-slate-700 mb-1">Target Job Title</label>
-          <input
-            type="text"
-            name="preferredJob"
-            value={formData?.preferredJob || ''}
-            onChange={handleChange}
-            placeholder="e.g. React Developer"
-            className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-semibold text-slate-700 mb-1">Expected Salary</label>
-          <input
-            type="text"
-            name="salaryExpectation"
-            value={formData?.salaryExpectation || ''}
-            onChange={handleChange}
-            placeholder="e.g. $2,000 / month"
-            className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-          />
-        </div>
-      </div>
-
       {/* Continue Button to Profile Page */}
       <div className="pt-4 border-t border-slate-100 flex justify-end">
         <button
           type="button"
           onClick={handleContinue}
-          className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs rounded-xl transition-all shadow-sm shadow-blue-500/20 active:scale-[0.98]"
+          className="flex items-center gap-2 rounded-xl bg-[#56a2d8] px-6 py-3 text-xs font-semibold text-white shadow-lg shadow-[#56a2d8]/25 transition-all hover:bg-[#2b73a4] active:scale-[0.98]"
         >
           <span>Save & Continue to Profile</span>
           <ArrowRight className="w-4 h-4" />
         </button>
+      </div>
       </div>
     </div>
   );

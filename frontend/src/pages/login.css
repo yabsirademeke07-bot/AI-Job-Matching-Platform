@@ -4,7 +4,7 @@
 .login-page-container {
   min-height: 100vh;
   width: 100%;
-  background-color: #f8fafc;
+  background-color: var(--brand-soft);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -26,7 +26,7 @@
 
 /* Left Dynamic AI Panel */
 .login-left-panel {
-  background: linear-gradient(135deg, #020617 0%, #0f172a 50%, #1e1b4b 100%);
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-deep));
   color: #ffffff;
   padding: 2.5rem 2rem;
   display: flex;
@@ -61,8 +61,8 @@
 }
 
 .login-input:focus {
-  border-color: #2563eb;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 3px rgb(86 162 216 / 15%);
   background-color: #ffffff;
 }
 
@@ -71,8 +71,8 @@ input:-webkit-autofill,
 input:-webkit-autofill:hover, 
 input:-webkit-autofill:focus, 
 input:-webkit-autofill:active {
-  -webkit-box-shadow: 0 0 0 30px #f8fafc inset !important;
-  -webkit-text-fill-color: #0f172a !important;
+  -webkit-box-shadow: 0 0 0 30px var(--brand-soft) inset !important;
+  -webkit-text-fill-color: var(--heading) !important;
   transition: background-color 5000s ease-in-out 0s;
 }
 
@@ -81,12 +81,12 @@ input:-webkit-autofill:active {
   width: 100%;
   padding: 0.75rem 1rem;
   border-radius: 0.75rem;
-  background-color: #2563eb;
+  background-color: var(--brand-primary);
   color: #ffffff;
   font-weight: 700;
   font-size: 0.875rem;
   transition: all 0.2s ease-in-out;
-  box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.25);
+  box-shadow: 0 4px 6px -1px rgb(86 162 216 / 25%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -94,9 +94,9 @@ input:-webkit-autofill:active {
 }
 
 .login-btn-primary:hover {
-  background-color: #1d4ed8;
+  background-color: var(--brand-deep);
   transform: translateY(-1px);
-  box-shadow: 0 6px 10px -1px rgba(37, 99, 235, 0.35);
+  box-shadow: 0 6px 10px -1px rgb(43 115 164 / 35%);
 }
 
 .login-btn-primary:disabled {
