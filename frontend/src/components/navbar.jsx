@@ -1,0 +1,316 @@
+import React, { useState, useEffect } from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import {
+  LogIn,
+  LayoutDashboard,
+  Menu,
+  UserPlus,
+  X,
+} from 'lucide-react';
+
+// የፎቶ Path — use local asset fallback in project
+import heroBannerImg from '../assets/hero.png';
+
+export default function Navbar() {
+  const location = useLocation();
+  const [user, setUser] = useState(null);
+  const [token, setToken] = useState(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // ገጹ Refresh ሲደረግ ወይም Route ሲቀየር የ Auth ሁኔታን መፈተሽ
+  useEffect(() => {
+    try {
+      const storedToken = localStorage.getItem('token');
+      const storedUser = localStorage.getItem('user');
+
+      if (storedToken && storedUser && storedUser !== 'undefined') {
+        setToken(storedToken);
+        setUser(JSON.parse(storedUser));
+      } else {
+        setToken(null);
+        setUser(null);
+      }
+    } catch (error) {
+      console.error("Error loading user state:", error);
+      setToken(null);
+      setUser(null);
+    }
+  }, [location]);
+
+  // Route በሚቀየርበት ጊዜ የሞባይል ሜኑን መዝጋት
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [location.pathname]);
+
+  const isActive = (path) => location.pathname === path;
+  // የ Role ዓይነቶች ማረጋገጫ
+  const isSeeker = ['job_seeker', 'seeker', 'jobseeker', 'user'].includes(user?.role);
+  const isEmployer = ['employer', 'company', 'recruiter'].includes(user?.role);
+  const isAdmin = user?.role === 'admin';
+  const isSeekerDashboardPage = ['/seeker-dashboard', '/seekerDashboard', '/dashboard'].includes(location.pathname);
+  const isEmployerDashboardPage = ['/employer-dashboard', '/employer/dashboard', '/employer/candidates', '/employer/post-job'].includes(location.pathname);
+
+  // ተጠቃሚው ገብቷል የሚባለው Token እና User ሲኖር ብቻ ነው
+  const isAuthenticated = Boolean(token && user);
+
+  return (
+    <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-sm transition-all w-full">
+      {/* Container: px-4 sm:px-6 lg:px-8 በመጠቀም ወደ ግራ እና ቀኝ ዳር እንዲጠጋ ተደርጓል */}
+      <div className="w-full px-4 sm:px-6 lg:px-8 h-20 sm:h-24 flex items-center justify-between gap-4">
+        
+        {/* BRAND LOGO - ሙሉ በሙሉ ወደ ግራ */}
+        <Link to="/" className="flex items-center gap-2.5 sm:gap-3.5 group shrink-0">
+          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl overflow-hidden shadow-md shadow-blue-500/10 group-hover:scale-105 transition-transform duration-200 border border-slate-100">
+            <img 
+              src={heroBannerImg} 
+              alt="Job Matching Logo" 
+              className="w-full h-full object-cover"
+            />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 group-hover:text-blue-600 transition-colors lowercase leading-none">
+              job <span className="text-blue-600">matching</span>
+            </span>
+            <span className="text-[10px] sm:text-xs font-extrabold text-slate-400 tracking-wider uppercase mt-0.5 sm:mt-1">
+              AI Platform
+            </span>
+          </div>
+        </Link>
+
+        {/* DESKTOP NAVIGATION LINKS - mr-auto ml-6/ml-10 በመጠቀም ወደ ግራ ተጠግተዋል፣ text-lg በመጠቀም መጠናቸው ጨምሯል */}
+        <nav className="hidden lg:flex items-center gap-5 xl:gap-7 mr-auto ml-6 xl:ml-10">
+          
+          <Link 
+            to="/" 
+            className={`relative py-1 text-base xl:text-lg font-bold tracking-wide transition-colors duration-200 group ${
+              isActive('/') ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'
+            }`}
+          >
+            Home
+            <span className={`absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 rounded-full transition-transform duration-300 origin-left ${
+              isActive('/') ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
+            }`} />
+          </Link>
+
+          <Link 
+            to="/jobs" 
+            className={`relative py-1 text-base xl:text-lg font-bold tracking-wide transition-colors duration-200 group ${
+              isActive('/jobs') || isActive('/explorejobs') ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'
+            }`}
+          >
+            Explore Jobs
+            <span className={`absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 rounded-full transition-transform duration-300 origin-left ${
+              isActive('/jobs') || isActive('/explorejobs') ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
+            }`} />
+          </Link>
+
+          <Link
+            to="/how-it-works"
+            className={`relative py-1 text-base xl:text-lg font-bold tracking-wide transition-colors duration-200 group ${
+              isActive('/how-it-works') ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'
+            }`}
+          >
+            How It Works
+            <span className={`absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 rounded-full transition-transform duration-300 origin-left ${
+              isActive('/how-it-works') ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
+            }`} />
+          </Link>
+
+          <Link 
+            to="/about" 
+            className={`relative py-1 text-base xl:text-lg font-bold tracking-wide transition-colors duration-200 group ${
+              isActive('/about') ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'
+            }`}
+          >
+            About
+            <span className={`absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 rounded-full transition-transform duration-300 origin-left ${
+              isActive('/about') ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
+            }`} />
+          </Link>
+
+          <Link 
+            to="/contact" 
+            className={`relative py-1 text-base xl:text-lg font-bold tracking-wide transition-colors duration-200 group ${
+              isActive('/contact') ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'
+            }`}
+          >
+            Contact
+            <span className={`absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 rounded-full transition-transform duration-300 origin-left ${
+              isActive('/contact') ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
+            }`} />
+          </Link>
+
+          {/* ተጠቃሚው Login ካደረገ የሚታዩ Dashboard Links */}
+          {isAuthenticated && isSeeker && isSeekerDashboardPage && (
+            <Link to="/seeker-dashboard" className="text-xs font-extrabold bg-blue-50 text-blue-600 px-3.5 py-1.5 rounded-full hover:bg-blue-100 transition flex items-center gap-2 shrink-0">
+              <LayoutDashboard className="w-4 h-4" />
+              <span>Seeker dashboard</span>
+            </Link>
+          )}
+
+          {isAuthenticated && isEmployer && isEmployerDashboardPage && (
+            <Link to="/employer-dashboard" className="text-xs font-extrabold bg-indigo-50 text-indigo-600 px-3.5 py-1.5 rounded-full hover:bg-indigo-100 transition flex items-center gap-2 shrink-0">
+              <LayoutDashboard className="w-4 h-4" />
+              <span>Employer dashboard</span>
+            </Link>
+          )}
+
+          {isAuthenticated && isAdmin && (
+            <Link to="/admin-dashboard" className="text-xs font-extrabold bg-purple-50 text-purple-600 px-3.5 py-1.5 rounded-full hover:bg-purple-100 transition flex items-center gap-2 shrink-0">
+              <LayoutDashboard className="w-4 h-4" />
+              <span>Admin dashbord</span>
+            </Link>
+          )}
+        </nav>
+
+        {/* DESKTOP RIGHT BUTTONS - ሙሉ በሙሉ ወደ ቀኝ */}
+        <div className="hidden lg:flex items-center gap-3 shrink-0 ml-auto">
+          <Link
+            to="/login"
+            className="brand-button text-base px-5 xl:px-6 py-2.5"
+          >
+            <LogIn className="w-5 h-5 text-blue-600" />
+            <span>Log In</span>
+          </Link>
+          <Link
+            to="/register"
+            className="brand-button text-base px-6 xl:px-7 py-2.5"
+          >
+            <UserPlus className="w-5 h-5" />
+            <span>Sign Up</span>
+          </Link>
+        </div>
+
+        {/* MOBILE & TABLET HAMBURGER MENU BUTTON */}
+        <div className="flex items-center lg:hidden ml-auto">
+          <button
+            type="button"
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            aria-label="Toggle navigation menu"
+            className="p-2.5 rounded-xl text-slate-700 hover:bg-slate-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500 transition-colors cursor-pointer"
+          >
+            {isMobileMenuOpen ? (
+              <X className="w-7 h-7 text-blue-600" />
+            ) : (
+              <Menu className="w-7 h-7 text-slate-800" />
+            )}
+          </button>
+        </div>
+
+      </div>
+
+      {/* MOBILE & TABLET DROPDOWN MENU */}
+      {isMobileMenuOpen && (
+        <div className="lg:hidden border-t border-slate-200/80 bg-white px-4 pt-3 pb-6 shadow-xl w-full">
+          <div className="flex flex-col gap-2 w-full">
+            
+            <Link 
+              to="/" 
+              onClick={() => setIsMobileMenuOpen(false)}
+              className={`px-4 py-3 rounded-xl font-bold text-base transition-colors ${
+                isActive('/') ? 'bg-blue-50 text-blue-600' : 'text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              Home
+            </Link>
+
+            <Link 
+              to="/jobs" 
+              onClick={() => setIsMobileMenuOpen(false)}
+              className={`px-4 py-3 rounded-xl font-bold text-base transition-colors ${
+                isActive('/jobs') || isActive('/explorejobs') ? 'bg-blue-50 text-blue-600' : 'text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              Explore Jobs
+            </Link>
+
+            <Link
+              to="/how-it-works"
+              onClick={() => setIsMobileMenuOpen(false)}
+              className={`px-4 py-3 rounded-xl font-bold text-base transition-colors ${
+                isActive('/how-it-works') ? 'bg-blue-50 text-blue-600' : 'text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              How It Works
+            </Link>
+
+            <Link 
+              to="/about" 
+              onClick={() => setIsMobileMenuOpen(false)}
+              className={`px-4 py-3 rounded-xl font-bold text-base transition-colors ${
+                isActive('/about') ? 'bg-blue-50 text-blue-600' : 'text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              About
+            </Link>
+
+            <Link 
+              to="/contact" 
+              onClick={() => setIsMobileMenuOpen(false)}
+              className={`px-4 py-3 rounded-xl font-bold text-base transition-colors ${
+                isActive('/contact') ? 'bg-blue-50 text-blue-600' : 'text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              Contact
+            </Link>
+
+            {/* Mobile User Consoles */}
+            {isAuthenticated && isSeeker && isSeekerDashboardPage && (
+              <Link 
+                to="/seeker-dashboard" 
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="mx-2 my-1 px-4 py-3 rounded-xl text-sm font-extrabold bg-blue-50 text-blue-600 flex items-center gap-2"
+              >
+                <LayoutDashboard className="w-4 h-4" />
+                <span>Seeker dashboard</span>
+              </Link>
+            )}
+
+            {isAuthenticated && isEmployer && (
+              <Link 
+                to="/employer-dashboard" 
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="mx-2 my-1 px-4 py-3 rounded-xl text-sm font-extrabold bg-indigo-50 text-indigo-600 flex items-center gap-2"
+              >
+                <LayoutDashboard className="w-4 h-4" />
+                <span>Employer dashboard</span>
+              </Link>
+            )}
+
+            {isAuthenticated && isAdmin && (
+              <Link 
+                to="/admin-dashboard" 
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="mx-2 my-1 px-4 py-3 rounded-xl text-sm font-extrabold bg-purple-50 text-purple-600 flex items-center gap-2"
+              >
+                <LayoutDashboard className="w-4 h-4" />
+                <span>Admin dashboard</span>
+              </Link>
+            )}
+
+            {/* Mobile Action Buttons */}
+            <div className="pt-3 mt-2 border-t border-slate-100 flex flex-col gap-2.5">
+              <Link
+                to="/login"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="brand-button w-full text-base"
+              >
+                <LogIn className="w-5 h-5 text-blue-600" />
+                <span>Log In</span>
+              </Link>
+              <Link
+                to="/register"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="brand-button w-full text-base"
+              >
+                <UserPlus className="w-5 h-5" />
+                <span>Sign Up</span>
+              </Link>
+            </div>
+
+          </div>
+        </div>
+      )}
+    </header>
+  );
+}

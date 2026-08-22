@@ -1,3 +1,73 @@
+:root {
+  --background: #ffffff;
+  --cta: var(--brand-primary);
+  --cta-hover: var(--brand-primary-hover);
+  --heading: #0f172a;
+  --body: #475569;
+  --accent-bg: var(--brand-soft);
+  --accent-soft: var(--brand-soft-hover);
+  --accent-text: var(--brand-deep);
+  --border: var(--brand-border);
+}
+
+.app {
+  min-height: 100vh;
+  background: #ffffff;
+  color: #475569;
+}
+
+button,
+a,
+input,
+textarea,
+select {
+  &:focus-visible {
+    outline: 3px solid rgba(86, 162, 216, 0.45);
+    outline-offset: 3px;
+  }
+}
+
+.primary-button {
+  border-radius: 0.75rem;
+  background: var(--brand-primary);
+  color: #ffffff;
+  font-weight: 700;
+  transition: background-color 0.2s ease;
+}
+
+.primary-button:hover {
+  background: var(--brand-primary-hover);
+}
+
+.accent-card {
+  border: 1px solid var(--brand-border);
+  border-radius: 1rem;
+  background: var(--brand-soft);
+}
+
+.heading {
+  color: #0f172a;
+}
+
+.body-text {
+  color: #475569;
+}
+
+.badge {
+  border: 1px solid #d0e5f5;
+  border-radius: 9999px;
+  background: #eaf4fb;
+  color: var(--brand-deep);
+  font-weight: 600;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible {
+  outline: 3px solid rgba(86, 162, 216, 0.45);
+  outline-offset: 3px;
+}
+
 .counter {
   font-size: 16px;
   padding: 5px 10px;
@@ -180,5 +250,14 @@
   &::after {
     right: 0;
     border-right-color: var(--border);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
   }
 }

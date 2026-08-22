@@ -1,0 +1,31 @@
+import React from 'react';
+import { Navigate } from 'react-router-dom';
+
+const ProtectedRoute = ({ children, allowedRoles }) => {
+  // localStorage ውስጥ የተቀመጠውን user መረጃ ማንበብ
+  const user = JSON.parse(localStorage.getItem('user'));
+
+  // 1. ተጠቃሚው ጭራሽ ካልገባ ወደ Login ይውሰደው
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  // 2. የ User-ኡን Role ማግኘት (role ወይም userType)
+  const userRole = (user.role || user.userType || 'user').toLowerCase();
+
+  // allowedRoles ከተሰጠ እና የተጠቃሚው Role የተፈቀደ ከሆነ
+  if (allowedRoles && allowedRoles.length > 0) {
+    const isAllowed = allowedRoles.some(
+      (role) => role.toLowerCase() === userRole
+    );
+
+    // Role-ኡ ካልተፈቀደ ወደ Login ከመመለስ ይልቅ ወደ Home ይውሰደው ወይም ይፍቀድለት
+    if (!isAllowed) {
+      return <Navigate to="/login" replace />;
+    }
+  }
+
+  return children;
+};
+
+export default ProtectedRoute;

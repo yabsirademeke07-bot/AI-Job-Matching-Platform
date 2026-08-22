@@ -10,18 +10,32 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@react-oauth/google": "^0.13.5",
+    "@tailwindcss/vite": "^4.3.3",
+    "axios": "^1.19.0",
+    "dotenv": "^17.4.2",
+    "firebase": "^12.17.1",
+    "lucide-react": "^1.28.0",
+    "mammoth": "^1.12.0",
+    "nodemailer": "^9.0.5",
+    "pdfjs-dist": "^6.2.108",
     "react": "^19.2.7",
-    "react-dom": "^19.2.7"
+    "react-dom": "^19.2.7",
+    "react-router-dom": "^7.18.2",
+    "react-type-animation": "^3.2.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
+    "autoprefixer": "^10.5.4",
     "eslint": "^10.6.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.3",
     "globals": "^17.7.0",
+    "postcss": "^8.5.21",
+    "tailwindcss": "^4.3.3",
     "vite": "^8.1.1"
   }
 }
