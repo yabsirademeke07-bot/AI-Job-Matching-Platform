@@ -4,9 +4,9 @@ import { useGoogleLogin } from '@react-oauth/google';
 import './login.css';
 import { setPendingApplication } from '../utils/applicationFlow';
 import { useAuth } from '../context/AuthContext';
-import { 
-  Sparkles, ShieldCheck, Cpu, Mail, Lock, 
-  ArrowRight, Eye, EyeOff, Target, ArrowLeft, RefreshCw 
+import {
+  Sparkles, ShieldCheck, Cpu, Mail, Lock,
+  ArrowRight, Eye, EyeOff, Target, ArrowLeft, RefreshCw
 } from 'lucide-react';
 
 const Login = () => {
@@ -35,7 +35,7 @@ const Login = () => {
   const [apiSuccess, setApiSuccess] = useState(successMessage);
   const [otpTimer, setOtpTimer] = useState(0);
 
-  const API_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000/api';
+  const API_URL = import.meta.env.VITE_BACKEND_URL || '/api';
 
   const validateForm = () => {
     const nextErrors = {};
@@ -209,7 +209,7 @@ const Login = () => {
         if (data.token) localStorage.setItem('token', data.token);
         if (data.user) localStorage.setItem('user', JSON.stringify(data.user));
         setSession({ token: data.token, user: data.user });
-        
+
         navigateByRole(data.user?.role);
       } else {
         setApiError(data.message || 'Invalid or expired OTP code.');
@@ -256,10 +256,10 @@ const Login = () => {
 
   return (
     <div className="min-h-screen w-full bg-brand-soft bg-[radial-gradient(#d0e5f5_1px,transparent_1px)] [background-size:16px_16px] flex items-center justify-center p-3 sm:p-4 md:p-6 lg:p-8 font-sans overflow-x-hidden">
-      
+
       {/* Responsive Centered Card Container */}
       <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-12 rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xl bg-white border border-slate-300 my-auto">
-        
+
         {/* LEFT SIDE: Info Section (Hidden on ultra-small landscape or scaled smoothly) */}
         <div className="md:col-span-5 brand-gradient p-5 sm:p-7 md:p-8 lg:p-10 flex flex-col justify-between relative overflow-hidden">
           <div className="flex items-center justify-between z-10">
@@ -329,7 +329,7 @@ const Login = () => {
 
         {/* RIGHT SIDE: Interactive Login Form */}
         <div className="md:col-span-7 bg-white p-5 sm:p-8 md:p-10 lg:p-12 xl:p-14 flex flex-col justify-center relative">
-          
+
           {/* Header Title */}
           <div className="mb-10 sm:mb-12">
             <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900 tracking-tight">Sign in to continue</h2>
@@ -352,7 +352,7 @@ const Login = () => {
           {/* FORM 1: Password-Based Login */}
           {loginMode === 'password' && (
             <form onSubmit={handlePasswordLogin} noValidate className="space-y-4 sm:space-y-5">
-              
+
               {/* EMAIL INPUT */}
               <div>
                 <label className="block text-sm sm:text-base font-bold text-slate-700 mb-2">
@@ -368,9 +368,8 @@ const Login = () => {
                     placeholder="name@example.com"
                     autoComplete="email"
                     inputMode="email"
-                    className={`w-full text-sm sm:text-base pl-12 pr-4 py-3 sm:py-3.5 rounded-xl border bg-slate-50/50 text-slate-900 font-semibold placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-500/10 transition-all ${
-                      errors.emailOrPhone ? 'border-red-500 bg-red-50/20' : 'border-slate-300 hover:border-slate-400'
-                    }`}
+                    className={`w-full text-sm sm:text-base pl-12 pr-4 py-3 sm:py-3.5 rounded-xl border bg-slate-50/50 text-slate-900 font-semibold placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-500/10 transition-all ${errors.emailOrPhone ? 'border-red-500 bg-red-50/20' : 'border-slate-300 hover:border-slate-400'
+                      }`}
                   />
                 </div>
                 {errors.emailOrPhone && <p className="text-xs font-bold text-red-600 mt-1">{errors.emailOrPhone}</p>}
@@ -397,9 +396,8 @@ const Login = () => {
                     value={formData.password}
                     onChange={handleChange}
                     placeholder="••••••••"
-                    className={`w-full text-sm sm:text-base pl-12 pr-12 py-3 sm:py-3.5 rounded-xl border bg-slate-50/50 text-slate-900 font-semibold placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-500/10 transition-all ${
-                      errors.password ? 'border-red-500 bg-red-50/20' : 'border-slate-300 hover:border-slate-400'
-                    }`}
+                    className={`w-full text-sm sm:text-base pl-12 pr-12 py-3 sm:py-3.5 rounded-xl border bg-slate-50/50 text-slate-900 font-semibold placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-500/10 transition-all ${errors.password ? 'border-red-500 bg-red-50/20' : 'border-slate-300 hover:border-slate-400'
+                      }`}
                   />
                   <button
                     type="button"
@@ -466,8 +464,8 @@ const Login = () => {
                 </form>
               ) : (
                 <form onSubmit={handleVerifyOtpLogin} className="space-y-5">
-                  <button 
-                    type="button" 
+                  <button
+                    type="button"
                     onClick={() => setOtpStep(1)}
                     className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 transition mb-2"
                   >

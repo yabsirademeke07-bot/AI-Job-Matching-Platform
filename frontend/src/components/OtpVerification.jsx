@@ -84,7 +84,7 @@ const OtpVerification = () => {
       } else if (pendingJobId) {
         navigate(getNextApplicationStep(pendingJobId));
       } else {
-        navigate('/personal-info');
+        navigate('/upload-cv');
       }
     } catch (err) {
       if (otpCode === '123456') {
@@ -99,7 +99,7 @@ const OtpVerification = () => {
         localStorage.setItem('user', JSON.stringify(user));
         localStorage.setItem('currentUser', JSON.stringify(user));
         setSession({ token: 'frontend-demo-token', user });
-        navigate(user.role === 'employer' ? '/employee-info' : pendingJobId ? getNextApplicationStep(pendingJobId) : '/personal-info');
+        navigate(user.role === 'employer' ? '/employee-info' : pendingJobId ? getNextApplicationStep(pendingJobId) : '/upload-cv');
       } else {
         setError(err.response?.data?.message || 'Demo OTP is 123456.');
       }

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useGoogleLogin } from '@react-oauth/google';
-import { 
-  Sparkles, ShieldCheck, Cpu, Mail, Lock, 
+import {
+  Sparkles, ShieldCheck, Cpu, Mail, Lock,
   ArrowRight, Eye, EyeOff, Target, User, CheckCircle2, Briefcase, RefreshCw, ArrowLeft
 } from 'lucide-react';
 
@@ -34,7 +34,7 @@ const Register = () => {
   const [apiError, setApiError] = useState('');
   const [apiSuccess, setApiSuccess] = useState('');
 
-  const API_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000/api';
+  const API_URL = import.meta.env.VITE_BACKEND_URL || '/api';
 
   const saveDemoRegistration = () => {
     localStorage.setItem('pendingRegistration', JSON.stringify({
@@ -122,7 +122,7 @@ const Register = () => {
   const handleSubmitStep1 = async (e) => {
     e.preventDefault();
     if (!validateForm()) return;
-    
+
     setIsLoading(true);
     setApiError('');
 
@@ -150,11 +150,11 @@ const Register = () => {
     } catch (error) {
       console.error('Registration Error:', error);
       saveDemoRegistration();
-    } 
+    }
     // ✅ የተስተካከለ ኮድ:
- finally {
-  setIsLoading(false);
-}
+    finally {
+      setIsLoading(false);
+    }
   };
 
   // Helper: Send OTP
@@ -249,12 +249,12 @@ const Register = () => {
       });
 
       if (response.ok) {
-        navigate('/login', { 
-          state: { message: 'Registration completed successfully! Please log in.' } 
+        navigate('/login', {
+          state: { message: 'Registration completed successfully! Please log in.' }
         });
       } else {
-        navigate('/login', { 
-          state: { message: 'Account verified! Please login.' } 
+        navigate('/login', {
+          state: { message: 'Account verified! Please login.' }
         });
       }
     } catch (err) {
@@ -271,7 +271,7 @@ const Register = () => {
       localStorage.setItem('user', JSON.stringify(user));
       localStorage.setItem('currentUser', JSON.stringify(user));
       localStorage.removeItem('pendingRegistration');
-      navigate(selectedRole === 'employer' ? '/employee-info' : '/personal-info');
+      navigate(selectedRole === 'employer' ? '/employee-info' : '/upload-cv');
     } finally {
       setIsLoading(false);
     }
@@ -317,7 +317,7 @@ const Register = () => {
   return (
     <div className="min-h-screen w-full bg-brand-soft bg-[radial-gradient(#d0e5f5_1px,transparent_1px)] [background-size:16px_16px] flex items-center justify-center p-3 sm:p-4 md:p-6 lg:p-8 font-sans overflow-x-hidden">
       <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-12 rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xl bg-white border border-slate-300 my-auto">
-        
+
         {/* LEFT SIDE: Info Section */}
         <div className="md:col-span-5 brand-gradient p-6 sm:p-8 flex flex-col justify-between relative overflow-hidden">
           <div className="flex items-center justify-between z-10">
@@ -386,7 +386,7 @@ const Register = () => {
 
         {/* RIGHT SIDE: Dynamic Form (Step 1, 2, 3) */}
         <div className="md:col-span-7 bg-white p-6 sm:p-8 md:p-10 lg:p-12 flex flex-col justify-center relative min-h-full">
-          
+
           {/* API Notifications */}
           {apiError && (
             <div className="mb-4 sm:mb-6 p-3.5 sm:p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-semibold flex items-center justify-between">
@@ -422,9 +422,8 @@ const Register = () => {
                       value={formData.fullName}
                       onChange={handleChange}
                       placeholder="e.g. John Doe"
-                      className={`w-full text-base sm:text-lg pl-12 pr-4 py-5 rounded-xl border bg-slate-100 text-slate-900 font-semibold placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-500/10 transition-all ${
-                        errors.fullName ? 'border-red-500 bg-red-50/20' : 'border-slate-300 hover:border-slate-400'
-                      }`}
+                      className={`w-full text-base sm:text-lg pl-12 pr-4 py-5 rounded-xl border bg-slate-100 text-slate-900 font-semibold placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-500/10 transition-all ${errors.fullName ? 'border-red-500 bg-red-50/20' : 'border-slate-300 hover:border-slate-400'
+                        }`}
                     />
                   </div>
                   {errors.fullName && <p className="text-xs font-bold text-red-600 mt-1">{errors.fullName}</p>}
@@ -443,9 +442,8 @@ const Register = () => {
                       value={formData.email}
                       onChange={handleChange}
                       placeholder="name@example.com"
-                      className={`w-full text-base sm:text-lg pl-12 pr-4 py-5 rounded-xl border bg-slate-100 text-slate-900 font-semibold placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-500/10 transition-all ${
-                        errors.email ? 'border-red-500 bg-red-50/20' : 'border-slate-300 hover:border-slate-400'
-                      }`}
+                      className={`w-full text-base sm:text-lg pl-12 pr-4 py-5 rounded-xl border bg-slate-100 text-slate-900 font-semibold placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-500/10 transition-all ${errors.email ? 'border-red-500 bg-red-50/20' : 'border-slate-300 hover:border-slate-400'
+                        }`}
                     />
                   </div>
                   {errors.email && <p className="text-xs font-bold text-red-600 mt-1">{errors.email}</p>}
@@ -464,9 +462,8 @@ const Register = () => {
                       value={formData.password}
                       onChange={handleChange}
                       placeholder="At least 6 characters"
-                      className={`w-full text-base sm:text-lg pl-12 pr-12 py-5 rounded-xl border bg-slate-100 text-slate-900 font-semibold placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-500/10 transition-all ${
-                        errors.password ? 'border-red-500 bg-red-50/20' : 'border-slate-300 hover:border-slate-400'
-                      }`}
+                      className={`w-full text-base sm:text-lg pl-12 pr-12 py-5 rounded-xl border bg-slate-100 text-slate-900 font-semibold placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-500/10 transition-all ${errors.password ? 'border-red-500 bg-red-50/20' : 'border-slate-300 hover:border-slate-400'
+                        }`}
                     />
                     <button
                       type="button"
@@ -492,9 +489,8 @@ const Register = () => {
                       value={formData.confirmPassword}
                       onChange={handleChange}
                       placeholder="Repeat password"
-                      className={`w-full text-base sm:text-lg pl-12 pr-12 py-5 rounded-xl border bg-slate-100 text-slate-900 font-semibold placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-500/10 transition-all ${
-                        errors.confirmPassword ? 'border-red-500 bg-red-50/20' : 'border-slate-300 hover:border-slate-400'
-                      }`}
+                      className={`w-full text-base sm:text-lg pl-12 pr-12 py-5 rounded-xl border bg-slate-100 text-slate-900 font-semibold placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-500/10 transition-all ${errors.confirmPassword ? 'border-red-500 bg-red-50/20' : 'border-slate-300 hover:border-slate-400'
+                        }`}
                     />
                     <button
                       type="button"
@@ -554,8 +550,8 @@ const Register = () => {
           {/* STEP 2: OTP Verification Form */}
           {step === 2 && (
             <div className="py-2">
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={() => setStep(1)}
                 className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-slate-800 mb-6 transition"
               >
@@ -622,8 +618,17 @@ const Register = () => {
 
               <div className="grid sm:grid-cols-2 gap-4 my-6">
                 {/* Job Seeker Role */}
-                <div 
-                  onClick={() => handleSelectRole('jobseeker')}
+                <div
+                  role="button"
+                  tabIndex={isLoading ? -1 : 0}
+                  aria-label="Select Job Seeker account"
+                  onClick={() => !isLoading && handleSelectRole('jobseeker')}
+                  onKeyDown={(event) => {
+                    if (!isLoading && (event.key === 'Enter' || event.key === ' ')) {
+                      event.preventDefault();
+                      handleSelectRole('jobseeker');
+                    }
+                  }}
                   className="p-5 rounded-2xl border-2 border-slate-200 hover:border-blue-600 hover:bg-blue-50/30 cursor-pointer transition-all duration-200 group relative flex flex-col justify-between"
                 >
                   <div>
@@ -633,15 +638,24 @@ const Register = () => {
                     <h3 className="font-extrabold text-slate-900 text-base mb-1">Job Seeker</h3>
                     <p className="text-xs text-slate-500 font-medium">I want to upload my CV, search for jobs, and get AI career matches.</p>
                   </div>
-                  <div className="mt-4 flex items-center text-xs font-extrabold text-blue-600">
+                  <button type="button" disabled={isLoading} onClick={(event) => { event.stopPropagation(); handleSelectRole('jobseeker'); }} className="mt-4 flex items-center text-xs font-extrabold text-blue-600 disabled:opacity-50">
                     <span>Select Job Seeker</span>
                     <ArrowRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition" />
-                  </div>
+                  </button>
                 </div>
 
                 {/* Employer Role */}
-                <div 
-                  onClick={() => handleSelectRole('employer')}
+                <div
+                  role="button"
+                  tabIndex={isLoading ? -1 : 0}
+                  aria-label="Select Employer account"
+                  onClick={() => !isLoading && handleSelectRole('employer')}
+                  onKeyDown={(event) => {
+                    if (!isLoading && (event.key === 'Enter' || event.key === ' ')) {
+                      event.preventDefault();
+                      handleSelectRole('employer');
+                    }
+                  }}
                   className="p-5 rounded-2xl border-2 border-slate-200 hover-brand-border hover:bg-brand-soft cursor-pointer transition-all duration-200 group relative flex flex-col justify-between"
                 >
                   <div>
@@ -651,10 +665,10 @@ const Register = () => {
                     <h3 className="font-extrabold text-slate-900 text-base mb-1">Employer / Hiring Manager</h3>
                     <p className="text-xs text-slate-500 font-medium">I want to post jobs, parse candidate CVs, and hire top tech talent.</p>
                   </div>
-                  <div className="mt-4 flex items-center text-xs font-extrabold brand-text">
+                  <button type="button" disabled={isLoading} onClick={(event) => { event.stopPropagation(); handleSelectRole('employer'); }} className="mt-4 flex items-center text-xs font-extrabold brand-text disabled:opacity-50">
                     <span>Select Employer</span>
                     <ArrowRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition" />
-                  </div>
+                  </button>
                 </div>
               </div>
             </div>

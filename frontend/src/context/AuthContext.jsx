@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import api from '../services/api';
 
 const AuthContext = createContext();
@@ -13,13 +13,16 @@ export const AuthProvider = ({ children }) => {
 
   const login = async ({ email, password }) => {
     setLoading(true);
-    const { data } = await api.post('/auth/login', { email, password });
-    localStorage.setItem('token', data.token);
-    localStorage.setItem('user', JSON.stringify(data.user));
-    setToken(data.token);
-    setUser(data.user);
-    setLoading(false);
-    return data;
+    try {
+      const { data } = await api.post('/login', { email, password });
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
+      setToken(data.token);
+      setUser(data.user);
+      return data;
+    } finally {
+      setLoading(false);
+    }
   };
 
   const setSession = (session) => {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, User, FileText, Target, Search, Bookmark,
@@ -6,11 +6,23 @@ import {
   AlertTriangle, MapPin, Briefcase, DollarSign, Send, Globe, Menu, X, Lightbulb
 } from 'lucide-react';
 import heroBannerImg from '../assets/hero.png';
+import { useAuth } from '../context/AuthContext';
+import useSeekerDashboard from '../hooks/useSeekerDashboard';
 
 // የተስተካከለ Import Path (ከ pages ፎልደር ወጥቶ ወደ components/seeker ይሄዳል)
 import CvAnalysisPage from '../components/seeker/CvAnalysis';
 
 export default function SeekerDashboard() {
+  const { user: sessionUser, logout } = useAuth();
+  const {
+    profile,
+    stats,
+    recommendations = [],
+    skillGaps = { userSkills: [], missingSkills: [] },
+    isLoading,
+    error,
+    isUsingFallback,
+  } = useSeekerDashboard();
   const [language, setLanguage] = useState('EN'); // 'EN' or 'AM'
   const location = useLocation();
   const [activeTab, setActiveTab] = useState(() => location.state?.activeTab || 'dashboard');
@@ -18,111 +30,24 @@ export default function SeekerDashboard() {
   const [aiMessage, setAiMessage] = useState('');
   const navigate = useNavigate();
 
+  const user = profile || sessionUser || { name: 'Job Seeker' };
+  const userName = typeof user.name === 'string' && user.name.trim() ? user.name : 'Job Seeker';
+
   const handleLogout = () => {
-    localStorage.clear();
+    logout();
     navigate('/login');
   };
 
   const [chatHistory, setChatHistory] = useState([
-    { 
-      sender: 'ai', 
-      text: language === 'EN' 
-        ? "Hello Abebe! I'm your AI Career Assistant. How can I help you today?" 
-        : "ሰላም አበበ! እኔ የሥራ አጋር የ AI ረዳትዎ ነኝ። ዛሬ እንዴት ልረዳዎት?" 
+    {
+      sender: 'ai',
+      text: language === 'EN'
+        ? `Hello ${userName}! I'm your AI Career Assistant. How can I help you today?`
+        : `ሰላም ${userName}! እኔ የሥራ አጋር የ AI ረዳትዎ ነኝ። ዛሬ እንዴት ልረዳዎት?`
     }
   ]);
 
-  // User Profile & Stats Data
-  const user = {
-    name: "Abebe Bikila",
-    title: "Full Stack React / Node.js Developer",
-    location: "Addis Ababa, Ethiopia",
-    preferredLocation: "Addis Ababa + Remote",
-    profileCompletion: 85,
-    cvScore: 82,
-    cvStatus: "Analyzed ✓",
-    cvAnalysisDate: "Aug 05, 2026",
-    expectedSalary: "25,000 - 35,000 ETB",
-    employmentType: ["Full-time", "Contract"]
-  };
-
-  // AI Recommended Jobs
-  const recommendedJobs = [
-    {
-      id: 1,
-      title: "Senior React & Node.js Developer",
-      company: "YeneTech Solutions",
-      location: "Addis Ababa (Bole)",
-      workMode: "Hybrid",
-      salary: "30,000 - 40,000 ETB",
-      type: "Full-time",
-      matchScore: 94,
-      skillsBreakdown: { skills: 95, experience: 90, location: 100, salary: 90 },
-      whyMatch: [
-        "React.js matches your top skills",
-        "2+ years experience meets requirements",
-        "Located in Addis Ababa",
-        "Salary matches preference"
-      ],
-      posted: "2 hours ago"
-    },
-    {
-      id: 2,
-      title: "Frontend Developer (React / Next.js)",
-      company: "EthioTelecom Innovation Lab",
-      location: "Addis Ababa",
-      workMode: "On-site",
-      salary: "28,000 - 35,000 ETB",
-      type: "Permanent",
-      matchScore: 88,
-      skillsBreakdown: { skills: 90, experience: 85, location: 100, salary: 85 },
-      whyMatch: [
-        "Matches 8 out of 9 required skills",
-        "Preferred employment type matches"
-      ],
-      posted: "1 day ago"
-    },
-    {
-      id: 3,
-      title: "Full Stack Engineer",
-      company: "Kacha Digital Financial",
-      location: "Addis Ababa (Hybrid)",
-      workMode: "Hybrid",
-      salary: "35,000 - 50,000 ETB",
-      type: "Full-time",
-      matchScore: 91,
-      skillsBreakdown: { skills: 92, experience: 88, location: 95, salary: 90 },
-      whyMatch: [
-        "Your Node.js and MongoDB skills are a strong match",
-        "Hybrid work fits your preferred location",
-        "Salary is within your preferred range"
-      ],
-      posted: "3 hours ago"
-    }
-  ];
-
-  // Skill Gap Data
-  const skillGapData = {
-    userSkills: ["React.js", "JavaScript", "Node.js", "MongoDB", "Tailwind CSS"],
-    missingSkills: [
-      { name: "TypeScript", demand: "High (High Demand in 14 jobs)", impact: "+8% match" },
-      { name: "Docker", demand: "Medium (Used in DevOps teams)", impact: "+5% match" }
-    ]
-  };
-
-  // Application Tracking
-  const defaultApplications = [
-    { company: "Gebeya Inc.", position: "Frontend Engineer", status: "Shortlisted", date: "Aug 02, 2026", step: 3 },
-    { company: "Kacha Digital Financial", position: "Full Stack Dev", status: "Under Review", date: "Jul 28, 2026", step: 2 }
-  ];
-  const applications = (() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem('mockApplications') || '[]');
-      return [...saved, ...defaultApplications];
-    } catch {
-      return defaultApplications;
-    }
-  })();
+  const applications = stats?.applicationsList || [];
 
   const handleSendMessage = (e) => {
     e.preventDefault();
@@ -196,11 +121,10 @@ export default function SeekerDashboard() {
               <button
                 key={item.id}
                 onClick={() => { setActiveTab(item.id); setIsSidebarOpen(false); navigate(item.path); }}
-                className={`dashboard-nav-item w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
-                  isActive
-                    ? 'dashboard-active text-white shadow-lg font-semibold'
-                    : 'hover:bg-slate-800 text-slate-400 hover:text-slate-200'
-                }`}
+                className={`dashboard-nav-item w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${isActive
+                  ? 'dashboard-active text-white shadow-lg font-semibold'
+                  : 'hover:bg-slate-800 text-slate-400 hover:text-slate-200'
+                  }`}
               >
                 <Icon className="w-5 h-5" />
                 <span>{item.label}</span>
@@ -258,14 +182,10 @@ export default function SeekerDashboard() {
 
             {/* User Dropdown Preview */}
             <div className="flex items-center gap-3 pl-3 border-l border-slate-200">
-              <img
-                src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80"
-                alt="Profile"
-                className="w-10 h-10 rounded-full object-cover ring-2 ring-blue-600/20"
-              />
+              {user.avatarUrl ? <img src={user.avatarUrl} alt={userName} className="w-10 h-10 rounded-full object-cover ring-2 ring-blue-600/20" /> : <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold ring-2 ring-blue-600/20">{userName.charAt(0).toUpperCase()}</div>}
               <div className="hidden sm:block text-left">
-                <p className="text-sm font-bold text-slate-800 leading-none">{user.name}</p>
-                <p className="text-xs text-slate-500 mt-1">Software Engineer</p>
+                <p className="text-sm font-bold text-slate-800 leading-none">{userName}</p>
+                <p className="text-xs text-slate-500 mt-1">{user.headline || user.email || 'Job seeker'}</p>
               </div>
             </div>
           </div>
@@ -273,24 +193,32 @@ export default function SeekerDashboard() {
 
         {/* DASHBOARD MAIN BODY */}
         <main className="p-6 md:p-8 max-w-7xl w-full mx-auto space-y-8">
-          {activeTab === 'cv' ? (
+          {isLoading && (
+            <div className="space-y-4" role="status" aria-label="Loading dashboard">
+              <div className="h-40 rounded-3xl bg-slate-200 animate-pulse" />
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">{[1, 2, 3, 4].map((item) => <div key={item} className="h-28 rounded-2xl bg-slate-200 animate-pulse" />)}</div>
+            </div>
+          )}
+          {error && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+          {!isLoading && isUsingFallback && <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">Dashboard API unavailable. Showing your available profile data while the service reconnects.</div>}
+          {!isLoading && !error && (activeTab === 'cv' ? (
             /* activeTab 'cv' ሲሆን የ CV Analysis ገጽ ይከፈታል */
             <CvAnalysisPage />
           ) : (
             /* activeTab ሌላ (ለምሳሌ 'dashboard') ሲሆን ዋናው Dashboard ይታያል */
             <>
               {/* WELCOME BANNER & PROFILE COMPLETION */}
-              <div className="dashboard-hero rounded-3xl p-6 md:p-8 text-white shadow-xl relative overflow-hidden">
+              <div className="dashboard-hero rounded-3xl p-6 md:p-8 text-slate-900 shadow-xl relative overflow-hidden">
                 <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
                   <div className="space-y-2">
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/30 text-blue-300 text-xs font-semibold">
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-xs font-semibold">
                       <Sparkles className="w-3.5 h-3.5" />
                       <span>{language === 'EN' ? 'AI Career Dashboard' : 'የ AI የሥራ እድል ዳሽቦርድ'}</span>
                     </div>
                     <h1 className="text-2xl md:text-3xl font-black tracking-tight">
-                      {language === 'EN' ? `Welcome, ${user.name.split(' ')[0]} 👋` : `እንኳን ደህና መጡ፣ ${user.name.split(' ')[0]} 👋`}
+                      {language === 'EN' ? `Welcome, ${userName.split(' ')[0]} 👋` : `እንኳን ደህና መጡ፣ ${userName.split(' ')[0]} 👋`}
                     </h1>
-                    <p className="text-slate-300 text-sm max-w-xl">
+                    <p className="text-slate-600 text-sm max-w-xl">
                       {language === 'EN'
                         ? "Here are your latest job matches based on your profile and CV analysis."
                         : "ከእርስዎ መረጃ እና CV ትንተና በመነሳት የተዘጋጁ የቅርብ ጊዜ የሥራ እድሎች ከዚህ በታች ቀርበዋል።"}
@@ -298,28 +226,28 @@ export default function SeekerDashboard() {
                   </div>
 
                   {/* Profile Completion & CV Status Card */}
-                  <div className="bg-white/10 backdrop-blur-md border border-white/15 p-4 md:p-5 rounded-2xl flex items-center gap-6 shrink-0">
+                  <div className="bg-slate-50 border border-slate-200 p-4 md:p-5 rounded-2xl flex items-center gap-6 shrink-0">
                     <div className="space-y-1">
-                      <p className="text-xs text-slate-300 font-medium">{language === 'EN' ? 'Profile Completion' : 'የመረጃ ምልአት'}</p>
+                      <p className="text-xs text-slate-500 font-medium">{language === 'EN' ? 'Profile Completion' : 'የመረጃ ምልአት'}</p>
                       <div className="flex items-baseline gap-2">
-                        <span className="text-2xl font-black text-white">{user.profileCompletion}%</span>
-                        <span className="text-xs text-emerald-400 font-semibold">{language === 'EN' ? 'Complete' : 'ተጠናቋል'}</span>
+                        <span className="text-2xl font-black text-slate-900">{user.profileCompletion}%</span>
+                        <span className="text-xs text-emerald-600 font-semibold">{language === 'EN' ? 'Complete' : 'ተጠናቋል'}</span>
                       </div>
-                      <div className="w-32 bg-slate-700 h-2 rounded-full overflow-hidden mt-1">
+                      <div className="w-32 bg-slate-200 h-2 rounded-full overflow-hidden mt-1">
                         <div className="bg-emerald-400 h-full rounded-full" style={{ width: `${user.profileCompletion}%` }} />
                       </div>
-                      <button onClick={() => navigate('/profile')} className="text-[11px] font-bold text-blue-200 hover:text-white hover:underline">
+                      <button onClick={() => navigate('/profile')} className="text-[11px] font-bold text-blue-700 hover:text-blue-900 hover:underline">
                         {language === 'EN' ? 'Add your CV' : 'CVዎን ይጨምሩ'}
                       </button>
                     </div>
 
-                    <div className="border-l border-white/20 pl-6 space-y-1">
-                      <p className="text-xs text-slate-300 font-medium">{language === 'EN' ? 'AI CV Score' : 'የ CV ነጥብ'}</p>
+                    <div className="border-l border-slate-200 pl-6 space-y-1">
+                      <p className="text-xs text-slate-500 font-medium">{language === 'EN' ? 'AI CV Score' : 'የ CV ነጥብ'}</p>
                       <div className="flex items-center gap-2">
-                        <span className="text-2xl font-black text-blue-400">{user.cvScore}/100</span>
+                        <span className="text-2xl font-black text-blue-600">{user.cvScore}/100</span>
                       </div>
-                      <p className="text-[11px] text-emerald-300 flex items-center gap-1 font-medium">
-                        <CheckCircle2 className="w-3.5 h-3.5" /> {user.cvStatus}
+                      <p className="text-[11px] text-emerald-600 flex items-center gap-1 font-medium">
+                        <CheckCircle2 className="w-3.5 h-3.5" /> {user.cvScore > 0 ? 'Analyzed' : 'Not analyzed'}
                       </p>
                     </div>
                   </div>
@@ -329,10 +257,10 @@ export default function SeekerDashboard() {
               {/* STATS OVERVIEW CARDS */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {[
-                  { title: language === 'EN' ? 'AI Job Matches' : 'የ AI የተጣጣሙ ስራዎች', count: '14', detail: language === 'EN' ? 'new matches' : 'አዲስ', icon: Target, color: 'text-blue-600', bg: 'bg-blue-50', path: '/ai-matches' },
-                  { title: language === 'EN' ? 'Applied Jobs' : 'ያመለከቱባቸው ስራዎች', count: '6', detail: language === 'EN' ? 'applications' : 'ማመልከቻዎች', icon: ClipboardList, color: 'text-indigo-600', bg: 'bg-indigo-50', path: '/applications' },
-                  { title: language === 'EN' ? 'Interviews' : 'ቃለ-መጠይቆች', count: '2', detail: language === 'EN' ? 'scheduled' : 'የተያዙ', icon: Mic, color: 'text-emerald-600', bg: 'bg-emerald-50', path: '/interview-prep' },
-                  { title: language === 'EN' ? 'Saved Jobs' : 'ያስቀመጧቸው ስራዎች', count: '4', detail: language === 'EN' ? 'saved jobs' : 'የተቀመጡ', icon: Bookmark, color: 'text-amber-600', bg: 'bg-amber-50', path: '/saved-jobs' },
+                  { title: language === 'EN' ? 'AI Job Matches' : 'የ AI የተጣጣሙ ስራዎች', count: stats?.matches ?? 0, detail: language === 'EN' ? 'new matches' : 'አዲስ', icon: Target, color: 'text-blue-600', bg: 'bg-blue-50', path: '/ai-matches' },
+                  { title: language === 'EN' ? 'Applied Jobs' : 'ያመለከቱባቸው ስራዎች', count: stats?.applications ?? 0, detail: language === 'EN' ? 'applications' : 'ማመልከቻዎች', icon: ClipboardList, color: 'text-indigo-600', bg: 'bg-indigo-50', path: '/applications' },
+                  { title: language === 'EN' ? 'Interviews' : 'ቃለ-መጠይቆች', count: stats?.interviews ?? 0, detail: language === 'EN' ? 'scheduled' : 'የተያዙ', icon: Mic, color: 'text-emerald-600', bg: 'bg-emerald-50', path: '/interview-prep' },
+                  { title: language === 'EN' ? 'Saved Jobs' : 'ያስቀመጧቸው ስራዎች', count: stats?.savedJobs ?? 0, detail: language === 'EN' ? 'saved jobs' : 'የተቀመጡ', icon: Bookmark, color: 'text-amber-600', bg: 'bg-amber-50', path: '/saved-jobs' },
                 ].map((stat, idx) => {
                   const Icon = stat.icon;
                   return (
@@ -372,9 +300,9 @@ export default function SeekerDashboard() {
 
                     {/* Job Cards */}
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                      {recommendedJobs.filter((job) => job.matchScore > 90).map((job) => (
+                      {recommendations.filter((job) => job.matchScore > 90).map((job) => (
                         <div key={job.id} className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm hover:border-blue-500/50 hover:shadow-md transition-all space-y-4">
-                          
+
                           <div className="flex items-start justify-between gap-4">
                             <div className="flex gap-4">
                               <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center font-black text-slate-700 text-lg border border-slate-200 shrink-0">
@@ -491,7 +419,7 @@ export default function SeekerDashboard() {
                     </p>
 
                     <div className="space-y-3">
-                      {skillGapData.missingSkills.map((skill, idx) => (
+                      {skillGaps.missingSkills.map((skill, idx) => (
                         <div key={idx} className="p-3.5 rounded-xl border border-amber-200/80 bg-amber-50/50 space-y-1">
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
@@ -565,7 +493,7 @@ export default function SeekerDashboard() {
 
               </div>
             </>
-          )}
+          ))}
         </main>
       </div>
 
