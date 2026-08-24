@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   LogIn,
@@ -6,41 +6,17 @@ import {
   Menu,
   UserPlus,
   X,
+  LogOut,
 } from 'lucide-react';
 
 // የፎቶ Path — use local asset fallback in project
 import heroBannerImg from '../assets/hero.png';
+import { useAuth } from '../context/AuthContext';
 
 export default function Navbar() {
   const location = useLocation();
-  const [user, setUser] = useState(null);
-  const [token, setToken] = useState(null);
+  const { user, isAuthenticated, logout } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-
-  // ገጹ Refresh ሲደረግ ወይም Route ሲቀየር የ Auth ሁኔታን መፈተሽ
-  useEffect(() => {
-    try {
-      const storedToken = localStorage.getItem('token');
-      const storedUser = localStorage.getItem('user');
-
-      if (storedToken && storedUser && storedUser !== 'undefined') {
-        setToken(storedToken);
-        setUser(JSON.parse(storedUser));
-      } else {
-        setToken(null);
-        setUser(null);
-      }
-    } catch (error) {
-      console.error("Error loading user state:", error);
-      setToken(null);
-      setUser(null);
-    }
-  }, [location]);
-
-  // Route በሚቀየርበት ጊዜ የሞባይል ሜኑን መዝጋት
-  useEffect(() => {
-    setIsMobileMenuOpen(false);
-  }, [location.pathname]);
 
   const isActive = (path) => location.pathname === path;
   // የ Role ዓይነቶች ማረጋገጫ
@@ -50,20 +26,20 @@ export default function Navbar() {
   const isSeekerDashboardPage = ['/seeker-dashboard', '/seekerDashboard', '/dashboard'].includes(location.pathname);
   const isEmployerDashboardPage = ['/employer-dashboard', '/employer/dashboard', '/employer/candidates', '/employer/post-job'].includes(location.pathname);
 
-  // ተጠቃሚው ገብቷል የሚባለው Token እና User ሲኖር ብቻ ነው
-  const isAuthenticated = Boolean(token && user);
+  const displayName = user?.name || user?.full_name || user?.email || 'User';
+  const avatarUrl = user?.avatarUrl || user?.avatar_url;
 
   return (
     <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-sm transition-all w-full">
       {/* Container: px-4 sm:px-6 lg:px-8 በመጠቀም ወደ ግራ እና ቀኝ ዳር እንዲጠጋ ተደርጓል */}
       <div className="w-full px-4 sm:px-6 lg:px-8 h-20 sm:h-24 flex items-center justify-between gap-4">
-        
+
         {/* BRAND LOGO - ሙሉ በሙሉ ወደ ግራ */}
         <Link to="/" className="flex items-center gap-2.5 sm:gap-3.5 group shrink-0">
           <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl overflow-hidden shadow-md shadow-blue-500/10 group-hover:scale-105 transition-transform duration-200 border border-slate-100">
-            <img 
-              src={heroBannerImg} 
-              alt="Job Matching Logo" 
+            <img
+              src={heroBannerImg}
+              alt="Job Matching Logo"
               className="w-full h-full object-cover"
             />
           </div>
@@ -79,70 +55,60 @@ export default function Navbar() {
 
         {/* DESKTOP NAVIGATION LINKS - mr-auto ml-6/ml-10 በመጠቀም ወደ ግራ ተጠግተዋል፣ text-lg በመጠቀም መጠናቸው ጨምሯል */}
         <nav className="hidden lg:flex items-center gap-5 xl:gap-7 mr-auto ml-6 xl:ml-10">
-          
-          <Link 
-            to="/" 
-            className={`relative py-1 text-base xl:text-lg font-bold tracking-wide transition-colors duration-200 group ${
-              isActive('/') ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'
-            }`}
+
+          <Link
+            to="/"
+            className={`relative py-1 text-base xl:text-lg font-bold tracking-wide transition-colors duration-200 group ${isActive('/') ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'
+              }`}
           >
             Home
-            <span className={`absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 rounded-full transition-transform duration-300 origin-left ${
-              isActive('/') ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
-            }`} />
+            <span className={`absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 rounded-full transition-transform duration-300 origin-left ${isActive('/') ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
+              }`} />
           </Link>
 
-          <Link 
-            to="/jobs" 
-            className={`relative py-1 text-base xl:text-lg font-bold tracking-wide transition-colors duration-200 group ${
-              isActive('/jobs') || isActive('/explorejobs') ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'
-            }`}
+          <Link
+            to="/jobs"
+            className={`relative py-1 text-base xl:text-lg font-bold tracking-wide transition-colors duration-200 group ${isActive('/jobs') || isActive('/explorejobs') ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'
+              }`}
           >
             Explore Jobs
-            <span className={`absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 rounded-full transition-transform duration-300 origin-left ${
-              isActive('/jobs') || isActive('/explorejobs') ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
-            }`} />
+            <span className={`absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 rounded-full transition-transform duration-300 origin-left ${isActive('/jobs') || isActive('/explorejobs') ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
+              }`} />
           </Link>
 
           <Link
             to="/how-it-works"
-            className={`relative py-1 text-base xl:text-lg font-bold tracking-wide transition-colors duration-200 group ${
-              isActive('/how-it-works') ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'
-            }`}
+            className={`relative py-1 text-base xl:text-lg font-bold tracking-wide transition-colors duration-200 group ${isActive('/how-it-works') ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'
+              }`}
           >
             How It Works
-            <span className={`absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 rounded-full transition-transform duration-300 origin-left ${
-              isActive('/how-it-works') ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
-            }`} />
+            <span className={`absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 rounded-full transition-transform duration-300 origin-left ${isActive('/how-it-works') ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
+              }`} />
           </Link>
 
-          <Link 
-            to="/about" 
-            className={`relative py-1 text-base xl:text-lg font-bold tracking-wide transition-colors duration-200 group ${
-              isActive('/about') ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'
-            }`}
+          <Link
+            to="/about"
+            className={`relative py-1 text-base xl:text-lg font-bold tracking-wide transition-colors duration-200 group ${isActive('/about') ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'
+              }`}
           >
             About
-            <span className={`absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 rounded-full transition-transform duration-300 origin-left ${
-              isActive('/about') ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
-            }`} />
+            <span className={`absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 rounded-full transition-transform duration-300 origin-left ${isActive('/about') ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
+              }`} />
           </Link>
 
-          <Link 
-            to="/contact" 
-            className={`relative py-1 text-base xl:text-lg font-bold tracking-wide transition-colors duration-200 group ${
-              isActive('/contact') ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'
-            }`}
+          <Link
+            to="/contact"
+            className={`relative py-1 text-base xl:text-lg font-bold tracking-wide transition-colors duration-200 group ${isActive('/contact') ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'
+              }`}
           >
             Contact
-            <span className={`absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 rounded-full transition-transform duration-300 origin-left ${
-              isActive('/contact') ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
-            }`} />
+            <span className={`absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 rounded-full transition-transform duration-300 origin-left ${isActive('/contact') ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
+              }`} />
           </Link>
 
           {/* ተጠቃሚው Login ካደረገ የሚታዩ Dashboard Links */}
           {isAuthenticated && isSeeker && isSeekerDashboardPage && (
-            <Link to="/seeker-dashboard" className="text-xs font-extrabold bg-blue-50 text-blue-600 px-3.5 py-1.5 rounded-full hover:bg-blue-100 transition flex items-center gap-2 shrink-0">
+            <Link to="/seeker-dashboard" className="text-xs font-extrabold bg-[var(--brand-primary)] text-white px-3.5 py-1.5 rounded-full hover:bg-[var(--brand-primary-hover)] transition flex items-center gap-2 shrink-0">
               <LayoutDashboard className="w-4 h-4" />
               <span>Seeker dashboard</span>
             </Link>
@@ -165,20 +131,21 @@ export default function Navbar() {
 
         {/* DESKTOP RIGHT BUTTONS - ሙሉ በሙሉ ወደ ቀኝ */}
         <div className="hidden lg:flex items-center gap-3 shrink-0 ml-auto">
-          <Link
-            to="/login"
-            className="brand-button text-base px-5 xl:px-6 py-2.5"
-          >
-            <LogIn className="w-5 h-5 text-blue-600" />
-            <span>Log In</span>
-          </Link>
-          <Link
-            to="/register"
-            className="brand-button text-base px-6 xl:px-7 py-2.5"
-          >
-            <UserPlus className="w-5 h-5" />
-            <span>Sign Up</span>
-          </Link>
+          {isAuthenticated ? (
+            <div className="flex items-center gap-3">
+              {avatarUrl ? <img src={avatarUrl} alt={displayName} className="w-9 h-9 rounded-full object-cover" /> : <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold">{displayName.charAt(0).toUpperCase()}</div>}
+              <span className="text-sm font-bold text-slate-700">{displayName}</span>
+              <button onClick={() => { logout(); }} className="brand-button text-sm px-4 py-2" aria-label="Log out">
+                <LogOut className="w-4 h-4" />
+                <span>Log Out</span>
+              </button>
+            </div>
+          ) : (
+            <>
+              <Link to="/login" className="brand-button text-base px-5 xl:px-6 py-2.5"><LogIn className="w-5 h-5 text-blue-600" /><span>Log In</span></Link>
+              <Link to="/register" className="brand-button text-base px-6 xl:px-7 py-2.5"><UserPlus className="w-5 h-5" /><span>Sign Up</span></Link>
+            </>
+          )}
         </div>
 
         {/* MOBILE & TABLET HAMBURGER MENU BUTTON */}
@@ -203,23 +170,21 @@ export default function Navbar() {
       {isMobileMenuOpen && (
         <div className="lg:hidden border-t border-slate-200/80 bg-white px-4 pt-3 pb-6 shadow-xl w-full">
           <div className="flex flex-col gap-2 w-full">
-            
-            <Link 
-              to="/" 
+
+            <Link
+              to="/"
               onClick={() => setIsMobileMenuOpen(false)}
-              className={`px-4 py-3 rounded-xl font-bold text-base transition-colors ${
-                isActive('/') ? 'bg-blue-50 text-blue-600' : 'text-slate-700 hover:bg-slate-50'
-              }`}
+              className={`px-4 py-3 rounded-xl font-bold text-base transition-colors ${isActive('/') ? 'bg-blue-50 text-blue-600' : 'text-slate-700 hover:bg-slate-50'
+                }`}
             >
               Home
             </Link>
 
-            <Link 
-              to="/jobs" 
+            <Link
+              to="/jobs"
               onClick={() => setIsMobileMenuOpen(false)}
-              className={`px-4 py-3 rounded-xl font-bold text-base transition-colors ${
-                isActive('/jobs') || isActive('/explorejobs') ? 'bg-blue-50 text-blue-600' : 'text-slate-700 hover:bg-slate-50'
-              }`}
+              className={`px-4 py-3 rounded-xl font-bold text-base transition-colors ${isActive('/jobs') || isActive('/explorejobs') ? 'bg-blue-50 text-blue-600' : 'text-slate-700 hover:bg-slate-50'
+                }`}
             >
               Explore Jobs
             </Link>
@@ -227,39 +192,36 @@ export default function Navbar() {
             <Link
               to="/how-it-works"
               onClick={() => setIsMobileMenuOpen(false)}
-              className={`px-4 py-3 rounded-xl font-bold text-base transition-colors ${
-                isActive('/how-it-works') ? 'bg-blue-50 text-blue-600' : 'text-slate-700 hover:bg-slate-50'
-              }`}
+              className={`px-4 py-3 rounded-xl font-bold text-base transition-colors ${isActive('/how-it-works') ? 'bg-blue-50 text-blue-600' : 'text-slate-700 hover:bg-slate-50'
+                }`}
             >
               How It Works
             </Link>
 
-            <Link 
-              to="/about" 
+            <Link
+              to="/about"
               onClick={() => setIsMobileMenuOpen(false)}
-              className={`px-4 py-3 rounded-xl font-bold text-base transition-colors ${
-                isActive('/about') ? 'bg-blue-50 text-blue-600' : 'text-slate-700 hover:bg-slate-50'
-              }`}
+              className={`px-4 py-3 rounded-xl font-bold text-base transition-colors ${isActive('/about') ? 'bg-blue-50 text-blue-600' : 'text-slate-700 hover:bg-slate-50'
+                }`}
             >
               About
             </Link>
 
-            <Link 
-              to="/contact" 
+            <Link
+              to="/contact"
               onClick={() => setIsMobileMenuOpen(false)}
-              className={`px-4 py-3 rounded-xl font-bold text-base transition-colors ${
-                isActive('/contact') ? 'bg-blue-50 text-blue-600' : 'text-slate-700 hover:bg-slate-50'
-              }`}
+              className={`px-4 py-3 rounded-xl font-bold text-base transition-colors ${isActive('/contact') ? 'bg-blue-50 text-blue-600' : 'text-slate-700 hover:bg-slate-50'
+                }`}
             >
               Contact
             </Link>
 
             {/* Mobile User Consoles */}
             {isAuthenticated && isSeeker && isSeekerDashboardPage && (
-              <Link 
-                to="/seeker-dashboard" 
+              <Link
+                to="/seeker-dashboard"
                 onClick={() => setIsMobileMenuOpen(false)}
-                className="mx-2 my-1 px-4 py-3 rounded-xl text-sm font-extrabold bg-blue-50 text-blue-600 flex items-center gap-2"
+                className="mx-2 my-1 px-4 py-3 rounded-xl text-sm font-extrabold bg-[var(--brand-primary)] text-white flex items-center gap-2"
               >
                 <LayoutDashboard className="w-4 h-4" />
                 <span>Seeker dashboard</span>
@@ -267,8 +229,8 @@ export default function Navbar() {
             )}
 
             {isAuthenticated && isEmployer && (
-              <Link 
-                to="/employer-dashboard" 
+              <Link
+                to="/employer-dashboard"
                 onClick={() => setIsMobileMenuOpen(false)}
                 className="mx-2 my-1 px-4 py-3 rounded-xl text-sm font-extrabold bg-indigo-50 text-indigo-600 flex items-center gap-2"
               >
@@ -278,8 +240,8 @@ export default function Navbar() {
             )}
 
             {isAuthenticated && isAdmin && (
-              <Link 
-                to="/admin-dashboard" 
+              <Link
+                to="/admin-dashboard"
                 onClick={() => setIsMobileMenuOpen(false)}
                 className="mx-2 my-1 px-4 py-3 rounded-xl text-sm font-extrabold bg-purple-50 text-purple-600 flex items-center gap-2"
               >
@@ -290,22 +252,20 @@ export default function Navbar() {
 
             {/* Mobile Action Buttons */}
             <div className="pt-3 mt-2 border-t border-slate-100 flex flex-col gap-2.5">
-              <Link
-                to="/login"
-                onClick={() => setIsMobileMenuOpen(false)}
-                className="brand-button w-full text-base"
-              >
-                <LogIn className="w-5 h-5 text-blue-600" />
-                <span>Log In</span>
-              </Link>
-              <Link
-                to="/register"
-                onClick={() => setIsMobileMenuOpen(false)}
-                className="brand-button w-full text-base"
-              >
-                <UserPlus className="w-5 h-5" />
-                <span>Sign Up</span>
-              </Link>
+              {isAuthenticated ? (
+                <>
+                  <div className="flex items-center gap-3 px-4 py-2 text-sm font-bold text-slate-700">
+                    {avatarUrl ? <img src={avatarUrl} alt={displayName} className="w-9 h-9 rounded-full object-cover" /> : <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center">{displayName.charAt(0).toUpperCase()}</div>}
+                    <span>{displayName}</span>
+                  </div>
+                  <button onClick={() => { logout(); setIsMobileMenuOpen(false); }} className="brand-button w-full text-base"><LogOut className="w-5 h-5" /><span>Log Out</span></button>
+                </>
+              ) : (
+                <>
+                  <Link to="/login" onClick={() => setIsMobileMenuOpen(false)} className="brand-button w-full text-base"><LogIn className="w-5 h-5 text-blue-600" /><span>Log In</span></Link>
+                  <Link to="/register" onClick={() => setIsMobileMenuOpen(false)} className="brand-button w-full text-base"><UserPlus className="w-5 h-5" /><span>Sign Up</span></Link>
+                </>
+              )}
             </div>
 
           </div>

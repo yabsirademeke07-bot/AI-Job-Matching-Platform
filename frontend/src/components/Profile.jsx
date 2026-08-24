@@ -28,44 +28,40 @@ const Profile = ({ userData = {}, cvFile = null }) => {
 
   // Dynamic Lists State
   const [educationList, setEducationList] = useState(
-    savedProfile?.education || [
-      { id: 1, university: 'Addis Ababa University', degree: "Bachelor's", department: 'Computer Science', graduationYear: '2024' }
-    ]
+    savedProfile?.education || []
   );
 
   const [experienceList, setExperienceList] = useState(
-    savedProfile?.experience || [
-      { id: 1, company: 'Tech Solutions Inc', position: 'Frontend Developer', startDate: '2024-01', endDate: 'Present', responsibilities: 'Building React components & UI interfaces.' }
-    ]
+    savedProfile?.experience || []
   );
 
-  const [skills, setSkills] = useState(savedProfile?.skills || ['React', 'JavaScript', 'Node.js']);
+  const [skills, setSkills] = useState(savedProfile?.skills || []);
   const [newSkill, setNewSkill] = useState('');
 
-  const [languages, setLanguages] = useState(savedProfile?.languages || ['English', 'አማርኛ']);
+  const [languages, setLanguages] = useState(savedProfile?.languages || []);
   const [newLang, setNewLang] = useState('');
 
   const [isSaved, setIsSaved] = useState(false);
 
   // Personal Profile Data State
   const [profileData, setProfileData] = useState({
-    firstName: savedProfile?.firstName || userData?.firstName || savedUser?.full_name?.split(' ')[0] || 'Abebe',
-    lastName: savedProfile?.lastName || userData?.lastName || savedUser?.full_name?.split(' ')[1] || 'Bikila',
-    email: savedProfile?.email || userData?.email || savedUser?.email || 'abebe@example.com',
-    phone: savedProfile?.phone || savedUser?.phone || '+251 900 000 000',
+    firstName: savedProfile?.firstName || userData?.firstName || savedUser?.full_name?.split(' ')[0] || '',
+    lastName: savedProfile?.lastName || userData?.lastName || savedUser?.full_name?.split(' ')[1] || '',
+    email: savedProfile?.email || userData?.email || savedUser?.email || '',
+    phone: savedProfile?.phone || savedUser?.phone || '',
     dob: savedProfile?.dob || '',
-    gender: savedProfile?.gender || 'Male',
-    country: savedProfile?.country || 'Ethiopia',
-    city: savedProfile?.city || 'Addis Ababa',
-    github: savedProfile?.github || 'https://github.com',
-    linkedin: savedProfile?.linkedin || 'https://linkedin.com',
-    portfolio: savedProfile?.portfolio || 'https://myportfolio.com',
-    jobCategory: savedProfile?.jobCategory || 'Software Engineering',
-    preferredJob: savedProfile?.preferredJob || userData?.preferredJob || 'Full Stack Developer',
-    employmentType: savedProfile?.employmentType || 'Full-Time',
-    salaryExpectation: savedProfile?.salaryExpectation || userData?.salaryExpectation || '$1,500 / month',
-    preferredCity: savedProfile?.preferredCity || 'Addis Ababa',
-    preferredWorkSetup: savedProfile?.preferredWorkSetup || 'Remote'
+    gender: savedProfile?.gender || '',
+    country: savedProfile?.country || '',
+    city: savedProfile?.city || '',
+    github: savedProfile?.github || '',
+    linkedin: savedProfile?.linkedin || '',
+    portfolio: savedProfile?.portfolio || '',
+    jobCategory: savedProfile?.jobCategory || '',
+    preferredJob: savedProfile?.preferredJob || userData?.preferredJob || '',
+    employmentType: savedProfile?.employmentType || '',
+    salaryExpectation: savedProfile?.salaryExpectation || userData?.salaryExpectation || '',
+    preferredCity: savedProfile?.preferredCity || '',
+    preferredWorkSetup: savedProfile?.preferredWorkSetup || ''
   });
 
   // Calculate profile completion dynamically
@@ -226,6 +222,7 @@ const Profile = ({ userData = {}, cvFile = null }) => {
             <label className="block text-slate-600 mb-1 font-medium">First Name</label>
             <input 
               type="text" 
+              placeholder="Your first name"
               value={profileData.firstName} 
               onChange={(e) => setProfileData({ ...profileData, firstName: e.target.value })}
               className="w-full p-2.5 rounded-xl border border-slate-200 bg-white font-semibold text-slate-800 outline-none focus:border-blue-500"
@@ -236,6 +233,7 @@ const Profile = ({ userData = {}, cvFile = null }) => {
             <label className="block text-slate-600 mb-1 font-medium">Last Name</label>
             <input 
               type="text" 
+              placeholder="Your last name"
               value={profileData.lastName} 
               onChange={(e) => setProfileData({ ...profileData, lastName: e.target.value })}
               className="w-full p-2.5 rounded-xl border border-slate-200 bg-white font-semibold text-slate-800 outline-none focus:border-blue-500"
@@ -246,6 +244,7 @@ const Profile = ({ userData = {}, cvFile = null }) => {
             <label className="block text-slate-600 mb-1 font-medium">Email</label>
             <input 
               type="email" 
+              placeholder="you@example.com"
               value={profileData.email} 
               onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
               className="w-full p-2.5 rounded-xl border border-slate-200 bg-white font-semibold text-slate-800 outline-none focus:border-blue-500"
@@ -258,6 +257,7 @@ const Profile = ({ userData = {}, cvFile = null }) => {
               <Phone className="w-4 h-4 text-slate-400 absolute left-3" />
               <input 
                 type="text" 
+                placeholder="+251 9XX XXX XXX"
                 value={profileData.phone} 
                 onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
                 className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:border-blue-500"
@@ -265,7 +265,7 @@ const Profile = ({ userData = {}, cvFile = null }) => {
             </div>
           </div>
 
-          <div>
+          <div className="hidden">
             <label className="block text-slate-600 mb-1 font-medium">Date of Birth (Optional)</label>
             <input 
               type="date" 
@@ -275,13 +275,14 @@ const Profile = ({ userData = {}, cvFile = null }) => {
             />
           </div>
 
-          <div>
+          <div className="hidden">
             <label className="block text-slate-600 mb-1 font-medium">Gender (Optional)</label>
             <select 
               value={profileData.gender} 
               onChange={(e) => setProfileData({ ...profileData, gender: e.target.value })}
               className="w-full p-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:border-blue-500"
             >
+              <option value="" disabled>Select gender</option>
               <option value="Male">Male</option>
               <option value="Female">Female</option>
               <option value="Other">Other</option>
@@ -293,6 +294,7 @@ const Profile = ({ userData = {}, cvFile = null }) => {
               <label className="block text-slate-600 mb-1 font-medium">Country</label>
               <input 
                 type="text" 
+                placeholder="Country"
                 value={profileData.country} 
                 onChange={(e) => setProfileData({ ...profileData, country: e.target.value })}
                 className="w-full p-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:border-blue-500"
@@ -302,6 +304,7 @@ const Profile = ({ userData = {}, cvFile = null }) => {
               <label className="block text-slate-600 mb-1 font-medium">City</label>
               <input 
                 type="text" 
+                placeholder="City"
                 value={profileData.city} 
                 onChange={(e) => setProfileData({ ...profileData, city: e.target.value })}
                 className="w-full p-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:border-blue-500"
@@ -510,7 +513,7 @@ const Profile = ({ userData = {}, cvFile = null }) => {
       </div>
 
       {/* Portfolio Links */}
-      <div className="bg-slate-50/90 rounded-2xl border border-slate-200/80 p-5 space-y-3 shadow-sm">
+      <div className="hidden bg-slate-50/90 rounded-2xl border border-slate-200/80 p-5 space-y-3 shadow-sm">
         <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2 border-b pb-2 border-slate-200">
           <LinkIcon className="w-4 h-4 text-sky-600" /> Portfolio & Links
         </h3>
@@ -562,6 +565,7 @@ const Profile = ({ userData = {}, cvFile = null }) => {
             <label className="block text-slate-600 mb-1 font-medium">Desired Position</label>
             <input 
               type="text" 
+              placeholder="e.g. Frontend Developer"
               value={profileData.preferredJob} 
               onChange={(e) => setProfileData({ ...profileData, preferredJob: e.target.value })}
               className="w-full p-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:border-blue-500"
@@ -572,6 +576,7 @@ const Profile = ({ userData = {}, cvFile = null }) => {
             <label className="block text-slate-600 mb-1 font-medium">Job Category</label>
             <input 
               type="text" 
+              placeholder="e.g. Software Engineering"
               value={profileData.jobCategory} 
               onChange={(e) => setProfileData({ ...profileData, jobCategory: e.target.value })}
               className="w-full p-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:border-blue-500"
@@ -585,6 +590,7 @@ const Profile = ({ userData = {}, cvFile = null }) => {
               onChange={(e) => setProfileData({ ...profileData, employmentType: e.target.value })}
               className="w-full p-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:border-blue-500"
             >
+              <option value="" disabled>Select employment type</option>
               <option value="Full-Time">Full-Time</option>
               <option value="Part-Time">Part-Time</option>
               <option value="Contract">Contract</option>
@@ -596,6 +602,7 @@ const Profile = ({ userData = {}, cvFile = null }) => {
             <label className="block text-slate-600 mb-1 font-medium">Salary Expectation</label>
             <input 
               type="text" 
+              placeholder="e.g. 25,000 ETB / month"
               value={profileData.salaryExpectation} 
               onChange={(e) => setProfileData({ ...profileData, salaryExpectation: e.target.value })}
               className="w-full p-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:border-blue-500"
@@ -606,6 +613,7 @@ const Profile = ({ userData = {}, cvFile = null }) => {
             <label className="block text-slate-600 mb-1 font-medium">Preferred Location (City)</label>
             <input 
               type="text" 
+              placeholder="e.g. Addis Ababa or Remote"
               value={profileData.preferredCity} 
               onChange={(e) => setProfileData({ ...profileData, preferredCity: e.target.value })}
               className="w-full p-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:border-blue-500"
@@ -619,6 +627,7 @@ const Profile = ({ userData = {}, cvFile = null }) => {
               onChange={(e) => setProfileData({ ...profileData, preferredWorkSetup: e.target.value })}
               className="w-full p-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:border-blue-500"
             >
+              <option value="" disabled>Select work setup</option>
               <option value="Remote">Remote</option>
               <option value="Hybrid">Hybrid</option>
               <option value="On-site">On-site</option>

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { UploadCloud, Sparkles, Loader2, ArrowRight } from 'lucide-react';
-import { getApplicationJobId, getNextApplicationStep, hasCompletedPersonalInfo, hasCompletedProfile, hasCompletedCv } from '../utils/applicationFlow';
+import { UploadCloud, Sparkles, Loader2, ArrowRight, FileText, ShieldCheck } from 'lucide-react';
+import { getApplicationJobId, getNextApplicationStep, hasCompletedProfile, hasCompletedCv } from '../utils/applicationFlow';
 
 const CvUploader = ({
   cvFile: externalCvFile,
@@ -27,6 +27,7 @@ const CvUploader = ({
     salaryExpectation: ''
   });
   const [continueError, setContinueError] = useState('');
+  const [isDragActive, setIsDragActive] = useState(false);
 
   // Controlled vs Uncontrolled Props logic
   const cvFile = externalCvFile !== undefined ? externalCvFile : internalCvFile;
@@ -44,9 +45,18 @@ const CvUploader = ({
     }));
   });
 
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
+  const processFile = (file) => {
     if (file) {
+      const validFile = /\.(pdf|doc|docx)$/i.test(file.name);
+      if (!validFile) {
+        setContinueError('Please upload a PDF, DOC, or DOCX file.');
+        return;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        setContinueError('Your CV must be smaller than 10MB.');
+        return;
+      }
+      setContinueError('');
       setCvFile(file);
       try {
         const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
@@ -56,6 +66,14 @@ const CvUploader = ({
       }
       simulateCvParsing(file);
     }
+  };
+
+  const handleFileChange = (e) => processFile(e.target.files[0]);
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragActive(false);
+    processFile(e.dataTransfer.files[0]);
   };
 
   const simulateCvParsing = (file) => {
@@ -83,8 +101,7 @@ const CvUploader = ({
       return;
     }
     if (applicationJobId) {
-      if (!hasCompletedPersonalInfo()) navigate(`/personal-info?jobId=${encodeURIComponent(applicationJobId)}`);
-      else navigate(hasCompletedProfile() ? getNextApplicationStep(applicationJobId) : `/profile?jobId=${encodeURIComponent(applicationJobId)}`);
+      navigate(hasCompletedProfile() ? getNextApplicationStep(applicationJobId) : `/profile?jobId=${encodeURIComponent(applicationJobId)}`);
       return;
     }
     if (onNext) {
@@ -98,87 +115,87 @@ const CvUploader = ({
   const savedUser = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
   const parsedUser = savedUser ? JSON.parse(savedUser) : null;
   const welcomeName = parsedUser?.full_name || parsedUser?.name || parsedUser?.email || null;
-  const isSeeker = ['job_seeker','seeker','jobseeker','user','employee'].includes((parsedUser?.role || '').toString().toLowerCase());
+  const isSeeker = ['job_seeker', 'seeker', 'jobseeker', 'user', 'employee'].includes((parsedUser?.role || '').toString().toLowerCase());
 
   return (
-    <div className="information-page w-full max-w-4xl mx-auto my-6 px-4 sm:px-6 lg:my-10">
-      <div className="space-y-8 rounded-3xl border border-slate-200 bg-white px-5 py-9 shadow-lg shadow-slate-900/5 sm:px-8 sm:py-11 lg:px-10 lg:py-14">
-      <div>
-        <h2 className="text-3xl font-extrabold leading-tight text-slate-900 tracking-tight sm:text-4xl">{isSeeker ? 'Welcome, ' + (welcomeName ? welcomeName : 'Job Seeker') : 'Upload Your CV'}</h2>
-        <p className="mt-3 text-lg leading-7 text-slate-600">
-          {isSeeker ? 'Upload your CV to extract skills, generate a match score with available roles, and complete your candidate profile.' : 'Upload a resume to analyze skills & preferences.'}
-        </p>
-      </div>
-
-      {/* Upload Box */}
-      <div className="border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-2xl p-12 sm:p-14 bg-slate-50/50 hover:bg-blue-50/20 transition-all text-center relative cursor-pointer">
-        <input
-          type="file"
-          accept=".pdf,.doc,.docx"
-          onChange={handleFileChange}
-          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-        />
-        
-        <div className="flex flex-col items-center justify-center pointer-events-none">
-          <div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center mb-3">
-            <UploadCloud className="w-6 h-6" />
-          </div>
-          <p className="text-base font-semibold text-slate-800 mb-2">
-            {cvFile ? cvFile.name : "Click to upload or drag & drop"}
-          </p>
-          <p className="text-base text-slate-400">PDF, DOC, DOCX (Max 10MB)</p>
-        </div>
-      </div>
-
-      {/* Parsing Loader */}
-      {continueError && <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{continueError}</p>}
-      {isParsing && (
-        <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 flex items-center gap-3">
-          <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
-          <div>
-            <h4 className="text-sm font-bold text-blue-900">AI is analyzing your CV...</h4>
-            <p className="text-xs text-blue-700">Extracting skills, experience, and match score.</p>
+    <div className="information-page w-full max-w-5xl mx-auto my-6 px-4 sm:px-6 lg:my-10">
+      <div className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-xl shadow-slate-900/5">
+        <div className="px-6 py-8 text-slate-900 sm:px-10" style={{ backgroundColor: '#f8fafc' }}>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-slate-200 px-3 py-1.5 text-xs font-bold text-slate-700"><Sparkles className="h-4 w-4 text-[var(--brand-deep)]" /> AI-powered CV analysis</div>
+              <h2 className="text-3xl font-black tracking-tight sm:text-4xl">Upload your CV</h2>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{isSeeker ? `Welcome, ${welcomeName || 'Job Seeker'}. Upload your CV to unlock personalized job matches.` : 'Upload your resume to analyze skills and discover better opportunities.'}</p>
+            </div>
+            <FileText className="hidden h-9 w-9 text-[var(--brand-deep)] sm:block" />
           </div>
         </div>
-      )}
 
-      {/* Analysis Output */}
-      {parsedAnalysis && !isParsing && (
-        <div className="p-5 rounded-2xl bg-emerald-50/60 border border-emerald-200 space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-emerald-600" />
-              <span className="text-sm font-bold text-emerald-900">AI CV Analysis Results</span>
+        <div className="space-y-6 p-6 sm:p-10">
+          <div onDragOver={(e) => { e.preventDefault(); setIsDragActive(true); }} onDragLeave={() => setIsDragActive(false)} onDrop={handleDrop} className={`relative min-h-[300px] rounded-3xl border-2 border-dashed p-8 text-center transition-all sm:p-12 ${isDragActive ? 'bg-[var(--brand-soft-hover)] ring-4 ring-[#d0e5f5]' : 'bg-[var(--brand-soft)]'}`} style={{ borderColor: 'var(--brand-primary)' }}>
+            <input type="file" accept=".pdf,.doc,.docx" onChange={handleFileChange} className="absolute inset-0 z-10 h-full w-full cursor-pointer !opacity-0" aria-label="Upload CV" />
+            <div className="pointer-events-none mx-auto flex max-w-lg flex-col items-center">
+              <div className="mb-5 flex h-20 w-20 items-center justify-center rounded-2xl text-white shadow-lg ring-4 ring-white/70" style={{ backgroundColor: 'var(--brand-primary)' }}>
+                <UploadCloud className="h-10 w-10" strokeWidth={2.5} aria-hidden="true" />
+              </div>
+              <h3 className="text-lg font-extrabold text-slate-900">{cvFile ? cvFile.name : 'Drag & drop your CV here'}</h3>
+              <p className="mt-2 text-sm text-slate-500">{cvFile ? `${(cvFile.size / 1024 / 1024).toFixed(2)} MB · Ready for analysis` : 'or click to browse from your device'}</p>
+              <span className="mt-5 rounded-xl px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-[#56a2d8]/25" style={{ backgroundColor: 'var(--brand-primary)' }}>{cvFile ? 'Choose a different file' : 'Choose CV file'}</span>
+              <p className="mt-4 text-xs font-medium text-slate-400">PDF, DOC or DOCX · Maximum 10MB</p>
             </div>
-            <span className="px-3 py-1 bg-emerald-600 text-white rounded-full text-xs font-extrabold">
-              {parsedAnalysis.matchScore}% Match
-            </span>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-            <div className="bg-white p-3 rounded-lg border border-emerald-100">
-              <span className="text-slate-400 block text-xs">Extracted Skills:</span>
-              <span className="font-semibold text-slate-800">{parsedAnalysis.skillsMatched.join(', ')}</span>
+          {/* Parsing Loader */}
+          {continueError && <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{continueError}</p>}
+          {isParsing && (
+            <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 flex items-center gap-3">
+              <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
+              <div>
+                <h4 className="text-sm font-bold text-blue-900">AI is analyzing your CV...</h4>
+                <p className="text-xs text-blue-700">Extracting skills, experience, and match score.</p>
+              </div>
             </div>
-            <div className="bg-white p-3 rounded-lg border border-emerald-100">
-              <span className="text-slate-400 block text-xs">Recommended Role:</span>
-              <span className="font-semibold text-slate-800">{parsedAnalysis.recommendedRole}</span>
+          )}
+
+          {/* Analysis Output */}
+          {parsedAnalysis && !isParsing && (
+            <div className="p-5 rounded-2xl bg-emerald-50/60 border border-emerald-200 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-emerald-600" />
+                  <span className="text-sm font-bold text-emerald-900">AI CV Analysis Results</span>
+                </div>
+                <span className="px-3 py-1 bg-emerald-600 text-white rounded-full text-xs font-extrabold">
+                  {parsedAnalysis.matchScore}% Match
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+                <div className="bg-white p-3 rounded-lg border border-emerald-100">
+                  <span className="text-slate-400 block text-xs">Extracted Skills:</span>
+                  <span className="font-semibold text-slate-800">{parsedAnalysis.skillsMatched.join(', ')}</span>
+                </div>
+                <div className="bg-white p-3 rounded-lg border border-emerald-100">
+                  <span className="text-slate-400 block text-xs">Recommended Role:</span>
+                  <span className="font-semibold text-slate-800">{parsedAnalysis.recommendedRole}</span>
+                </div>
+              </div>
             </div>
+          )}
+
+          {/* Continue Button to Profile Page */}
+          <div className="flex flex-col items-center justify-between gap-4 border-t border-slate-100 pt-6 sm:flex-row">
+            <div className="flex items-center gap-2 text-xs font-semibold text-slate-500"><ShieldCheck className="h-4 w-4 text-emerald-600" /> Your CV stays private and secure</div>
+            <button
+              type="button"
+              onClick={handleContinue}
+              className="brand-button flex items-center gap-2 px-6 py-3 text-xs shadow-lg shadow-[#56a2d8]/25 active:scale-[0.98]"
+            >
+              <span>Continue</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
           </div>
         </div>
-      )}
-
-      {/* Continue Button to Profile Page */}
-      <div className="pt-4 border-t border-slate-100 flex justify-end">
-        <button
-          type="button"
-          onClick={handleContinue}
-          className="flex items-center gap-2 rounded-xl bg-[#56a2d8] px-6 py-3 text-xs font-semibold text-white shadow-lg shadow-[#56a2d8]/25 transition-all hover:bg-[#2b73a4] active:scale-[0.98]"
-        >
-          <span>Save & Continue to Profile</span>
-          <ArrowRight className="w-4 h-4" />
-        </button>
-      </div>
       </div>
     </div>
   );

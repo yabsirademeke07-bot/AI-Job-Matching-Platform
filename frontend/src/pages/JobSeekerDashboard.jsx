@@ -1,0 +1,40 @@
+import { useCallback, useEffect, useState } from 'react';
+import { AlertCircle, RefreshCw, LayoutDashboard, User, FileText, Target, Search, Bookmark, ClipboardList, Brain, Mic, Bell, Settings, LogOut } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { getDashboardSummary, getJobMatches, getRecentApplications, getRecommendedJobs, getUpcomingInterviews } from '../services/dashboardApi';
+import WelcomeCard from '../components/dashboard/WelcomeCard';
+import ApplicationSummary from '../components/dashboard/ApplicationSummary';
+import AIJobMatches from '../components/dashboard/AIJobMatches';
+import RecentApplications from '../components/dashboard/RecentApplications';
+import UpcomingInterview from '../components/dashboard/UpcomingInterview';
+import RecommendedJobs from '../components/dashboard/RecommendedJobs';
+
+function useResource(loader) {
+  const [state, setState] = useState({ data: null, isLoading: true, error: null });
+  const load = useCallback(() => { setState((current) => ({ ...current, isLoading: true, error: null })); loader().then((data) => setState({ data, isLoading: false, error: null })).catch((error) => setState({ data: null, isLoading: false, error: error?.message || 'Unable to load this section.' })); }, [loader]);
+  useEffect(() => { load(); }, [load]);
+  return { ...state, retry: load };
+}
+
+export default function JobSeekerDashboard() {
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
+  const location = useLocation();
+  const summary = useResource(useCallback(() => getDashboardSummary(), []));
+  const matches = useResource(useCallback(() => getJobMatches(), []));
+  const applications = useResource(useCallback(() => getRecentApplications(), []));
+  const interviews = useResource(useCallback(() => getUpcomingInterviews(), []));
+  const recommended = useResource(useCallback(() => getRecommendedJobs(), []));
+  const [savedJobs, setSavedJobs] = useState(() => JSON.parse(localStorage.getItem('savedJobs') || '[]'));
+  const profile = summary.data?.profile || { name: user?.name || user?.full_name || 'User', profileCompletion: 0, cvReviewScore: 0 };
+  const stats = summary.data?.stats || { total: 0, pending: 0, shortlisted: 0, interviewScheduled: 0, hired: 0 };
+  const toggleSave = (id) => setSavedJobs((current) => { const next = current.includes(id) ? current.filter((item) => item !== id) : [...current, id]; localStorage.setItem('savedJobs', JSON.stringify(next)); return next; });
+  const refreshAll = () => [summary, matches, applications, interviews, recommended].forEach((resource) => resource.retry());
+  const joinInterview = (url) => window.open(url, '_blank', 'noopener,noreferrer');
+  const navItems = [
+     ['Dashboard', '/dashboard', LayoutDashboard], ['My Profile', '/profile', User], ['My Resume', '/resume', FileText], ['My CV & Analysis', '/cv-analysis', FileText], ['AI Job Matches', '/ai-matches', Target], ['Explore Jobs', '/explore-jobs', Search], ['Saved Jobs', '/saved-jobs', Bookmark], ['My Applications', '/applications', ClipboardList], ['Skill Gap Analysis', '/skill-gap', Brain], ['AI Interview Prep', '/interview-prep', Mic], ['Notifications', '/notifications', Bell],
+  ];
+  const handleLogout = () => { logout(); navigate('/login'); };
+  return <div className="information-page min-h-screen bg-slate-50 lg:flex"><aside className="hidden w-64 shrink-0 border-r border-slate-200 bg-white lg:block"><div className="sticky top-0 flex h-screen flex-col p-5"><div className="mb-8 border-b border-slate-100 pb-5"><p className="text-lg font-black lowercase text-slate-900">job <span className="text-[var(--brand-deep)]">matching</span></p><p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">AI Platform</p></div><nav className="flex-1 space-y-1" aria-label="Seeker dashboard navigation">{navItems.map(([label, path, Icon]) => <button key={path} type="button" onClick={() => navigate(path)} className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-semibold transition ${location.pathname === path || (path === '/dashboard' && location.pathname === '/seeker-dashboard') ? 'bg-[var(--brand-primary)] text-white shadow-sm' : 'text-slate-600 hover:bg-[var(--brand-soft)] hover:text-[var(--brand-deep)]'}`}><Icon className="h-4 w-4" /> {label}</button>)}</nav><div className="border-t border-slate-100 pt-4"><button type="button" onClick={() => navigate('/settings')} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold text-slate-600 hover:bg-[var(--brand-soft)]"><Settings className="h-4 w-4" /> Settings</button><button type="button" onClick={handleLogout} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold text-red-500 hover:bg-red-50"><LogOut className="h-4 w-4" /> Logout</button></div></div></aside><main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8"><div className="mx-auto max-w-6xl space-y-8"><div className="flex items-center justify-between"><div><p className="text-sm font-bold text-[var(--brand-deep)]">Job Matching AI</p><p className="text-sm text-slate-500">Your personalized job search</p></div><button type="button" onClick={refreshAll} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-600 shadow-sm"><RefreshCw className="h-4 w-4" /> Refresh</button></div>{summary.error && <div className="flex items-center gap-2 rounded-xl bg-red-50 p-4 text-sm text-red-700"><AlertCircle className="h-4 w-4" /> {summary.error}</div>}{summary.isLoading ? <div className="h-48 animate-pulse rounded-3xl bg-slate-200" /> : <WelcomeCard user={{ ...user, ...profile }} onCompleteProfile={() => navigate('/profile')} />}{summary.isLoading ? <div className="h-32 animate-pulse rounded-2xl bg-slate-200" /> : <ApplicationSummary stats={stats} onNavigate={navigate} />}<AIJobMatches jobs={matches.data || []} savedJobs={savedJobs} onSave={toggleSave} onViewDetails={(id) => navigate(`/jobs/${id}`)} onViewAll={() => navigate('/ai-matches')} isLoading={matches.isLoading} error={matches.error} onRetry={matches.retry} /><RecentApplications applications={applications.data || []} onViewDetails={(id) => navigate(`/applications/${id}`)} onViewAll={() => navigate('/applications')} isLoading={applications.isLoading} error={applications.error} onRetry={applications.retry} /><UpcomingInterview interview={interviews.data?.[0]} onViewDetails={(id) => navigate(`/interviews/${id}`)} onJoin={joinInterview} isLoading={interviews.isLoading} error={interviews.error} onRetry={interviews.retry} /><RecommendedJobs jobs={recommended.data || []} onViewDetails={(id) => navigate(`/jobs/${id}`)} onViewAll={() => navigate('/explore-jobs')} isLoading={recommended.isLoading} error={recommended.error} onRetry={recommended.retry} /></div></main></div>;
+}
