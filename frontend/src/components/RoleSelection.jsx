@@ -58,7 +58,7 @@ const RoleSelection = () => {
       } else if (pendingJobId) {
         navigate(getNextApplicationStep(pendingJobId));
       } else {
-        navigate("/personal-info");
+        navigate("/upload-cv");
       }
     } catch (err) {
       console.error("Error updating user role:", err);
@@ -67,7 +67,7 @@ const RoleSelection = () => {
       localStorage.setItem("user", JSON.stringify({ ...storedUser, role: localRole }));
       localStorage.setItem("token", localStorage.getItem("token") || "frontend-demo-token");
       setSession({ token: localStorage.getItem("token"), user: { ...storedUser, role: localRole } });
-      navigate(localRole === "employer" ? "/employee-info" : "/personal-info");
+      navigate(localRole === "employer" ? "/employee-info" : "/upload-cv");
     }
   };
 
@@ -119,11 +119,10 @@ const RoleSelection = () => {
                 tabIndex={0}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { setSelectedRole('seeker'); setError(''); } }}
                 onClick={() => { setSelectedRole('seeker'); setError(''); }}
-                className={`relative flex flex-col justify-between p-6 md:p-8 rounded-3xl border transition-transform duration-200 ease-in-out cursor-pointer shadow-sm hover:shadow-lg focus:shadow-lg outline-none ${
-                  selectedRole === 'seeker'
+                className={`relative flex flex-col justify-between p-6 md:p-8 rounded-3xl border transition-transform duration-200 ease-in-out cursor-pointer shadow-sm hover:shadow-lg focus:shadow-lg outline-none ${selectedRole === 'seeker'
                     ? 'border-blue-600 bg-gradient-to-b from-white to-blue-50 transform scale-[1.01] shadow-blue-500/20'
                     : 'border-slate-200 bg-white hover:-translate-y-1'
-                }`}
+                  }`}
               >
                 <div>
                   <div className="flex items-center gap-4">
@@ -177,11 +176,10 @@ const RoleSelection = () => {
                 tabIndex={0}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { setSelectedRole('employer'); setError(''); } }}
                 onClick={() => { setSelectedRole('employer'); setError(''); }}
-                className={`relative flex flex-col justify-between p-6 md:p-8 rounded-3xl border transition-transform duration-200 ease-in-out cursor-pointer shadow-sm hover:shadow-lg focus:shadow-lg outline-none ${
-                  selectedRole === 'employer'
+                className={`relative flex flex-col justify-between p-6 md:p-8 rounded-3xl border transition-transform duration-200 ease-in-out cursor-pointer shadow-sm hover:shadow-lg focus:shadow-lg outline-none ${selectedRole === 'employer'
                     ? 'border-blue-600 bg-gradient-to-b from-white to-blue-50 transform scale-[1.01] shadow-blue-500/20'
                     : 'border-slate-200 bg-white hover:-translate-y-1'
-                }`}
+                  }`}
               >
                 <div>
                   <div className="flex items-center gap-4">

@@ -146,6 +146,59 @@ select:focus-visible {
     transform: translateY(0);
   }
 
+  .dashboard-action-button {
+    background-color: var(--brand-primary) !important;
+    transition: background-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+  }
+
+  .dashboard-action-button:hover {
+    background-color: var(--brand-primary-hover) !important;
+    box-shadow: 0 8px 18px rgb(86 162 216 / 22%);
+  }
+
+  /* Explore Jobs uses coordinated tinted sections and elevated card surfaces. */
+  .jobs-page {
+    background: #eef4f8;
+  }
+
+  .jobs-page .jobs-search-panel,
+  .jobs-page .jobs-filter-panel,
+  .jobs-page .jobs-results-header,
+  .jobs-page .jobs-empty-state {
+    background: #f8fbfd;
+    border-color: #d7e6ef;
+    box-shadow: 0 8px 20px rgb(15 23 42 / 7%), 0 2px 5px rgb(86 162 216 / 9%);
+  }
+
+  .jobs-page .jobs-filter-panel {
+    background: #f5fafd;
+    box-shadow: 5px 10px 24px rgb(15 23 42 / 11%), 0 2px 6px rgb(86 162 216 / 10%);
+  }
+
+  .jobs-page .job-listing-card {
+    background: #f5fafd !important;
+    border-color: #cfe2ee;
+    box-shadow: 0 8px 18px rgb(15 23 42 / 8%), 0 2px 5px rgb(86 162 216 / 10%);
+  }
+
+  .jobs-page .job-listing-card:nth-child(even) {
+    background: #edf6fb !important;
+  }
+
+  .jobs-page .job-listing-card:hover,
+  .jobs-page .job-listing-card:nth-child(even):hover {
+    background: #e6f3fa !important;
+  }
+
+  .jobs-page .job-listing-card:hover {
+    box-shadow: 0 18px 34px rgb(15 23 42 / 12%), 0 5px 12px rgb(86 162 216 / 12%);
+  }
+
+  .jobs-page .jobs-search-panel:focus-within,
+  .jobs-page .jobs-sort-select:focus {
+    box-shadow: 0 8px 22px rgb(86 162 216 / 13%), 0 0 0 3px rgb(86 162 216 / 12%);
+  }
+
   .accent-card {
     @apply rounded-2xl;
     border: 1px solid var(--brand-border);
@@ -183,7 +236,7 @@ select:focus-visible {
 }
 
 /* The contact page keeps only the direct support panel beside the form. */
-main > section:nth-of-type(3) aside > div:last-child {
+main>section:nth-of-type(3) aside>div:last-child {
   display: none;
 }
 
@@ -329,6 +382,7 @@ main > section:nth-of-type(3) aside > div:last-child {
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   *,
   *::before,
   *::after {
@@ -369,6 +423,23 @@ main > section:nth-of-type(3) aside > div:last-child {
 .information-page textarea::placeholder {
   color: #64748b !important;
   opacity: 1;
+}
+
+/* Keep seeker profile labels and fields visually consistent with the brand. */
+.profile-readable label {
+  color: var(--brand-deep) !important;
+}
+
+.profile-readable label::after {
+  content: ':';
+  margin-left: 0.15rem;
+}
+
+.profile-readable input,
+.profile-readable textarea,
+.profile-readable select {
+  background-color: var(--brand-soft) !important;
+  border-color: var(--brand-border) !important;
 }
 
 .information-page input:focus,
@@ -457,7 +528,13 @@ main > section:nth-of-type(3) aside > div:last-child {
 }
 
 .seeker-dashboard .dashboard-hero {
-  background-image: linear-gradient(135deg, var(--brand-deep), var(--brand-primary)) !important;
+  background-color: #ffffff !important;
+  background-image: none !important;
+  border: 1px solid var(--brand-border);
+}
+
+.seeker-dashboard .dashboard-hero .dashboard-hero-decoration {
+  background-color: var(--dashboard-soft) !important;
 }
 
 .seeker-dashboard .text-blue-600,

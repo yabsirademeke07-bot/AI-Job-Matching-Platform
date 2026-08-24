@@ -34,16 +34,6 @@ export function hasCompletedProfile() {
   }
 }
 
-export function hasCompletedPersonalInfo() {
-  try {
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
-    const personalInfo = user?.personalInfo;
-    return Boolean(personalInfo?.fullName && personalInfo?.phone && personalInfo?.location);
-  } catch {
-    return false;
-  }
-}
-
 export function hasCompletedCv() {
   try {
     const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -55,7 +45,6 @@ export function hasCompletedCv() {
 
 export function getNextApplicationStep(jobId) {
   if (!hasCompletedCv()) return `/upload-cv?jobId=${encodeURIComponent(jobId)}`;
-  if (!hasCompletedPersonalInfo()) return `/personal-info?jobId=${encodeURIComponent(jobId)}`;
   if (!hasCompletedProfile()) return `/profile?jobId=${encodeURIComponent(jobId)}`;
   return `/job-details/${encodeURIComponent(jobId)}`;
 }

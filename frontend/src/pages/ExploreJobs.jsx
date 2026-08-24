@@ -604,7 +604,7 @@ function CleanJobCard({ job, saved, onToggleSave, onShare, onViewDetails }) {
   return (
     <div
       onClick={() => onViewDetails(job)}
-      className="group relative rounded-2xl border border-slate-200/90 bg-white p-7 sm:p-9 shadow-xs hover:-translate-y-1 hover:border-[#56A2D8] hover:shadow-xl hover:shadow-[#56A2D8]/15 transition-all duration-200 ease-out text-left cursor-pointer"
+      className="job-listing-card group relative rounded-2xl border border-slate-200/90 bg-white p-7 sm:p-9 shadow-xs hover:-translate-y-1 hover:border-[#56A2D8] hover:shadow-xl hover:shadow-[#56A2D8]/15 transition-all duration-200 ease-out text-left cursor-pointer"
     >
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
@@ -1631,7 +1631,7 @@ export default function ExploreJobsPage() {
   const visibleJobs = filteredJobs.slice(0, visibleCount);
 
   return (
-    <div className="min-h-screen bg-[#F4F7FA] text-slate-900 font-sans flex flex-col">
+    <div className="jobs-page min-h-screen bg-[#F4F7FA] text-slate-900 font-sans flex flex-col">
       {/* Toast Alert */}
       {toastMessage && (
         <div className="fixed bottom-6 right-6 z-50 bg-[#2B73A4] text-white px-5 py-3.5 rounded-2xl shadow-xl flex items-center gap-3 border border-[#56A2D8]">
@@ -1706,7 +1706,7 @@ export default function ExploreJobsPage() {
       {/* EXPANDED FULL-WIDTH CONTAINER */}
       <div className="w-full px-3 sm:px-5 md:px-6 lg:px-8 xl:px-10 2xl:px-12 py-4 flex-1">
         {/* TOP SEARCH BAR */}
-        <div className="mb-8 rounded-2xl border border-slate-200/90 bg-white p-3 shadow-xs text-left">
+        <div className="jobs-search-panel mb-8 rounded-2xl border border-slate-200/90 bg-white p-3 shadow-xs text-left">
           <div className="relative">
             <Search className="pointer-events-none absolute left-4.5 top-1/2 h-6 w-6 -translate-y-1/2 text-slate-400" />
             <input
@@ -1731,7 +1731,7 @@ export default function ExploreJobsPage() {
         <div className="flex flex-col lg:flex-row items-start gap-7">
           {/* LEFT: FILTER SIDEBAR */}
           <aside
-            className={`fixed inset-y-0 right-0 z-40 w-80 shrink-0 overflow-y-auto bg-white p-6 shadow-2xl transition-transform lg:sticky lg:top-6 lg:block lg:max-h-[calc(100vh-3rem)] lg:translate-x-0 lg:rounded-2xl lg:border lg:border-slate-200/90 lg:p-6 lg:shadow-2xs ${
+            className={`jobs-filter-panel fixed inset-y-0 right-0 z-40 w-80 shrink-0 overflow-y-auto bg-white p-6 shadow-2xl transition-transform lg:sticky lg:top-6 lg:block lg:max-h-[calc(100vh-3rem)] lg:translate-x-0 lg:rounded-2xl lg:border lg:border-slate-200/90 lg:p-6 lg:shadow-2xs ${
               mobileFiltersOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0"
             }`}
           >
@@ -2038,7 +2038,7 @@ export default function ExploreJobsPage() {
 
           {/* RIGHT: JOB CARDS */}
           <main className="flex-1 min-w-0 w-full space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 pb-3.5 text-left">
+            <div className="jobs-results-header flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 pb-3.5 text-left">
               <span className="text-lg sm:text-xl font-black text-[#2B73A4] border-b-2 border-[#56A2D8] pb-3.5 px-1 self-start">
                 All Jobs ({filteredJobs.length})
               </span>
@@ -2048,7 +2048,7 @@ export default function ExploreJobsPage() {
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value)}
-                  className="rounded-xl border border-slate-200/90 bg-white px-4 py-2.5 text-base font-bold text-slate-800 outline-hidden transition cursor-pointer shadow-2xs hover:border-[#56A2D8]"
+                  className="jobs-sort-select rounded-xl border border-slate-200/90 bg-white px-4 py-2.5 text-base font-bold text-slate-800 outline-hidden transition cursor-pointer shadow-2xs hover:border-[#56A2D8]"
                 >
                   <option value="newest">Most Recent (Newest)</option>
                   <option value="priority">Top Priority & Urgent</option>
@@ -2060,7 +2060,7 @@ export default function ExploreJobsPage() {
             </div>
 
             {filteredJobs.length === 0 ? (
-              <div className="rounded-2xl border border-slate-200/90 bg-white p-14 text-center shadow-2xs space-y-4">
+              <div className="jobs-empty-state rounded-2xl border border-slate-200/90 bg-white p-14 text-center shadow-2xs space-y-4">
                 <Search className="mx-auto h-10 w-10 text-slate-300" />
                 <h3 className="text-lg font-bold text-slate-900">No jobs match your selected criteria</h3>
                 <p className="text-sm text-slate-500 font-medium max-w-sm mx-auto">
