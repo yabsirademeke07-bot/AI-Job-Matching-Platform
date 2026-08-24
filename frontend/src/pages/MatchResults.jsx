@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { beginApplication } from '../utils/applicationFlow';
 import { 
   Sparkles, CheckCircle2, AlertCircle, Briefcase, 
   MapPin, Building2, ArrowRight, ArrowLeft, ExternalLink, 
@@ -9,6 +11,7 @@ import {
 const MatchResults = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user, isAuthenticated } = useAuth();
   const sourceJob = location.state?.sourceJob;
   const [filterScore, setFilterScore] = useState('all'); 
   const [searchQuery, setSearchQuery] = useState('');
@@ -85,9 +88,9 @@ const MatchResults = () => {
   };
 
   const handleApply = (jobId, jobTitle) => {
-    if (!appliedJobs.includes(jobId)) {
-      setAppliedJobs([...appliedJobs, jobId]);
-    }
+    const job = matchedJobs.find((item) => item.id === jobId);
+    beginApplication(jobId, job, navigate, { isAuthenticated, role: user?.role, sourcePage: location.pathname, returnPath: location.pathname });
+    if (!appliedJobs.includes(jobId)) setAppliedJobs([...appliedJobs, jobId]);
   };
 
   // Safe Search and Filter Logic

@@ -1,14 +1,20 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { ArrowLeft, CheckCircle2, FileText, Loader2, Sparkles } from 'lucide-react';
 import ResumeSelector from '../components/jobs/ResumeSelector';
 import { useAuth } from '../context/AuthContext';
 import { applyForJob, getJobById } from '../services/jobService';
+import { getApplicationForJob } from '../utils/applicationFlow';
 
-const defaultResumes = [
-  { id: 'resume-1', name: 'My_Resume.pdf' },
-  { id: 'resume-2', name: 'CV_2026.pdf' }
-];
+function getStoredResumeList() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem('seekerResume') || 'null');
+    return parsed?.fileName ? [{ id: parsed.id || 'resume-current', name: parsed.fileName }] : [];
+  } catch (error) {
+    console.error('Unable to read stored resume:', error);
+    return [];
+  }
+}
 
 export default function ApplyJob() {
   const { id } = useParams();
@@ -17,12 +23,13 @@ export default function ApplyJob() {
   const { isAuthenticated } = useAuth();
 
   const [job, setJob] = useState(null);
-  const [resumes, setResumes] = useState(defaultResumes);
-  const [selectedResumeId, setSelectedResumeId] = useState(defaultResumes[0]?.id || '');
+  const [resumes] = useState(getStoredResumeList);
+  const [selectedResumeId, setSelectedResumeId] = useState(() => getStoredResumeList()[0]?.id || '');
   const [coverLetter, setCoverLetter] = useState('');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState('');
+  const [existingApplication, setExistingApplication] = useState(() => getApplicationForJob(id));
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -31,19 +38,10 @@ export default function ApplyJob() {
     }
 
     const savedResume = localStorage.getItem('seekerResume');
-    if (savedResume) {
-      try {
-        const parsed = JSON.parse(savedResume);
-        if (parsed?.fileName) {
-          const resumeList = [{ id: parsed.id || 'resume-current', name: parsed.fileName }, ...defaultResumes];
-          setResumes(resumeList);
-          setSelectedResumeId(resumeList[0].id);
-        }
-      } catch (error) {
-        console.error('Unable to parse saved resume', error);
-      }
+    if (!savedResume) {
+      navigate(`/resume?jobId=${encodeURIComponent(id)}`, { replace: true });
+      return;
     }
-
     const fetchJob = async () => {
       try {
         setLoading(true);
@@ -86,8 +84,13 @@ export default function ApplyJob() {
     try {
       const result = await applyForJob(job.id, {
         resumeId: selectedResumeId,
-        coverLetter: coverLetter.trim()
+        coverLetter: coverLetter.trim(),
+        job
       });
+      if (result?.alreadyApplied) {
+        setExistingApplication(result.data);
+        return;
+      }
       const applicationId = result?.applicationId || result?.data?.id || 'new-application';
       setToast('Application submitted successfully!');
       window.setTimeout(() => navigate(`/applications/${applicationId}`), 700);
@@ -98,6 +101,8 @@ export default function ApplyJob() {
       setSubmitting(false);
     }
   };
+
+  if (existingApplication) return <main className="min-h-[70vh] bg-slate-50 px-4 py-10"><div className="mx-auto max-w-lg rounded-2xl border border-slate-200 bg-white p-7 text-center shadow-sm"><h1 className="text-2xl font-black text-slate-900">Application Submitted</h1><p className="mt-3 text-sm leading-6 text-slate-600">You have already applied for this job.</p><button type="button" onClick={() => navigate(`/applications/${existingApplication.id}`, { state: { application: existingApplication } })} className="brand-button mt-5 px-5 py-3 text-sm">View Application</button></div></main>;
 
   if (loading || !job) {
     return (

@@ -1,4 +1,3 @@
-import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { AuthProvider } from './context/AuthContext';
@@ -25,7 +24,6 @@ import Home from './pages/home/Home';
 import About from './pages/about';
 import Contact from './pages/contact';
 import ExploreJobs from './pages/ExploreJobs';
-import FindJobs from './pages/FindJobs';
 import JobDetailsPage from './pages/JobDetails';
 import ApplyJob from './pages/ApplyJob';
 import Companies from './pages/Companies';
@@ -44,9 +42,7 @@ import MyApplications from './pages/MyApplications';
 import ApplicationDetails from './pages/ApplicationDetails';
 import InterviewDetails from './pages/InterviewDetails';
 import SeekerModulePage from './pages/SeekerModulePage';
-import CvAnalysis from './components/seeker/CvAnalysis';
 import SeekerDocumentation from './pages/Seekerdocumentation';
-import ApplicationSubmit from './pages/ApplicationSubmit';
 
 // Employer Pages
 import EmployerDashboard from './pages/EmployerDashboard';
@@ -68,7 +64,7 @@ function BackButton() {
     '/dashboard', '/seeker-dashboard', '/seekerDashboard', '/profile',
     '/profile-completion', '/profile/me', '/profile/edit', '/resume',
     '/resume/preview', '/applications', '/ai-matches', '/saved-jobs',
-    '/skill-gap', '/interview-prep', '/notifications', '/settings',
+    '/notifications', '/settings',
     '/cv-analysis',
   ];
 
@@ -111,12 +107,13 @@ function AppLayout() {
           {/* 1. PUBLIC ROUTES                           */}
           {/* ========================================== */}
           <Route path="/" element={<Home />} />
-          <Route path="/jobs" element={<FindJobs />} />
+          <Route path="/jobs" element={<ExploreJobs />} />
           <Route path="/explore-jobs" element={<ExploreJobs />} />
 
           <Route path="/job-details/:id" element={<JobDetailsPage />} />
           <Route path="/jobs/:id" element={<JobDetailsPage />} />
           <Route path="/jobs/:id/apply" element={<ApplyJob />} />
+          <Route path="/apply/:id" element={<ApplyJob />} />
           <Route path="/about" element={<About />} />
           <Route path="/how-it-works" element={<HowItWorks />} />
           <Route path="/services" element={<About initialSection="services" />} />
@@ -175,14 +172,6 @@ function AppLayout() {
             }
           />
           <Route
-            path="/apply/:id"
-            element={
-              <ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}>
-                <ApplicationSubmit />
-              </ProtectedRoute>
-            }
-          />
-          <Route
             path="/cv-upload"
             element={
               <ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}>
@@ -208,8 +197,6 @@ function AppLayout() {
           />
           <Route path="/ai-matches" element={<ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}>{withSeekerSidebar(<SeekerModulePage module="matches" />)}</ProtectedRoute>} />
           <Route path="/saved-jobs" element={<ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}>{withSeekerSidebar(<SeekerModulePage module="saved" />)}</ProtectedRoute>} />
-          <Route path="/skill-gap" element={<ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}>{withSeekerSidebar(<SeekerModulePage module="skillgap" />)}</ProtectedRoute>} />
-          <Route path="/interview-prep" element={<ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}>{withSeekerSidebar(<SeekerModulePage module="interview" />)}</ProtectedRoute>} />
           <Route path="/notifications" element={<ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}>{withSeekerSidebar(<SeekerModulePage module="notifications" />)}</ProtectedRoute>} />
           <Route path="/settings" element={<ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}>{withSeekerSidebar(<SeekerModulePage module="settings" />)}</ProtectedRoute>} />
           <Route
@@ -252,15 +239,8 @@ function AppLayout() {
               </ProtectedRoute>
             }
           />
-          <Route
-            path="/CvAnalysis"
-            element={
-              <ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}>
-                <CvAnalysis />
-              </ProtectedRoute>
-            }
-          />
-          <Route path="/cv-analysis" element={<ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}>{withSeekerSidebar(<CvAnalysis />)}</ProtectedRoute>} />
+          <Route path="/CvAnalysis" element={<Navigate to="/resume" replace />} />
+          <Route path="/cv-analysis" element={<Navigate to="/resume" replace />} />
           <Route
             path="/seeker-docs"
             element={
@@ -358,6 +338,14 @@ function AppLayout() {
             element={
               <ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}>
                 {withSeekerSidebar(<MyProfile />)}
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/chat/:conversationId"
+            element={
+              <ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "employer", "admin", "user", "employee"]}>
+                <Communication />
               </ProtectedRoute>
             }
           />

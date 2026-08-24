@@ -29,7 +29,6 @@ const seekerBenefits = [
   ['Personalized Job Matches', '/ai-matches'],
   ['Apply Easily', '/find-jobs'],
   ['Track Applications', '/applications'],
-  ['Interview Management', '/interview-prep'],
 ];
 const employerBenefits = [
   ['Post Jobs', '/employer/post-job'],
