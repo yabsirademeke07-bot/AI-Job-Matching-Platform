@@ -1,5 +1,15 @@
 @import "tailwindcss";
 
+/* The employer workspace keeps only its dark-mode action in the secondary
+   header; the global navigation owns search, notifications, company identity,
+   and logout. */
+header[class*="z-40"] > div:last-child > :nth-child(1),
+header[class*="z-40"] > div:last-child > :nth-child(2),
+header[class*="z-40"] > div:last-child > :nth-child(4),
+header[class*="z-40"] > div:last-child > :nth-child(5) {
+  display: none;
+}
+
 :root {
   color-scheme: light;
 
@@ -44,6 +54,32 @@ body {
 
 * {
   box-sizing: border-box;
+}
+
+/* Employer pipeline tables keep their column labels and empty states easy to scan. */
+main table thead th {
+  color: #334155 !important;
+  font-size: 0.75rem;
+  font-weight: 900 !important;
+  letter-spacing: 0.08em;
+}
+
+main table td[colspan] {
+  font-weight: 700;
+  color: #475569;
+}
+
+div.bg-slate-950 main table thead {
+  background-color: #1e293b !important;
+}
+
+div.bg-slate-950 main table thead th {
+  color: #f8fafc !important;
+}
+
+main button.text-blue-600 {
+  font-weight: 900 !important;
+  color: #2563eb !important;
 }
 
 button,
@@ -525,6 +561,18 @@ main>section:nth-of-type(3) aside>div:last-child {
 .seeker-dashboard .bg-blue-600,
 .seeker-dashboard .bg-indigo-600 {
   background-color: var(--dashboard-accent) !important;
+}
+
+body:has(.bg-slate-950) main table thead th {
+  color: #ffffff !important;
+}
+
+main table thead {
+  background-color: var(--brand-deep) !important;
+}
+
+main table thead th {
+  color: #ffffff !important;
 }
 
 .seeker-dashboard .dashboard-hero {

@@ -29,6 +29,7 @@ import FindJobs from './pages/FindJobs';
 import JobDetailsPage from './pages/JobDetails';
 import ApplyJob from './pages/ApplyJob';
 import Companies from './pages/Companies';
+import CompanyCommunity from './pages/CompanyCommunity';
 import HowItWorks from './pages/HowItWorks';
 
 // Seeker Components & Pages
@@ -49,7 +50,8 @@ import SeekerDocumentation from './pages/Seekerdocumentation';
 import ApplicationSubmit from './pages/ApplicationSubmit';
 
 // Employer Pages
-import EmployerDashboard from './pages/EmployerDashboard';
+import EmployerWorkspace from './pages/EmployerWorkspace';
+import DashboardOverview from './pages/DashboardOverview';
 import CvCheck from './pages/Cvcheck';
 
 // Admin Pages
@@ -122,6 +124,7 @@ function AppLayout() {
           <Route path="/services" element={<About initialSection="services" />} />
           <Route path="/contact" element={<Contact />} />
           <Route path="/companies" element={<Companies />} />
+          <Route path="/companies/:companyId" element={<CompanyCommunity />} />
           <Route path="/find-jobs" element={<ExploreJobs />} />
           <Route path="/company" element={<Companies />} />
 
@@ -274,10 +277,18 @@ function AppLayout() {
           {/* 4. EMPLOYER PROTECTED ROUTES               */}
           {/* ========================================== */}
           <Route
+            path="/employer/dashboard/overview"
+            element={
+              <ProtectedRoute allowedRoles={["employer", "company", "recruiter"]}>
+                <DashboardOverview />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/employer-dashboard"
             element={
               <ProtectedRoute allowedRoles={["employer", "company", "recruiter"]}>
-                <EmployerDashboard />
+                <EmployerWorkspace />
               </ProtectedRoute>
             }
           />
@@ -285,7 +296,7 @@ function AppLayout() {
             path="/employer/dashboard"
             element={
               <ProtectedRoute allowedRoles={["employer", "company", "recruiter"]}>
-                <EmployerDashboard />
+                <EmployerWorkspace />
               </ProtectedRoute>
             }
           />
@@ -293,7 +304,7 @@ function AppLayout() {
             path="/employer/candidates"
             element={
               <ProtectedRoute allowedRoles={["employer", "company", "recruiter"]}>
-                <EmployerDashboard />
+                <EmployerWorkspace />
               </ProtectedRoute>
             }
           />
@@ -301,7 +312,7 @@ function AppLayout() {
             path="/employer/post-job"
             element={
               <ProtectedRoute allowedRoles={["employer", "company", "recruiter"]}>
-                <EmployerDashboard />
+                <EmployerWorkspace />
               </ProtectedRoute>
             }
           />
