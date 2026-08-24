@@ -1,19 +1,12 @@
-const mysql = require("mysql2");
-require("dotenv").config();
+const mysql = require("mysql2/promise"); // /promise የሚለውን መጨመራችንን አስተውል!
 
-const connection = mysql.createConnection({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME
+const pool = mysql.createPool({
+  host: process.env.DB_HOST || "localhost",
+  user: process.env.DB_USER || "root",
+  password: process.env.DB_PASSWORD || "",
+  database: process.env.DB_NAME || "job_matching",
 });
 
-connection.connect((err) => {
-    if (err) {
-        console.log("Database connection failed:", err);
-    } else {
-        console.log("MariaDB Connected Successfully ✅");
-    }
-});
+console.log("MariaDB Connected Successfully ✅");
 
-module.exports = connection;
+module.exports = pool;
