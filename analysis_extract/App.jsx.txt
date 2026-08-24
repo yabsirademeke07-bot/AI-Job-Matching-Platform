@@ -1,0 +1,189 @@
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+
+// Layout Components
+import Navbar from './components/Navbar';
+import Footer from './components/Footer';
+
+// Profile Component
+import Profile from './components/Profile';
+
+// Core Pages
+import Home from "./pages/Home/Home";
+import About from './pages/About';
+import Contact from './pages/Contact';
+
+// Explore Jobs Page
+import ExploreJobs from './pages/explorejobs'; 
+
+import Login from './pages/Login';
+import Register from './pages/Register';
+import GoogleCallback from "./pages/GoogleCallback";
+
+// CvUploader
+import CvUploader from './components/CvUploader';
+
+import JobDetails from './pages/Jobdetails';
+import MatchResults from './pages/MatchResults';
+
+// Dashboards
+import AdminDashboard from './pages/AdminDashboard';
+import SeekerDashboard from "./pages/SeekerDashboard";
+import EmployerDashboard from "./pages/EmployerDashboard";
+
+// ተጨማሪ ገጾች
+import SeekerDocumentation from './pages/SeekerDocumentation';
+import CvCheck from './pages/CvCheck';
+import AdminApproval from './pages/AdminApproval';
+import Communication from './pages/Communication';
+import Companies from './pages/Companies';
+
+// Protected Route Guard
+import ProtectedRoute from './components/ProtectedRoute';
+
+function App() {
+  return (
+    <Router>
+      <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans">
+        <Navbar />
+        <main className="flex-grow">
+          <Routes>
+            {/* Public Routes */}
+            <Route path="/" element={<Home />} />
+            <Route path="/jobs" element={<ExploreJobs />} />
+            <Route path="/explorejobs" element={<ExploreJobs />} />
+            <Route path="/explore-jobs" element={<ExploreJobs />} />
+            <Route path="/job-details/:id" element={<JobDetails />} />
+            <Route path="/about" element={<About />} />
+            <Route path="/contact" element={<Contact />} />
+            <Route path="/companies" element={<Companies />} />
+
+            {/* Auth Routes */}
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/auth/google/callback" element={<GoogleCallback />} />
+
+            {/* Protected Routes - Job Seeker */}
+            {/* 1. በ Register.jsx ውስጥ navigate('/dashboard') ሲባል የሚከፈት አዲስ Route */}
+            <Route 
+              path="/dashboard" 
+              element={
+                <ProtectedRoute allowedRoles={['job_seeker', 'seeker', 'jobseeker', 'user']}>
+                  <SeekerDashboard />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/seeker-dashboard" 
+              element={
+                <ProtectedRoute allowedRoles={['job_seeker', 'seeker', 'jobseeker', 'user']}>
+                  <SeekerDashboard />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/seekerDashboard" 
+              element={
+                <ProtectedRoute allowedRoles={['job_seeker', 'seeker', 'jobseeker', 'user']}>
+                  <SeekerDashboard />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/upload-cv" 
+              element={
+                <ProtectedRoute allowedRoles={['job_seeker', 'seeker', 'jobseeker', 'user']}>
+                  <CvUploader />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/match-results" 
+              element={
+                <ProtectedRoute allowedRoles={['job_seeker', 'seeker', 'jobseeker', 'user']}>
+                  <MatchResults />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/seeker-docs" 
+              element={
+                <ProtectedRoute allowedRoles={['job_seeker', 'seeker', 'jobseeker', 'user']}>
+                  <SeekerDocumentation />
+                </ProtectedRoute>
+              } 
+            />
+
+            {/* Protected Routes - Employer */}
+            <Route 
+              path="/employer-dashboard" 
+              element={
+                <ProtectedRoute allowedRoles={['employer', 'company', 'recruiter']}>
+                  <EmployerDashboard />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/employer/dashboard" 
+              element={
+                <ProtectedRoute allowedRoles={['employer', 'company', 'recruiter']}>
+                  <EmployerDashboard />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/employer-cv-check" 
+              element={
+                <ProtectedRoute allowedRoles={['employer', 'company', 'recruiter']}>
+                  <CvCheck />
+                </ProtectedRoute>
+              } 
+            />
+
+            {/* Protected Routes - Admin */}
+            <Route 
+              path="/admin-dashboard" 
+              element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <AdminDashboard />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/admin-approval" 
+              element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <AdminApproval />
+                </ProtectedRoute>
+              } 
+            />
+
+            {/* Shared Protected Routes */}
+            <Route 
+              path="/profile" 
+              element={
+                <ProtectedRoute allowedRoles={['job_seeker', 'seeker', 'jobseeker', 'employer', 'admin', 'user']}>
+                  <Profile />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/chat" 
+              element={
+                <ProtectedRoute allowedRoles={['job_seeker', 'seeker', 'jobseeker', 'employer', 'admin', 'user']}>
+                  <Communication />
+                </ProtectedRoute>
+              } 
+            />
+
+            {/* Fallback */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </main>
+        <Footer />
+      </div>
+    </Router>
+  );
+}
+
+export default App;

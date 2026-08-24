@@ -1,0 +1,135 @@
+import React from 'react';
+import { UploadCloud, CheckCircle2, FileText, Sparkles, Loader2, AlertCircle } from 'lucide-react';
+
+const CvUploader = ({
+  cvFile,
+  setCvFile,
+  isParsing,
+  setIsParsing,
+  parsedAnalysis,
+  setParsedAnalysis,
+  formData,
+  handleChange
+}) => {
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setCvFile(file);
+      simulateCvParsing(file);
+    }
+  };
+
+  const simulateCvParsing = (file) => {
+    setIsParsing(true);
+    setParsedAnalysis(null);
+
+    // AI Parsing Simulation
+    setTimeout(() => {
+      setIsParsing(false);
+      setParsedAnalysis({
+        skillsMatched: ['React.js', 'JavaScript', 'Tailwind CSS', 'Node.js', 'Git'],
+        experienceYears: '3+ Years',
+        education: 'B.Sc. in Computer Science',
+        matchScore: 88,
+        recommendedRole: 'Frontend Developer / Full Stack Developer'
+      });
+    }, 2000);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-xl font-bold text-slate-900 tracking-tight">Upload Your CV</h2>
+        <p className="text-xs text-slate-500 mt-0.5">
+          Upload your resume to automatically extract skills & preferences.
+        </p>
+      </div>
+
+      {/* Upload Box */}
+      <div className="border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-2xl p-6 bg-slate-50/50 hover:bg-blue-50/20 transition-all text-center relative cursor-pointer">
+        <input
+          type="file"
+          accept=".pdf,.doc,.docx"
+          onChange={handleFileChange}
+          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+        />
+        
+        <div className="flex flex-col items-center justify-center pointer-events-none">
+          <div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center mb-3">
+            <UploadCloud className="w-6 h-6" />
+          </div>
+          <p className="text-xs font-semibold text-slate-800 mb-1">
+            {cvFile ? cvFile.name : "Click to upload or drag & drop"}
+          </p>
+          <p className="text-[11px] text-slate-400">PDF, DOC, DOCX (Max 10MB)</p>
+        </div>
+      </div>
+
+      {/* Parsing Loader */}
+      {isParsing && (
+        <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 flex items-center gap-3">
+          <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
+          <div>
+            <h4 className="text-xs font-bold text-blue-900">AI is analyzing your CV...</h4>
+            <p className="text-[10px] text-blue-700">Extracting skills, experience, and match score.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Analysis Output */}
+      {parsedAnalysis && !isParsing && (
+        <div className="p-4 rounded-2xl bg-emerald-50/60 border border-emerald-200 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-emerald-600" />
+              <span className="text-xs font-bold text-emerald-900">AI CV Analysis Results</span>
+            </div>
+            <span className="px-2.5 py-0.5 bg-emerald-600 text-white rounded-full text-[10px] font-extrabold">
+              {parsedAnalysis.matchScore}% Match
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 text-[11px]">
+            <div className="bg-white p-2 rounded-lg border border-emerald-100">
+              <span className="text-slate-400 block text-[9px]">Extracted Skills:</span>
+              <span className="font-semibold text-slate-800">{parsedAnalysis.skillsMatched.join(', ')}</span>
+            </div>
+            <div className="bg-white p-2 rounded-lg border border-emerald-100">
+              <span className="text-slate-400 block text-[9px]">Recommended Role:</span>
+              <span className="font-semibold text-slate-800">{parsedAnalysis.recommendedRole}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Preferred Job Inputs */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+        <div>
+          <label className="block text-xs font-semibold text-slate-700 mb-1">Target Job Title</label>
+          <input
+            type="text"
+            name="preferredJob"
+            value={formData?.preferredJob || ''}
+            onChange={handleChange}
+            placeholder="e.g. React Developer"
+            className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-slate-700 mb-1">Expected Salary</label>
+          <input
+            type="text"
+            name="salaryExpectation"
+            value={formData?.salaryExpectation || ''}
+            onChange={handleChange}
+            placeholder="e.g. $2,000 / month"
+            className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+          />
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default CvUploader;
