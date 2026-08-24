@@ -39,6 +39,20 @@ select {
   background: var(--brand-primary-hover);
 }
 
+aside[class*="pt-24"][class*="lg:sticky"] {
+  padding-top: 1.25rem;
+}
+
+aside[class*="pt-24"][class*="lg:sticky"] nav button {
+  padding-top: 0.625rem;
+  padding-bottom: 0.625rem;
+}
+
+aside[class*="pt-24"][class*="lg:sticky"] nav button:not([aria-current="page"]):hover {
+  background-color: #eff6ff;
+  color: #1d4ed8;
+}
+
 .accent-card {
   border: 1px solid var(--brand-border);
   border-radius: 1rem;

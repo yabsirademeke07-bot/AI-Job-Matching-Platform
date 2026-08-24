@@ -28,6 +28,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { setPendingApplication } from "../utils/applicationFlow";
+import api from "../services/api";
 
 // =========================================================================
 // 1. ALL AFRIWORK CONSTANTS & FULL DATASETS (53ቱ ሙሉ ዘርፎች)
@@ -500,7 +501,7 @@ function AuthModal({ isOpen, initialMode = "login", targetJob, onClose, onSucces
           <h2 className="text-2xl font-black text-slate-900 tracking-tight">
             {mode === "login" ? "Login to Apply" : "Create Candidate Account"}
           </h2>
-          <p className="text-sm text-slate-600 font-medium mt-1">
+          <p className="mt-1 text-sm font-semibold text-slate-700 dark:text-slate-200">
             {targetJob
               ? `Sign in to submit your application for "${targetJob.title}"`
               : "Sign in to access verified career vacancies & personalized AI matches"}
@@ -531,7 +532,7 @@ function AuthModal({ isOpen, initialMode = "login", targetJob, onClose, onSucces
         <form onSubmit={handleSubmit} className="space-y-4">
           {mode === "signup" && (
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
+              <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-900">
                 Full Name
               </label>
               <div className="relative">
@@ -542,14 +543,14 @@ function AuthModal({ isOpen, initialMode = "login", targetJob, onClose, onSucces
                   placeholder="e.g. Abebe Kebede"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full pl-11 pr-4 py-3 rounded-xl border border-slate-300 text-sm font-semibold text-slate-900 outline-none focus:border-[#56A2D8]"
+                  className="w-full border border-slate-300 bg-white pl-11 pr-4 py-3 text-sm font-medium text-slate-900 placeholder:text-slate-500 outline-none focus:border-[#2B73A4]"
                 />
               </div>
             </div>
           )}
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
+            <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-900">
               Email Address
             </label>
             <div className="relative">
@@ -560,13 +561,13 @@ function AuthModal({ isOpen, initialMode = "login", targetJob, onClose, onSucces
                 placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full pl-11 pr-4 py-3 rounded-xl border border-slate-300 text-sm font-semibold text-slate-900 outline-none focus:border-[#56A2D8]"
+                className="w-full border border-slate-300 bg-white pl-11 pr-4 py-3 text-sm font-medium text-slate-900 placeholder:text-slate-500 outline-none focus:border-[#2B73A4]"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
+            <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-900">
               Password
             </label>
             <div className="relative">
@@ -577,7 +578,7 @@ function AuthModal({ isOpen, initialMode = "login", targetJob, onClose, onSucces
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full pl-11 pr-4 py-3 rounded-xl border border-slate-300 text-sm font-semibold text-slate-900 outline-none focus:border-[#56A2D8]"
+                className="w-full border border-slate-300 bg-white pl-11 pr-4 py-3 text-sm font-medium text-slate-900 placeholder:text-slate-500 outline-none focus:border-[#2B73A4]"
               />
             </div>
           </div>
@@ -612,10 +613,10 @@ function CleanJobCard({ job, saved, onToggleSave, onShare, onViewDetails }) {
             {job.title}
           </h3>
 
-          <div className="mt-2.5 flex items-center gap-3 text-base sm:text-lg font-bold text-slate-700 flex-wrap">
-            <span className="text-slate-900 font-black">{job.company}</span>
-            <span className="text-slate-300">•</span>
-            <span className="text-slate-600 font-semibold">{job.location}</span>
+          <div className="mt-2.5 flex items-center gap-3 flex-wrap text-base sm:text-lg font-bold text-slate-700">
+            <span className="font-black text-slate-900">{job.company}</span>
+            <span className="text-slate-500">•</span>
+            <span className="font-semibold text-slate-700">{job.location}</span>
           </div>
         </div>
 
@@ -623,7 +624,7 @@ function CleanJobCard({ job, saved, onToggleSave, onShare, onViewDetails }) {
           className="flex items-center gap-3 shrink-0 text-slate-400"
           onClick={(e) => e.stopPropagation()}
         >
-          <span className="hidden sm:inline-block text-sm sm:text-base font-bold text-slate-500">
+          <span className="hidden sm:inline-block text-sm sm:text-base font-bold text-slate-700">
             {job.postedAt}
           </span>
 
@@ -651,7 +652,7 @@ function CleanJobCard({ job, saved, onToggleSave, onShare, onViewDetails }) {
       </div>
 
       <div className="mt-4">
-        <p className="text-base sm:text-lg leading-relaxed text-slate-700 font-normal">
+        <p className="text-base sm:text-lg leading-relaxed font-medium text-slate-800">
           {showFullShort ? job.shortDescription : `${job.shortDescription.slice(0, 185)}...`}
         </p>
         <button
@@ -669,20 +670,20 @@ function CleanJobCard({ job, saved, onToggleSave, onShare, onViewDetails }) {
       <div className="mt-8 pt-6 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-5">
         <div className="flex items-center gap-6 sm:gap-10 lg:gap-14 text-sm flex-wrap">
           <div>
-            <p className="font-bold text-slate-900 text-base sm:text-lg">{job.experienceLevel}</p>
-            <p className="text-xs sm:text-sm text-slate-500 font-semibold mt-0.5">Experience Level</p>
+            <p className="text-base font-extrabold text-slate-900 sm:text-lg">{job.experienceLevel}</p>
+            <p className="mt-0.5 text-xs font-bold text-slate-700 sm:text-sm">Experience Level</p>
           </div>
 
           <div>
-            <p className="font-bold text-slate-900 text-base sm:text-lg">
+            <p className="text-base font-extrabold text-slate-900 sm:text-lg">
               {job.workplace} – {job.type}
             </p>
-            <p className="text-xs sm:text-sm text-slate-500 font-semibold mt-0.5">Job Type</p>
+            <p className="mt-0.5 text-xs font-bold text-slate-700 sm:text-sm">Job Type</p>
           </div>
 
           <div>
-            <p className="font-bold text-slate-900 text-base sm:text-lg">{job.deadline}</p>
-            <p className="text-xs sm:text-sm text-slate-500 font-semibold mt-0.5">Deadline</p>
+            <p className="text-base font-extrabold text-slate-900 sm:text-lg">{job.deadline}</p>
+            <p className="mt-0.5 text-xs font-bold text-slate-700 sm:text-sm">Deadline</p>
           </div>
         </div>
 
@@ -721,7 +722,7 @@ function JobDetailModal({ job, onClose, onApply, onShare, onToggleSave, isSaved 
               <ShieldCheck className="h-4.5 w-4.5 text-[#56A2D8]" />
               <span>Verified Employer Posting</span>
             </span>
-            <span className="text-sm font-bold text-slate-500 hidden sm:inline">
+            <span className="hidden text-sm font-bold text-slate-700 sm:inline">
               {job.postedAt}
             </span>
           </div>
@@ -782,13 +783,13 @@ function JobDetailModal({ job, onClose, onApply, onShare, onToggleSave, isSaved 
                     <Building2 className="w-5.5 h-5.5 text-[#56A2D8]" />
                     {job.company}
                   </span>
-                  <span className="text-slate-300">•</span>
-                  <span className="flex items-center gap-2 text-slate-600 font-semibold">
+                  <span className="text-slate-500">•</span>
+                  <span className="flex items-center gap-2 text-slate-700 font-semibold">
                     <MapPin className="w-5.5 h-5.5 text-[#56A2D8]" />
                     {job.location}
                   </span>
-                  <span className="text-slate-300">•</span>
-                  <span className="flex items-center gap-2 text-slate-600 font-semibold">
+                  <span className="text-slate-500">•</span>
+                  <span className="flex items-center gap-2 text-slate-700 font-semibold">
                     <Briefcase className="w-5.5 h-5.5 text-[#56A2D8]" />
                     {job.workplace} ({job.type})
                   </span>
@@ -798,7 +799,7 @@ function JobDetailModal({ job, onClose, onApply, onShare, onToggleSave, isSaved 
               <div className="bg-[#F0F7FC] border border-[#D0E5F5] rounded-2xl p-5 flex items-center gap-3.5 shrink-0 self-start lg:self-center">
                 <Sparkles className="w-6 h-6 text-[#56A2D8]" />
                 <div>
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
+                  <span className="block text-xs font-bold uppercase tracking-wider text-slate-700">
                     AI Match Confidence
                   </span>
                   <span className="text-xl font-black text-[#2B73A4]">
@@ -820,7 +821,7 @@ function JobDetailModal({ job, onClose, onApply, onShare, onToggleSave, isSaved 
                   {job.aiMatchScore}% Match
                 </span>
               </div>
-              <p className="text-base sm:text-lg text-slate-700 leading-relaxed font-semibold">
+              <p className="text-base font-semibold leading-relaxed text-slate-800 sm:text-lg">
                 ✨ {job.matchReason}
               </p>
             </div>
@@ -830,7 +831,7 @@ function JobDetailModal({ job, onClose, onApply, onShare, onToggleSave, isSaved 
                 <span className="w-3 h-3 rounded-full bg-[#56A2D8]"></span>
                 <span>Job Overview & Scope</span>
               </h3>
-              <p className="text-lg sm:text-xl leading-relaxed sm:leading-9 text-slate-700 font-normal">
+              <p className="text-lg font-normal leading-relaxed text-slate-800 sm:text-xl sm:leading-9">
                 {job.fullDescription}
               </p>
             </div>
@@ -845,7 +846,7 @@ function JobDetailModal({ job, onClose, onApply, onShare, onToggleSave, isSaved 
                   {job.responsibilities.map((resp, idx) => (
                     <li
                       key={idx}
-                      className="flex items-start gap-4 text-base sm:text-lg leading-relaxed text-slate-700 font-semibold"
+                      className="flex items-start gap-4 text-base font-semibold leading-relaxed text-slate-800 sm:text-lg"
                     >
                       <CheckCircle2 className="mt-1 h-6 w-6 shrink-0 text-[#56A2D8]" />
                       <span>{resp}</span>
@@ -865,7 +866,7 @@ function JobDetailModal({ job, onClose, onApply, onShare, onToggleSave, isSaved 
                   {job.requirements.map((req, idx) => (
                     <li
                       key={idx}
-                      className="flex items-start gap-4 text-base sm:text-lg leading-relaxed text-slate-700 font-semibold"
+                      className="flex items-start gap-4 text-base font-semibold leading-relaxed text-slate-800 sm:text-lg"
                     >
                       <CheckCircle2 className="mt-1 h-6 w-6 shrink-0 text-[#56A2D8]" />
                       <span>{req}</span>
@@ -901,36 +902,36 @@ function JobDetailModal({ job, onClose, onApply, onShare, onToggleSave, isSaved 
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="bg-[#F0F7FC] rounded-2xl p-6 border border-[#D0E5F5] space-y-2 text-left">
-                  <span className="text-xs sm:text-sm font-bold text-slate-500 uppercase tracking-wider block">
+                  <span className="block text-xs font-bold uppercase tracking-wider text-slate-700 sm:text-sm">
                     Offered Compensation
                   </span>
                   <span className="text-2xl sm:text-3xl font-black text-slate-900 flex items-center gap-1">
                     {job.salary}
                   </span>
-                  <span className="text-xs sm:text-sm text-slate-600 font-semibold block">
+                  <span className="block text-xs font-semibold text-slate-700 sm:text-sm">
                     Negotiable Package
                   </span>
                 </div>
 
                 <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200 space-y-3.5 text-left">
-                  <span className="text-xs sm:text-sm font-bold text-slate-500 uppercase tracking-wider block border-b border-slate-200 pb-2">
+                  <span className="block border-b border-slate-200 pb-2 text-xs font-bold uppercase tracking-wider text-slate-700 sm:text-sm">
                     Employer Specifications
                   </span>
                   <div className="space-y-2.5 text-sm sm:text-base">
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-600 font-medium">Sector:</span>
+                      <span className="font-medium text-slate-700">Sector:</span>
                       <span className="font-bold text-slate-900">{job.sector}</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-600 font-medium">Vacancies:</span>
+                      <span className="font-medium text-slate-700">Vacancies:</span>
                       <span className="font-bold text-slate-900">{job.vacancies || 1} Position</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-600 font-medium">Education:</span>
+                      <span className="font-medium text-slate-700">Education:</span>
                       <span className="font-bold text-slate-900">{job.education}</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-600 font-medium">Deadline:</span>
+                      <span className="font-medium text-slate-700">Deadline:</span>
                       <span className="font-black text-[#2B73A4] bg-[#F0F7FC] px-2.5 py-1 rounded-lg border border-[#D0E5F5]">
                         {job.deadline}
                       </span>
@@ -943,7 +944,7 @@ function JobDetailModal({ job, onClose, onApply, onShare, onToggleSave, isSaved 
                     <Building2 className="w-5 h-5 text-[#56A2D8]" />
                     <span>About {job.company}</span>
                   </div>
-                  <p className="text-sm sm:text-base text-slate-600 leading-relaxed font-normal">
+                  <p className="text-sm font-normal leading-relaxed text-slate-700 sm:text-base">
                     {job.companyAbout ||
                       `${job.company} is an established enterprise driving professional employment and organizational growth.`}
                   </p>
@@ -1404,6 +1405,15 @@ export default function ExploreJobsPage() {
     }
   });
   const [search, setSearch] = useState("");
+  useEffect(() => {
+    let mounted = true;
+    api.get('/jobs').then(({ data }) => {
+      if (!mounted || !data.jobs?.length) return;
+      const published = data.jobs.map((job) => ({ ...job, company: job.company_name || 'Employer company', workplace: job.work_mode || 'hybrid', type: job.job_type || 'full-time', sector: job.category || 'Other', tags: String(job.required_skills || '').split(',').map((skill) => skill.trim()).filter(Boolean), shortDescription: job.description || '', fullDescription: job.description || '', deadline: job.application_deadline || 'No deadline', postedAt: 'Recently posted', aiMatchScore: 0 }));
+      setJobs((current) => [...published, ...current.filter((item) => !published.some((job) => String(job.id) === String(item.id))) ]);
+    }).catch(() => {});
+    return () => { mounted = false; };
+  }, []);
 
   // Pagination / Limit State
   const INITIAL_VISIBLE_COUNT = 4;

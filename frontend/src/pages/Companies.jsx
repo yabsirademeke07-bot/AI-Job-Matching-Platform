@@ -228,6 +228,12 @@ export default function Companies() {
                 </div>
 
                 <Link
+                  to={`/companies/${company.id}`}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-extrabold text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                >
+                  Company Profile
+                </Link>
+                <Link
                   to={`/jobs?company=${encodeURIComponent(company.name)}`}
                   className="inline-flex items-center gap-1.5 bg-brand-soft hover-brand-bg brand-text hover:text-white px-4 py-2.5 rounded-xl text-sm font-extrabold transition-all duration-200 group/btn"
                 >

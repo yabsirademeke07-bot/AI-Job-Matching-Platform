@@ -1,12 +1,25 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import api from '../services/api';
 
-const AuthContext = createContext();
+const AuthContext = createContext({
+  user: null,
+  token: null,
+  isAuthenticated: false,
+  loading: false,
+  login: async () => null,
+  setSession: () => {},
+  logout: () => {},
+});
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(() => {
-    const raw = localStorage.getItem('user');
-    return raw ? JSON.parse(raw) : null;
+    try {
+      const raw = localStorage.getItem('user');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      localStorage.removeItem('user');
+      return null;
+    }
   });
   const [token, setToken] = useState(() => localStorage.getItem('token'));
   const [loading, setLoading] = useState(false);
@@ -39,8 +52,13 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    localStorage.removeItem('job_matching_auth_user');
+    sessionStorage.removeItem('token');
+    sessionStorage.removeItem('user');
     setToken(null);
     setUser(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.location.replace('/register');
   };
 
   const isAuthenticated = Boolean(token);

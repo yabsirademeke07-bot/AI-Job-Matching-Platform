@@ -28,6 +28,7 @@ export default function Navbar() {
 
   const displayName = user?.name || user?.full_name || user?.email || 'User';
   const avatarUrl = user?.avatarUrl || user?.avatar_url;
+  const handleLogout = () => logout();
 
   return (
     <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-sm transition-all w-full">
@@ -131,11 +132,17 @@ export default function Navbar() {
 
         {/* DESKTOP RIGHT BUTTONS - ሙሉ በሙሉ ወደ ቀኝ */}
         <div className="hidden lg:flex items-center gap-3 shrink-0 ml-auto">
-          {isAuthenticated ? (
+          {isAuthenticated && isEmployer ? (
+            <div className="flex items-center gap-3">
+              {avatarUrl ? <img src={avatarUrl} alt={displayName} className="h-9 w-9 rounded-full object-cover" /> : <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 font-bold text-blue-700">{displayName.charAt(0).toUpperCase()}</div>}
+              <span className="max-w-40 truncate text-sm font-bold text-slate-700">{displayName}</span>
+              <button type="button" onClick={handleLogout} className="flex h-10 items-center gap-2 rounded-xl bg-black px-4 text-sm font-bold leading-none text-white shadow-sm transition hover:bg-slate-800" aria-label="Log out"><LogOut className="h-4 w-4" /><span>Log Out</span></button>
+            </div>
+          ) : isAuthenticated ? (
             <div className="flex items-center gap-3">
               {avatarUrl ? <img src={avatarUrl} alt={displayName} className="w-9 h-9 rounded-full object-cover" /> : <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold">{displayName.charAt(0).toUpperCase()}</div>}
               <span className="text-sm font-bold text-slate-700">{displayName}</span>
-              <button onClick={() => { logout(); }} className="brand-button text-sm px-4 py-2" aria-label="Log out">
+              <button type="button" onClick={handleLogout} className="brand-button text-sm px-4 py-2" aria-label="Log out">
                 <LogOut className="w-4 h-4" />
                 <span>Log Out</span>
               </button>
@@ -252,13 +259,18 @@ export default function Navbar() {
 
             {/* Mobile Action Buttons */}
             <div className="pt-3 mt-2 border-t border-slate-100 flex flex-col gap-2.5">
-              {isAuthenticated ? (
+              {isAuthenticated && isEmployer ? (
                 <>
                   <div className="flex items-center gap-3 px-4 py-2 text-sm font-bold text-slate-700">
                     {avatarUrl ? <img src={avatarUrl} alt={displayName} className="w-9 h-9 rounded-full object-cover" /> : <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center">{displayName.charAt(0).toUpperCase()}</div>}
                     <span>{displayName}</span>
                   </div>
-                  <button onClick={() => { logout(); setIsMobileMenuOpen(false); }} className="brand-button w-full text-base"><LogOut className="w-5 h-5" /><span>Log Out</span></button>
+                  <button type="button" onClick={() => { handleLogout(); setIsMobileMenuOpen(false); }} className="brand-button w-full text-base"><LogOut className="w-5 h-5" /><span>Log Out</span></button>
+                </>
+              ) : isAuthenticated ? (
+                <>
+                  <Link to="/login" onClick={() => setIsMobileMenuOpen(false)} className="brand-button w-full text-base"><LogIn className="w-5 h-5 text-blue-600" /><span>Log In</span></Link>
+                  <Link to="/register" onClick={() => setIsMobileMenuOpen(false)} className="brand-button w-full text-base"><UserPlus className="w-5 h-5" /><span>Sign Up</span></Link>
                 </>
               ) : (
                 <>
