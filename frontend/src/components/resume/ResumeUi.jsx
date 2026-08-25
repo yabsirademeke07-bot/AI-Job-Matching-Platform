@@ -1,7 +1,7 @@
 import { FileText, Lightbulb } from 'lucide-react';
 
 export function ResumeEmptyState({ onUpload }) {
-  return <section className="rounded-3xl border-2 border-dashed border-[var(--brand-border)] bg-[var(--brand-soft)] p-10 text-center shadow-sm"><FileText className="mx-auto h-14 w-14 text-[var(--brand-primary)]" /><h2 className="mt-4 text-xl font-black text-slate-900">No Resume Uploaded Yet</h2><p className="mx-auto mt-2 max-w-md text-sm text-slate-500">Upload your resume to apply for jobs and help AI find better job matches.</p><button type="button" onClick={onUpload} className="mt-6 min-h-11 rounded-xl bg-[var(--brand-primary)] px-5 text-sm font-bold text-white hover:bg-[var(--brand-primary-hover)]">Upload Resume</button></section>;
+  return <section className="rounded-3xl border-2 border-dashed border-[var(--brand-border)] bg-[var(--brand-soft)] p-10 text-center shadow-sm"><FileText className="mx-auto h-14 w-14 text-[var(--brand-primary)]" /><h2 className="mt-4 text-xl font-black text-slate-900">No resume uploaded yet.</h2><p className="mx-auto mt-2 max-w-md text-sm text-slate-500">Upload your resume to manage your application and receive AI-powered CV insights.</p><button type="button" onClick={onUpload} className="mt-6 min-h-11 rounded-xl bg-[var(--brand-primary)] px-5 text-sm font-bold text-white hover:bg-[var(--brand-primary-hover)]">Upload Resume</button></section>;
 }
 
 export function ResumeTips() {

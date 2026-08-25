@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowRight, Bookmark, BriefcaseBusiness, CheckCircle2, ChevronRight,
   FileText, MapPin, Mic2, Settings, Sparkles, Target, TrendingUp,
-  Bell, X, Send, SlidersHorizontal, Share2, Trash2, KeyRound, Eye, EyeOff
+  Bell, X, Send, SlidersHorizontal, Trash2
 } from 'lucide-react';
+import { getMockNotifications } from '../utils/interviewFlow';
 
 const modules = {
   matches: { title: 'AI Job Matches', eyebrow: 'PERSONALIZED FOR YOU', icon: Target, description: 'Ranked opportunities based on your CV, skills, preferences, and career goals.' },
@@ -18,19 +19,19 @@ const modules = {
 
 const matches = [
   {
-    title: 'Senior React & Node.js Developer', company: 'YeneTech Solutions', location: 'Addis Ababa · Hybrid',
-    score: 94, salary: '30,000 - 40,000 ETB', salaryMin: 30000, jobType: 'Full-time',
-    whyMatch: 'Your 3 years of React and Node.js experience matches the role requirements.', missingSkills: ['Docker']
+    id: 'job-101', title: 'Senior React & Node.js Developer', company: 'YeneTech Solutions', location: 'Addis Ababa · Hybrid',
+    score: 94, matchScore: 94, skillsMatch: 95, experienceMatch: 90, salary: '30,000 - 40,000 ETB', salaryMin: 30000, jobType: 'Full-time',
+    whyMatch: 'Your 3 years of React and Node.js experience matches the role requirements.', matchingSkills: ['React', 'Node.js', 'JavaScript'], skillsToImprove: ['Docker']
   },
   {
-    title: 'Frontend Developer', company: 'EthioTelecom Innovation Lab', location: 'Addis Ababa · On-site',
-    score: 88, salary: '28,000 - 35,000 ETB', salaryMin: 28000, jobType: 'Permanent',
-    whyMatch: 'Your React, JavaScript, and frontend experience are a strong match for this team.', missingSkills: ['TypeScript', 'Testing']
+    id: 'job-102', title: 'Frontend Developer', company: 'EthioTelecom Innovation Lab', location: 'Addis Ababa · On-site',
+    score: 88, matchScore: 88, skillsMatch: 89, experienceMatch: 86, salary: '28,000 - 35,000 ETB', salaryMin: 28000, jobType: 'Permanent',
+    whyMatch: 'Your React, JavaScript, and frontend experience are a strong match for this team.', matchingSkills: ['React', 'JavaScript', 'CSS'], skillsToImprove: ['TypeScript', 'Testing']
   },
   {
-    title: 'Full Stack Engineer', company: 'Kacha Digital Financial', location: 'Remote · Ethiopia',
-    score: 84, salary: '35,000 - 50,000 ETB', salaryMin: 35000, jobType: 'Contract',
-    whyMatch: 'Your Node.js, MongoDB, and remote-work preferences align with this opportunity.', missingSkills: ['AWS']
+    id: 'job-103', title: 'Full Stack Engineer', company: 'Kacha Digital Financial', location: 'Remote · Ethiopia',
+    score: 84, matchScore: 84, skillsMatch: 85, experienceMatch: 82, salary: '35,000 - 50,000 ETB', salaryMin: 35000, jobType: 'Contract',
+    whyMatch: 'Your Node.js, MongoDB, and remote-work preferences align with this opportunity.', matchingSkills: ['Node.js', 'MongoDB', 'REST APIs'], skillsToImprove: ['AWS']
   },
 ];
 
@@ -52,10 +53,11 @@ const applicationStatuses = [
 ];
 
 const notifications = [
-  { id: 1, category: 'job-alerts', label: 'Job Alerts', title: 'You have a 94% match with Senior React Developer', detail: 'YeneTech Solutions · 2 hours ago', path: '/ai-matches' },
-  { id: 2, category: 'application-updates', label: 'Application Updates', title: 'Your application at Gebeya Inc. was shortlisted', detail: 'Application status changed · 4 hours ago', path: '/applications' },
-  { id: 3, category: 'interview-invites', label: 'Interview Invites', title: 'New interview invitation from Kacha Digital Financial', detail: 'Interview Prep · 1 day ago', path: '/interview-prep' },
-  { id: 4, category: 'job-alerts', label: 'Job Alerts', title: 'Three new frontend jobs match your profile', detail: 'AI recommendations · 2 days ago', path: '/explore-jobs' },
+  { id: 1, type: 'application', label: 'Applications', title: 'Application Update', message: 'Your application for Frontend Developer at Blue Nile Tech is now under review.', relatedId: 'application-201', createdAt: 'Today, 10:30 AM', isRead: false },
+  { id: 2, type: 'interview', label: 'Interviews', title: 'Interview Invitation', message: 'You have been invited for an interview for Frontend Developer.', relatedId: 'interview-301', createdAt: 'Today, 9:00 AM', isRead: false },
+  { id: 3, type: 'message', label: 'Messages', title: 'New Message', message: 'Blue Nile Tech sent you a new message about your application.', relatedId: 'conversation-501', createdAt: 'Yesterday', isRead: true },
+  { id: 4, type: 'recommendation', label: 'AI Recommendations', title: 'AI Recommendation', message: 'Senior React & Node.js Developer is a strong match for your profile.', relatedJobId: 'job-101', createdAt: '2 days ago', isRead: false },
+  { id: 5, type: 'system', label: 'System', title: 'Profile reminder', message: 'Complete your profile to receive more relevant job recommendations.', createdAt: '3 days ago', isRead: true },
 ];
 
 const savedJobs = [
@@ -105,13 +107,23 @@ const interviewScenarios = {
   },
 };
 
+function MatchCard({ job, featured = false, onViewDetails }) {
+  return <article className={`flex flex-col rounded-2xl border bg-white p-5 shadow-sm ${featured ? 'border-[var(--brand-primary)] ring-1 ring-[var(--brand-primary)]/20' : 'border-slate-200'}`}>
+    <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-wider text-[var(--brand-deep)]">{featured ? 'Best Match' : 'Recommended'}</p><h2 className="mt-2 text-lg font-black text-slate-900">{job.title}</h2><p className="mt-1 text-sm font-semibold text-slate-500">{job.company}</p><p className="mt-2 text-sm text-slate-500">{job.location}</p></div><div className="text-right"><p className="text-2xl font-black text-[var(--brand-deep)]">{job.score}%</p><p className="text-xs font-bold text-slate-500">AI Match</p></div></div>
+    <p className="mt-4 text-sm leading-6 text-slate-600">{job.whyMatch}</p>
+    <div className="mt-4 grid grid-cols-2 gap-2 text-sm"><div className="rounded-lg bg-slate-50 p-3"><p className="text-xs text-slate-500">Skills Match</p><p className="mt-1 font-black text-slate-900">{job.skillsMatch}%</p></div><div className="rounded-lg bg-slate-50 p-3"><p className="text-xs text-slate-500">Experience Match</p><p className="mt-1 font-black text-slate-900">{job.experienceMatch}%</p></div></div>
+    <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2"><div><p className="font-bold text-slate-700">Matching Skills</p><div className="mt-2 flex flex-wrap gap-1.5">{job.matchingSkills.map((skill) => <span key={skill} className="rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">{skill}</span>)}</div></div><div><p className="font-bold text-slate-700">Skills to Improve</p><div className="mt-2 flex flex-wrap gap-1.5">{job.skillsToImprove.map((skill) => <span key={skill} className="rounded-md bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">{skill}</span>)}</div></div></div>
+    <button type="button" onClick={() => onViewDetails(job)} className="mt-5 min-h-11 rounded-xl bg-[var(--brand-primary)] px-4 py-3 text-sm font-black text-white hover:bg-[var(--brand-primary-hover)]">View Details</button>
+  </article>;
+}
+
 export default function SeekerModulePage({ module: moduleProp }) {
   const { module: routeModule } = useParams();
   const module = moduleProp || routeModule || 'matches';
   const navigate = useNavigate();
   const current = modules[module] || modules.matches;
-  const [saved, setSaved] = useState([]);
   const [savedJobList, setSavedJobList] = useState(savedJobs);
+  const [savedJobToRemove, setSavedJobToRemove] = useState(null);
   const [toast, setToast] = useState('');
   const [answer, setAnswer] = useState('');
   const [selectedApplication, setSelectedApplication] = useState(null);
@@ -120,17 +132,39 @@ export default function SeekerModulePage({ module: moduleProp }) {
   const [jobTypeFilter, setJobTypeFilter] = useState('all');
   const [targetRole, setTargetRole] = useState('Senior AI/ML Engineer');
   const [notificationTab, setNotificationTab] = useState('all');
+  const [notificationItems, setNotificationItems] = useState(() => [...getMockNotifications(), ...notifications]);
   const [interviewRole, setInterviewRole] = useState('Senior React Developer');
   const [interviewCompany, setInterviewCompany] = useState('YeneTech Solutions');
   const [interviewMode, setInterviewMode] = useState('chat');
   const [passwordForm, setPasswordForm] = useState({ current: '', next: '', confirm: '' });
-  const [emailNotifications, setEmailNotifications] = useState(true);
-  const [inAppNotifications, setInAppNotifications] = useState(true);
   const [profileVisibility, setProfileVisibility] = useState('public');
-  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [interviewStep, setInterviewStep] = useState(0);
   const [interviewMessages, setInterviewMessages] = useState([]);
   const [feedback, setFeedback] = useState(null);
+  const [settingsSection, setSettingsSection] = useState('account');
+  const [accountForm, setAccountForm] = useState(() => {
+    try {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      return { displayName: user.name || user.full_name || '', email: user.email || '', phone: user.phone || '' };
+    } catch { return { displayName: '', email: '', phone: '' }; }
+  });
+  const [notificationSettings, setNotificationSettings] = useState({ applications: true, interviews: true, messages: true, recommendations: true, system: true });
+  const [resumeVisible, setResumeVisible] = useState(true);
+  const [dataPreferences, setDataPreferences] = useState(true);
+  const [showDeleteAccount, setShowDeleteAccount] = useState(false);
+
+  useEffect(() => {
+    if (!savedJobToRemove) return undefined;
+    const closeOnEscape = (event) => { if (event.key === 'Escape') setSavedJobToRemove(null); };
+    document.addEventListener('keydown', closeOnEscape);
+    return () => document.removeEventListener('keydown', closeOnEscape);
+  }, [savedJobToRemove]);
+  useEffect(() => {
+    if (!showDeleteAccount) return undefined;
+    const closeOnEscape = (event) => { if (event.key === 'Escape') setShowDeleteAccount(false); };
+    document.addEventListener('keydown', closeOnEscape);
+    return () => document.removeEventListener('keydown', closeOnEscape);
+  }, [showDeleteAccount]);
   const localApplications = (() => {
     try {
       return JSON.parse(localStorage.getItem('mockApplications') || '[]');
@@ -145,30 +179,32 @@ export default function SeekerModulePage({ module: moduleProp }) {
     window.setTimeout(() => setToast(''), 2200);
   };
 
-  const toggleSaved = (index) => {
-    setSaved((items) => items.includes(index) ? items.filter((item) => item !== index) : [...items, index]);
-    notify(saved.includes(index) ? 'Job removed from saved jobs' : 'Job saved');
+  const removeSavedJob = () => {
+    if (!savedJobToRemove) return;
+    setSavedJobList((items) => items.filter((item) => String(item.id) !== String(savedJobToRemove.id)));
+    setSavedJobToRemove(null);
+    notify('Job removed from saved jobs');
   };
+
+  const notificationFilters = [{ id: 'all', label: 'All' }, ...[...new Map(notificationItems.map((item) => [item.type, item.label])).entries()].map(([id, label]) => ({ id, label }))];
+  const visibleNotifications = notificationTab === 'all' ? notificationItems : notificationItems.filter((item) => item.type === notificationTab);
+
+  const openNotification = (notification) => {
+    setNotificationItems((items) => items.map((item) => item.id === notification.id ? { ...item, isRead: true } : item));
+    if (notification.type === 'application' && notification.relatedId) navigate(`/applications/${encodeURIComponent(String(notification.relatedId))}`);
+    if (notification.type === 'interview' && (notification.relatedInterviewId || notification.relatedId)) navigate(`/interviews/${encodeURIComponent(String(notification.relatedInterviewId || notification.relatedId))}`);
+    if (notification.type === 'message' && notification.relatedId) navigate(`/chat/${encodeURIComponent(String(notification.relatedId))}`);
+    if (notification.type === 'recommendation' && notification.relatedJobId) navigate(`/job-details/${encodeURIComponent(String(notification.relatedJobId))}`);
+    if (notification.type === 'system') navigate('/profile');
+  };
+
+  const markAllNotificationsRead = () => setNotificationItems((items) => items.map((item) => ({ ...item, isRead: true })));
 
   const filteredMatches = matches.filter((job) => (
     job.score >= Number(scoreFilter)
     && job.salaryMin >= Number(salaryFilter)
     && (jobTypeFilter === 'all' || job.jobType === jobTypeFilter)
   ));
-
-  const shareJob = async (job) => {
-    const shareData = { title: job.title, text: `${job.title} at ${job.company}`, url: window.location.href };
-    try {
-      if (navigator.share) {
-        await navigator.share(shareData);
-      } else {
-        await navigator.clipboard.writeText(`${job.title} at ${job.company} - ${window.location.href}`);
-        notify('Job link copied');
-      }
-    } catch (error) {
-      if (error.name !== 'AbortError') notify('Unable to share this job');
-    }
-  };
 
   const interviewQuestions = interviewScenarios[interviewRole]?.[interviewCompany]
     || interviewScenarios[interviewRole]?.['YeneTech Solutions']
@@ -200,13 +236,12 @@ export default function SeekerModulePage({ module: moduleProp }) {
       return;
     }
     setPasswordForm({ current: '', next: '', confirm: '' });
-    notify('Password change request saved');
+    notify('Password settings updated successfully.');
   };
 
-  const confirmLogout = () => {
-    localStorage.clear();
-    sessionStorage.clear();
-    navigate('/login');
+  const saveAccountSettings = (event) => {
+    event.preventDefault();
+    notify('Settings updated successfully.');
   };
 
   return (
@@ -216,7 +251,7 @@ export default function SeekerModulePage({ module: moduleProp }) {
           <div>
             <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-brand"><Sparkles className="h-4 w-4" /> {current.eyebrow}</div>
             <h1 className="text-3xl font-black tracking-tight sm:text-4xl">{current.title}</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400 sm:text-base">{current.description}</p>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400 sm:text-base">{module === 'saved' ? 'Keep track of jobs you are interested in and review them later.' : module === 'notifications' ? 'Stay updated with your applications, interviews, messages, and job recommendations.' : module === 'matches' ? 'Discover jobs that best match your skills, experience, resume, and profile.' : current.description}</p>
           </div>
           <button onClick={() => navigate('/dashboard')} className="flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition hover:border-brand hover:text-brand"><ArrowRight className="h-4 w-4 rotate-180" /> Dashboard</button>
         </div>
@@ -237,62 +272,45 @@ export default function SeekerModulePage({ module: moduleProp }) {
               <span className="ml-auto text-xs font-bold text-slate-400">{filteredMatches.length} matches found</span>
             </div>
 
-            {filteredMatches.length > 0 ? (
-              <div className="grid gap-5 lg:grid-cols-3">
-                {filteredMatches.map((job) => {
-                  const jobIndex = matches.indexOf(job);
-                  return (
-                    <article key={job.title} className="flex flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:border-brand hover:shadow-lg">
-                      <div className="flex items-start justify-between gap-3"><div><div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-brand-soft text-brand"><BriefcaseBusiness className="h-5 w-5" /></div><h2 className="font-bold text-slate-900">{job.title}</h2><p className="mt-1 text-sm text-slate-500">{job.company}</p></div><span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-black text-emerald-700">{job.score}% Match</span></div>
-                      <div className="mt-5 space-y-2 text-sm text-slate-500"><p className="flex items-center gap-2"><MapPin className="h-4 w-4 text-brand" />{job.location}</p><p className="flex items-center gap-2"><TrendingUp className="h-4 w-4 text-emerald-600" />{job.salary}</p><p className="flex items-center gap-2"><BriefcaseBusiness className="h-4 w-4 text-brand" />{job.jobType}</p></div>
-                      <div className="mt-5 rounded-xl bg-brand-soft p-3 text-sm leading-5 text-slate-600"><p className="font-black text-brand">Why you match</p><p className="mt-1">{job.whyMatch}</p></div>
-                      <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm"><p className="font-black text-amber-800">Missing skills</p><div className="mt-2 flex flex-wrap gap-2">{job.missingSkills.map((skill) => <button key={skill} onClick={() => navigate('/skill-gap')} className="rounded-lg bg-white px-2.5 py-1 text-xs font-bold text-amber-800 underline decoration-amber-300 underline-offset-2 hover:text-brand">{skill}</button>)}</div></div>
-                      <div className="mt-auto flex gap-2 pt-5"><button onClick={() => toggleSaved(jobIndex)} className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 text-sm font-bold text-slate-700 transition hover:border-brand hover:text-brand"><Bookmark className={`h-4 w-4 ${saved.includes(jobIndex) ? 'fill-current text-brand' : ''}`} /> {saved.includes(jobIndex) ? 'Saved' : 'Save Job'}</button><button onClick={() => navigate('/upload-cv')} className="min-h-11 flex-1 rounded-xl bg-brand px-3 text-sm font-black text-white hover:bg-brand-deep">1-Click Apply</button></div>
-                    </article>
-                  );
-                })}
-              </div>
-            ) : <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm font-semibold text-slate-500">No jobs match these filters. Try a broader score or salary range.</div>}
+            {filteredMatches.length > 0 && <div className="grid grid-cols-2 gap-3 sm:grid-cols-4"><div className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-xs font-bold text-slate-500">Best Match</p><p className="mt-1 text-2xl font-black text-[var(--brand-deep)]">{filteredMatches[0].score}%</p></div><div className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-xs font-bold text-slate-500">Recommended Jobs</p><p className="mt-1 text-2xl font-black text-slate-900">{filteredMatches.length}</p></div><div className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-xs font-bold text-slate-500">Skills Matched</p><p className="mt-1 text-2xl font-black text-slate-900">{filteredMatches[0].matchingSkills.length}</p></div><div className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-xs font-bold text-slate-500">Skills to Improve</p><p className="mt-1 text-2xl font-black text-slate-900">{filteredMatches[0].skillsToImprove.length}</p></div></div>}
+
+            {matches.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center"><p className="text-sm font-semibold text-slate-500">No Job Matches Available Yet</p><p className="mt-2 text-sm text-slate-500">Complete your profile and add your skills to receive better job recommendations.</p><button type="button" onClick={() => navigate('/profile')} className="mt-5 min-h-11 rounded-xl bg-brand px-4 py-2.5 text-sm font-black text-white hover:bg-brand-deep">Update Profile</button></div> : filteredMatches.length > 0 ? <><MatchCard job={filteredMatches[0]} featured onViewDetails={(job) => navigate(`/job-details/${encodeURIComponent(String(job.id))}`, { state: { job } })} /><div><h2 className="mb-4 text-xl font-black text-slate-900">Recommended Jobs</h2><div className="grid gap-5 md:grid-cols-2">{filteredMatches.slice(1).map((job) => <MatchCard key={job.id} job={job} onViewDetails={(selectedJob) => navigate(`/job-details/${encodeURIComponent(String(selectedJob.id))}`, { state: { job: selectedJob } })} />)}</div></div></> : <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm font-semibold text-slate-500">No jobs match these filters. Try a broader score or salary range.</div>}
           </div>
         )}
 
         {module === 'saved' && (
           <div className="space-y-5">
-            <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex items-center gap-2 text-sm font-black text-slate-800"><Bookmark className="h-5 w-5 fill-current text-brand" /> {savedJobList.length} saved jobs</div>
-              <span className="text-xs font-semibold text-slate-400">Review before the deadlines</span>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Saved Jobs</p>
+              <p className="mt-1 text-2xl font-black text-slate-900">{savedJobList.length}</p>
             </div>
 
             {savedJobList.length > 0 ? (
               <div className="grid gap-5 lg:grid-cols-3">
                 {savedJobList.map((job) => (
-                  <article key={job.title} className="flex flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:border-brand hover:shadow-lg">
+                  <article key={job.id} className="flex flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:border-brand hover:shadow-lg">
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-brand-soft text-brand"><BriefcaseBusiness className="h-5 w-5" /></div>
                         <h2 className="font-bold text-slate-900">{job.title}</h2>
                         <p className="mt-1 text-sm text-slate-500">{job.company}</p>
                       </div>
-                      <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-black text-emerald-700">{job.score}% Match</span>
+                      {job.score != null && <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-black text-emerald-700">AI Match: {job.score}%</span>}
                     </div>
                     <div className="mt-5 space-y-2 text-sm text-slate-500">
                       <p className="flex items-center gap-2"><MapPin className="h-4 w-4 text-brand" />{job.location}</p>
-                      <p className="flex items-center gap-2"><TrendingUp className="h-4 w-4 text-emerald-600" />{job.salary}</p>
-                    </div>
-                    <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-3">
-                      <p className="text-sm font-black text-amber-800">{job.daysLeft} days left</p>
-                      <p className="mt-1 text-xs text-amber-700">Application deadline: {job.deadline}</p>
+                      <p className="flex items-center gap-2"><BriefcaseBusiness className="h-4 w-4 text-brand" />{job.jobType || job.type || 'Job type not specified'}</p>
                     </div>
                     <p className="mt-3 text-xs font-semibold text-slate-400">Saved on {job.savedAt}</p>
-                    <div className="mt-auto grid grid-cols-2 gap-2 pt-5">
-                      <button onClick={() => navigate('/upload-cv')} className="min-h-11 rounded-xl bg-brand px-3 text-sm font-black text-white hover:bg-brand-deep">Apply Now</button>
-                      <button onClick={() => shareJob(job)} className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 text-sm font-bold text-slate-700 hover:border-brand hover:text-brand"><Share2 className="h-4 w-4" /> Share</button>
-                      <button onClick={() => { setSavedJobList((items) => items.filter((item) => item.title !== job.title)); notify('Job removed from saved jobs'); }} className="col-span-2 flex min-h-10 items-center justify-center gap-2 rounded-xl border border-red-100 text-xs font-bold text-red-600 hover:bg-red-50"><Trash2 className="h-4 w-4" /> Remove from Saved</button>
+                    <div className="mt-auto flex flex-col gap-2 pt-5 sm:flex-row">
+                      <button type="button" onClick={() => navigate(`/job-details/${encodeURIComponent(String(job.id))}`, { state: { job } })} className="min-h-11 flex-1 rounded-xl bg-brand px-3 text-sm font-black text-white hover:bg-brand-deep">View Details</button>
+                      <button type="button" onClick={() => setSavedJobToRemove(job)} className="min-h-11 flex-1 rounded-xl border border-red-100 text-sm font-bold text-red-600 hover:bg-red-50"><Trash2 className="mr-1 inline h-4 w-4" />Remove</button>
                     </div>
                   </article>
                 ))}
               </div>
-            ) : <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center text-sm font-semibold text-slate-500">No saved jobs yet. Save a promising job from AI Job Matches.</div>}
+            ) : <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center"><p className="text-sm font-semibold text-slate-500">No Saved Jobs Yet</p><p className="mt-2 text-sm text-slate-500">You haven't saved any jobs yet.</p><button type="button" onClick={() => navigate('/explore-jobs')} className="mt-5 min-h-11 rounded-xl bg-brand px-4 py-2.5 text-sm font-black text-white hover:bg-brand-deep">Explore Jobs</button></div>}
+            {savedJobToRemove && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setSavedJobToRemove(null); }}><div role="dialog" aria-modal="true" aria-labelledby="remove-saved-job-title" className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"><div className="flex items-start justify-between gap-4"><div><h2 id="remove-saved-job-title" className="text-xl font-black text-slate-900">Remove Saved Job?</h2><p className="mt-3 text-sm leading-6 text-slate-600">Are you sure you want to remove this job from your saved jobs?</p></div><button type="button" aria-label="Close" onClick={() => setSavedJobToRemove(null)} className="rounded-lg p-1 text-slate-500 hover:bg-slate-100"><X className="h-5 w-5" /></button></div><div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end"><button type="button" onClick={() => setSavedJobToRemove(null)} className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700">Cancel</button><button type="button" onClick={removeSavedJob} className="rounded-xl bg-red-600 px-4 py-3 text-sm font-bold text-white hover:bg-red-700">Remove</button></div></div></div>}
           </div>
         )}
 
@@ -304,7 +322,7 @@ export default function SeekerModulePage({ module: moduleProp }) {
             </div>
             <div className="grid gap-4 overflow-x-auto pb-4 xl:grid-cols-5">
               {applicationStatuses.map((status) => {
-                const columnApplications = displayedApplications.filter((item) => item.status === status.id || (status.id === 'applied' && item.status === 'applied'));
+                  const columnApplications = displayedApplications.filter((item) => item.status === status.id || (status.id === 'applied' && item.status === 'applied'));
                 return (
                   <section key={status.id} className="min-w-[240px] rounded-2xl border border-slate-200 bg-slate-100/70 p-3">
                     <div className={`rounded-xl border p-3 ${status.color}`}><div className="flex items-center justify-between gap-2"><h2 className="text-sm font-black">{status.label}</h2><span className="rounded-full bg-white/70 px-2 py-0.5 text-xs font-black">{columnApplications.length}</span></div><p className="mt-1 text-[11px] font-semibold opacity-75">{status.description}</p></div>
@@ -313,7 +331,7 @@ export default function SeekerModulePage({ module: moduleProp }) {
                         <button key={item.title} onClick={() => setSelectedApplication(item)} className="w-full rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-brand hover:shadow-md">
                           <div className="flex items-start justify-between gap-2"><h3 className="text-sm font-black text-slate-900">{item.title}</h3><ChevronRight className="h-4 w-4 shrink-0 text-slate-400" /></div>
                           <p className="mt-1 text-xs font-semibold text-slate-500">{item.company}</p>
-                          <p className="mt-4 text-[11px] font-semibold text-slate-400">Applied {item.date}</p>
+                          <p className="mt-4 text-[11px] font-semibold text-slate-400">Applied {item.date}</p>{item.status === 'interview' && <span className="mt-2 block text-xs font-bold text-brand">Interview status: Scheduled</span>}
                         </button>
                       )) : <p className="rounded-xl border border-dashed border-slate-300 p-4 text-center text-xs font-semibold text-slate-400">No applications</p>}
                     </div>
@@ -387,29 +405,22 @@ export default function SeekerModulePage({ module: moduleProp }) {
           </div>
         )}
 
-        {module === 'notifications' && (() => {
-          const tabs = [{ id: 'all', label: 'All' }, ...[...new Map(notifications.map((item) => [item.category, item.label])).entries()].map(([id, label]) => ({ id, label }))];
-          const visibleNotifications = notificationTab === 'all' ? notifications : notifications.filter((item) => item.category === notificationTab);
-          return (
-            <div className="space-y-5">
-              <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">{tabs.map((tab) => <button key={tab.id} onClick={() => setNotificationTab(tab.id)} className={`rounded-xl px-4 py-2.5 text-sm font-black transition ${notificationTab === tab.id ? 'bg-brand text-white shadow-sm' : 'text-slate-500 hover:bg-brand-soft hover:text-brand'}`}>{tab.label}</button>)}</div>
-              <div className="space-y-3">{visibleNotifications.map((item) => <button key={item.id} onClick={() => navigate(item.path)} className="flex w-full items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-brand hover:shadow-md"><span className="rounded-xl bg-brand-soft p-3 text-brand"><Bell className="h-5 w-5" /></span><span className="flex-1"><span className="mb-1 block text-[11px] font-black uppercase tracking-wider text-brand">{item.label}</span><strong className="block text-sm text-slate-900">{item.title}</strong><small className="mt-1 block text-slate-500">{item.detail}</small></span><ChevronRight className="h-5 w-5 shrink-0 text-slate-400" /></button>)}</div>
-              {visibleNotifications.length === 0 && <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm font-semibold text-slate-500">No notifications in this category.</div>}
-            </div>
-          );
-        })()}
+        {module === 'notifications' && (
+          <div className="space-y-5">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm"><div className="flex flex-wrap gap-2">{notificationFilters.map((filter) => <button key={filter.id} type="button" onClick={() => setNotificationTab(filter.id)} className={`rounded-xl px-4 py-2.5 text-sm font-black transition ${notificationTab === filter.id ? 'bg-brand text-white shadow-sm' : 'text-slate-500 hover:bg-brand-soft hover:text-brand'}`}>{filter.label}</button>)}</div>{notificationItems.some((item) => !item.isRead) && <button type="button" onClick={markAllNotificationsRead} className="text-sm font-bold text-[var(--brand-deep)] hover:underline">Mark All as Read</button>}</div>
+            {notificationItems.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center"><h2 className="text-base font-black text-slate-900">No Notifications Yet</h2><p className="mt-2 text-sm text-slate-500">You are all caught up. New updates will appear here.</p></div> : visibleNotifications.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center"><h2 className="text-base font-black text-slate-900">No {notificationFilters.find((filter) => filter.id === notificationTab)?.label || 'Notifications'} Notifications</h2><p className="mt-2 text-sm text-slate-500">You don't have any {notificationFilters.find((filter) => filter.id === notificationTab)?.label.toLowerCase() || ''} updates yet.</p></div> : <div className="space-y-3">{visibleNotifications.map((item) => <button key={item.id} type="button" onClick={() => openNotification(item)} className={`flex w-full items-start gap-4 rounded-2xl border p-5 text-left shadow-sm transition hover:border-brand hover:shadow-md ${item.isRead ? 'border-slate-200 bg-white' : 'border-[var(--brand-border)] bg-[var(--brand-soft)]/30'}`}><span className="mt-0.5 rounded-xl bg-brand-soft p-3 text-brand"><Bell className="h-5 w-5" /></span><span className="min-w-0 flex-1"><span className="mb-1 block text-[11px] font-black uppercase tracking-wider text-brand">{item.label}</span><strong className={`block text-sm text-slate-900 ${item.isRead ? 'font-bold' : 'font-black'}`}>{item.title}</strong><span className="mt-1 block text-sm leading-6 text-slate-600">{item.message}</span><small className="mt-2 block text-xs text-slate-500">{item.createdAt}</small></span><span className="flex shrink-0 items-center gap-2">{!item.isRead && <span className="rounded-full bg-[var(--brand-primary)] px-2 py-1 text-[10px] font-black text-white">New</span>}<ChevronRight className="h-5 w-5 text-slate-400" /></span></button>)}</div>}
+          </div>
+        )}
 
         {module === 'settings' && (
-          <div className="max-w-3xl space-y-5">
-            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center gap-3"><span className="rounded-xl bg-brand-soft p-3 text-brand"><KeyRound className="h-5 w-5" /></span><div><h2 className="text-lg font-black text-slate-900">Security</h2><p className="text-sm text-slate-500">Keep your account protected with a strong password.</p></div></div><form onSubmit={handlePasswordChange} className="mt-5 grid gap-3 sm:grid-cols-3"><input type="password" value={passwordForm.current} onChange={(event) => setPasswordForm({ ...passwordForm, current: event.target.value })} placeholder="Current password" className="min-h-11 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-brand" /><input type="password" value={passwordForm.next} onChange={(event) => setPasswordForm({ ...passwordForm, next: event.target.value })} placeholder="New password" className="min-h-11 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-brand" /><input type="password" value={passwordForm.confirm} onChange={(event) => setPasswordForm({ ...passwordForm, confirm: event.target.value })} placeholder="Confirm password" className="min-h-11 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-brand" /><button type="submit" className="min-h-11 rounded-xl bg-brand px-4 text-sm font-black text-white hover:bg-brand-deep sm:col-span-3 sm:w-fit">Change Password</button></form></section>
-
-            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center gap-3"><span className="rounded-xl bg-brand-soft p-3 text-brand"><Bell className="h-5 w-5" /></span><div><h2 className="text-lg font-black text-slate-900">Notification preferences</h2><p className="text-sm text-slate-500">Choose where you want to receive updates.</p></div></div><div className="mt-5 space-y-3"><label className="flex items-center justify-between rounded-xl border border-slate-200 p-4"><span><strong className="block text-sm text-slate-900">Email notifications</strong><small className="text-xs text-slate-500">Job alerts and application updates by email</small></span><input type="checkbox" checked={emailNotifications} onChange={(event) => setEmailNotifications(event.target.checked)} className="h-5 w-5 accent-[var(--brand-primary)]" /></label><label className="flex items-center justify-between rounded-xl border border-slate-200 p-4"><span><strong className="block text-sm text-slate-900">In-app notifications</strong><small className="text-xs text-slate-500">Alerts and interview invites inside the platform</small></span><input type="checkbox" checked={inAppNotifications} onChange={(event) => setInAppNotifications(event.target.checked)} className="h-5 w-5 accent-[var(--brand-primary)]" /></label></div></section>
-
-            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center gap-3"><span className="rounded-xl bg-brand-soft p-3 text-brand">{profileVisibility === 'public' ? <Eye className="h-5 w-5" /> : <EyeOff className="h-5 w-5" />}</span><div><h2 className="text-lg font-black text-slate-900">Privacy & visibility</h2><p className="text-sm text-slate-500">Control whether employers can discover your profile.</p></div></div><div className="mt-5 grid gap-3 sm:grid-cols-2"><button onClick={() => setProfileVisibility('public')} className={`rounded-xl border p-4 text-left ${profileVisibility === 'public' ? 'border-brand bg-brand-soft' : 'border-slate-200'}`}><strong className="block text-sm text-slate-900">Public</strong><span className="mt-1 block text-xs text-slate-500">Allow employers to find your profile.</span></button><button onClick={() => setProfileVisibility('private')} className={`rounded-xl border p-4 text-left ${profileVisibility === 'private' ? 'border-brand bg-brand-soft' : 'border-slate-200'}`}><strong className="block text-sm text-slate-900">Private</strong><span className="mt-1 block text-xs text-slate-500">Hide your profile from employer searches.</span></button></div></section>
-
-            <section className="flex items-center justify-between rounded-2xl border border-red-100 bg-red-50 p-5"><div><h2 className="text-sm font-black text-red-900">Log out of your account</h2><p className="mt-1 text-xs text-red-700">You will need to sign in again to access your dashboard.</p></div><button onClick={() => setShowLogoutConfirm(true)} className="min-h-11 rounded-xl bg-red-600 px-4 text-sm font-black text-white hover:bg-red-700">Logout</button></section>
-
-            {showLogoutConfirm && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" onClick={() => setShowLogoutConfirm(false)}><div onClick={(event) => event.stopPropagation()} className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl"><div className="flex items-start justify-between gap-4"><div><h2 className="text-lg font-black text-slate-900">Confirm logout</h2><p className="mt-2 text-sm leading-6 text-slate-500">Are you sure you want to log out?</p></div><button onClick={() => setShowLogoutConfirm(false)} aria-label="Close logout confirmation" className="rounded-lg p-1 text-slate-400 hover:bg-slate-100"><X className="h-5 w-5" /></button></div><div className="mt-6 flex justify-end gap-2"><button onClick={() => setShowLogoutConfirm(false)} className="min-h-10 rounded-xl border border-slate-200 px-4 text-sm font-bold text-slate-600">Cancel</button><button onClick={confirmLogout} className="min-h-10 rounded-xl bg-red-600 px-4 text-sm font-black text-white hover:bg-red-700">Yes, logout</button></div></div></div>}
+          <div className="max-w-4xl space-y-5">
+            <div className="overflow-x-auto border-b border-slate-200"><div className="flex min-w-max gap-1">{[['account', 'Account'], ['security', 'Security'], ['notifications', 'Notifications'], ['privacy', 'Privacy'], ['danger', 'Danger Zone']].map(([id, label]) => <button key={id} type="button" onClick={() => setSettingsSection(id)} className={`min-h-11 border-b-2 px-4 text-sm font-black ${settingsSection === id ? 'border-brand text-brand' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>{label}</button>)}</div></div>
+            {settingsSection === 'account' && <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><h2 className="text-lg font-black text-slate-900">Account Information</h2><p className="mt-1 text-sm text-slate-500">Manage the contact details shown on your account.</p><form onSubmit={saveAccountSettings} className="mt-5 grid gap-4 sm:grid-cols-2"><label className="text-sm font-bold text-slate-700">Display Name<input value={accountForm.displayName} onChange={(event) => setAccountForm({ ...accountForm, displayName: event.target.value })} className="mt-2 min-h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 font-normal outline-none focus:border-brand" /></label><label className="text-sm font-bold text-slate-700">Email<input type="email" value={accountForm.email} onChange={(event) => setAccountForm({ ...accountForm, email: event.target.value })} className="mt-2 min-h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 font-normal outline-none focus:border-brand" /></label><label className="text-sm font-bold text-slate-700 sm:col-span-2">Phone Number<input value={accountForm.phone} onChange={(event) => setAccountForm({ ...accountForm, phone: event.target.value })} className="mt-2 min-h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 font-normal outline-none focus:border-brand" /></label><button type="submit" className="min-h-11 w-fit rounded-xl bg-brand px-5 py-2.5 text-sm font-black text-white hover:bg-brand-deep">Save Changes</button></form></section>}
+            {settingsSection === 'security' && <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><h2 className="text-lg font-black text-slate-900">Password & Security</h2><p className="mt-1 text-sm text-slate-500">Preview password settings without changing your real password.</p><form onSubmit={handlePasswordChange} className="mt-5 grid gap-3 sm:grid-cols-3"><input type="password" value={passwordForm.current} onChange={(event) => setPasswordForm({ ...passwordForm, current: event.target.value })} placeholder="Current Password" className="min-h-11 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-brand" /><input type="password" value={passwordForm.next} onChange={(event) => setPasswordForm({ ...passwordForm, next: event.target.value })} placeholder="New Password" className="min-h-11 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-brand" /><input type="password" value={passwordForm.confirm} onChange={(event) => setPasswordForm({ ...passwordForm, confirm: event.target.value })} placeholder="Confirm New Password" className="min-h-11 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-brand" /><button type="submit" className="min-h-11 rounded-xl bg-brand px-4 text-sm font-black text-white hover:bg-brand-deep sm:col-span-3 sm:w-fit">Update Password</button></form></section>}
+            {settingsSection === 'notifications' && <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><h2 className="text-lg font-black text-slate-900">Notification Settings</h2><p className="mt-1 text-sm text-slate-500">Choose which updates you want to see.</p><div className="mt-5 space-y-3">{[['applications', 'Application Updates', 'Receive updates about your job applications.'], ['interviews', 'Interview Invitations', 'Receive interview updates and invitations.'], ['messages', 'Employer Messages', 'Receive notifications when an employer sends a message.'], ['recommendations', 'AI Job Recommendations', 'Receive recommendations for jobs matching your profile.'], ['system', 'System Notifications', 'Receive important system updates.']].map(([key, label, description]) => <label key={key} className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 p-4"><span><strong className="block text-sm text-slate-900">{label}</strong><small className="text-xs text-slate-500">{description}</small></span><input type="checkbox" checked={notificationSettings[key]} onChange={(event) => setNotificationSettings({ ...notificationSettings, [key]: event.target.checked })} className="h-5 w-5 accent-[var(--brand-primary)]" /></label>)}</div><button type="button" onClick={() => notify('Notification preferences updated.')} className="mt-5 min-h-11 rounded-xl bg-brand px-5 py-2.5 text-sm font-black text-white hover:bg-brand-deep">Save Preferences</button></section>}
+            {settingsSection === 'privacy' && <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><h2 className="text-lg font-black text-slate-900">Privacy</h2><p className="mt-1 text-sm text-slate-500">Control how employers and matching features use your information.</p><div className="mt-5 grid gap-3 sm:grid-cols-2"><button type="button" onClick={() => setProfileVisibility('public')} className={`rounded-xl border p-4 text-left ${profileVisibility === 'public' ? 'border-brand bg-brand-soft' : 'border-slate-200'}`}><strong className="block text-sm text-slate-900">Public to Employers</strong><span className="mt-1 block text-xs text-slate-500">Allow employers to discover your profile.</span></button><button type="button" onClick={() => setProfileVisibility('private')} className={`rounded-xl border p-4 text-left ${profileVisibility === 'private' ? 'border-brand bg-brand-soft' : 'border-slate-200'}`}><strong className="block text-sm text-slate-900">Private</strong><span className="mt-1 block text-xs text-slate-500">Hide your profile from employer searches.</span></button></div><label className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-slate-200 p-4"><span><strong className="block text-sm text-slate-900">Resume Visibility</strong><small className="text-xs text-slate-500">Allow employers to view your resume when applying.</small></span><input type="checkbox" checked={resumeVisible} onChange={(event) => setResumeVisible(event.target.checked)} className="h-5 w-5 accent-[var(--brand-primary)]" /></label><label className="mt-3 flex items-center justify-between gap-4 rounded-xl border border-slate-200 p-4"><span><strong className="block text-sm text-slate-900">Data Preferences</strong><small className="text-xs text-slate-500">Use your information to improve job matching.</small></span><input type="checkbox" checked={dataPreferences} onChange={(event) => setDataPreferences(event.target.checked)} className="h-5 w-5 accent-[var(--brand-primary)]" /></label><button type="button" onClick={() => notify('Privacy preferences updated.')} className="mt-5 min-h-11 rounded-xl bg-brand px-5 py-2.5 text-sm font-black text-white hover:bg-brand-deep">Save Privacy</button></section>}
+            {settingsSection === 'danger' && <section className="rounded-2xl border border-red-200 bg-red-50 p-5"><h2 className="text-lg font-black text-red-900">Danger Zone</h2><p className="mt-2 text-sm leading-6 text-red-800">Deleting your account will remove your account data and access to the Job Seeker platform.</p><button type="button" onClick={() => setShowDeleteAccount(true)} className="mt-5 min-h-11 rounded-xl border border-red-600 px-5 py-2.5 text-sm font-black text-red-700 hover:bg-red-100">Delete Account</button></section>}
+            {showDeleteAccount && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowDeleteAccount(false); }}><div role="dialog" aria-modal="true" aria-labelledby="delete-account-title" className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"><div className="flex items-start justify-between gap-4"><div><h2 id="delete-account-title" className="text-xl font-black text-slate-900">Delete Account?</h2><p className="mt-3 text-sm leading-6 text-slate-600">This action will permanently remove your account and cannot be undone.</p></div><button type="button" aria-label="Close" onClick={() => setShowDeleteAccount(false)} className="rounded-lg p-1 text-slate-500 hover:bg-slate-100"><X className="h-5 w-5" /></button></div><div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end"><button type="button" onClick={() => setShowDeleteAccount(false)} className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700">Cancel</button><button type="button" onClick={() => { setShowDeleteAccount(false); notify('Account deletion request confirmed.'); }} className="rounded-xl bg-red-600 px-4 py-3 text-sm font-bold text-white hover:bg-red-700">Delete Account</button></div></div></div>}
           </div>
         )}
 
