@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { CheckCircle, Building, MapPin, Briefcase, DollarSign, Calendar, ArrowLeft, LogIn, Send, Sparkles, Loader2, MessageCircle, Copy } from "lucide-react";
 import api from "../api/axiosConfig";
@@ -23,8 +23,8 @@ const JobDetails = () => {
   const [job, setJob] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [matchLoading, setMatchLoading] = useState(false);
-  const [matchScore, setMatchScore] = useState(null);
+  const [matchLoading] = useState(false);
+  const [matchScore] = useState(null);
 
   // 1. Fetch Job Details
   useEffect(() => {
@@ -100,6 +100,13 @@ const JobDetails = () => {
     matchingSkills: job.matchBreakdown?.matchingSkills ?? job.matchingSkills ?? [],
     skillsToImprove: job.matchBreakdown?.skillsToImprove ?? job.skillsToImprove ?? [],
   };
+  const backPath = location.state?.sourcePath || "/explore-jobs";
+  const backLabel = {
+    "/saved-jobs": "Back to Saved Jobs",
+    "/ai-matches": "Back to AI Job Matches",
+    "/dashboard": "Back to Dashboard",
+    "/applications": "Back to My Applications",
+  }[backPath] || "Back to Jobs";
   const existingApplication = job && getApplicationForJob(id);
   const deadline = job?.deadlineDate || job?.application_deadline;
   const isExpired = deadline && new Date(deadline) < new Date();
@@ -131,10 +138,10 @@ const JobDetails = () => {
       <div className="mx-auto max-w-7xl">
         {/* Back Button */}
         <button
-          onClick={() => navigate(-1)}
+          onClick={() => navigate(backPath)}
           className="mb-5 flex items-center gap-2 text-sm font-semibold text-slate-600 transition-colors hover:text-slate-900"
         >
-          <ArrowLeft size={18} /> ወደ ኋላ ተመለስ
+          <ArrowLeft size={18} /> {backLabel}
         </button>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">

@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useGoogleLogin } from '@react-oauth/google';
 import './login.css';
-import { getNextApplicationStep, getPendingApplication, setPendingApplication } from '../utils/applicationFlow';
+import { continueApplicationFlow, getNextOnboardingStep, getPendingApplication } from '../utils/applicationFlow';
 import { useAuth } from '../context/AuthContext';
 import {
   Sparkles, ShieldCheck, Cpu, Mail, Lock,
-  ArrowRight, Eye, EyeOff, Target, ArrowLeft, RefreshCw
+  ArrowRight, Eye, EyeOff, Target, ArrowLeft
 } from 'lucide-react';
 
 const Login = () => {
@@ -33,7 +33,6 @@ const Login = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState('');
   const [apiSuccess, setApiSuccess] = useState(successMessage);
-  const [otpTimer, setOtpTimer] = useState(0);
 
   const API_URL = import.meta.env.VITE_BACKEND_URL || '/api';
 
@@ -47,25 +46,28 @@ const Login = () => {
 
   const navigateByRole = (role, sessionUser = {}) => {
     const normalizedRole = (role || '').toLowerCase().replace(/[\s-]+/g, '_');
+    const pending = getPendingApplication();
+    const pendingJobId = location.state?.jobId || pending?.jobId;
+    if (pendingJobId) {
+      continueApplicationFlow(navigate, { jobId: pendingJobId });
+      return;
+    }
+    if (!normalizedRole) {
+      if (!sessionUser.is_verified && !sessionUser.isVerified) {
+        navigate('/verify-otp', { state: { email: formData.emailOrPhone.trim() } });
+      } else {
+        navigate(getNextOnboardingStep());
+      }
+      return;
+    }
     if (['employer', 'company', 'recruiter'].includes(normalizedRole)) {
       navigate('/employer-dashboard');
     } else if (['job_seeker', 'seeker', 'jobseeker', 'user', 'employee'].includes(normalizedRole)) {
-      const pending = getPendingApplication();
-      const pendingJobId = location.state?.jobId || pending?.jobId;
-      if (!role && pendingJobId) {
-        navigate(`/select-role?jobId=${encodeURIComponent(pendingJobId)}`);
-        return;
+      if (!sessionUser.is_verified && !sessionUser.isVerified) {
+        navigate('/verify-otp', { state: { email: formData.emailOrPhone.trim() } });
+      } else {
+        navigate(getNextOnboardingStep());
       }
-      if ((location.state?.intent === 'apply' || pendingJobId) && pendingJobId) {
-        if (sessionUser.is_verified || sessionUser.isVerified) {
-          navigate(getNextApplicationStep(pendingJobId));
-          return;
-        }
-        setPendingApplication(pendingJobId, null, { currentStep: 'OTP_REQUIRED' });
-        navigate(`/verify-otp?jobId=${encodeURIComponent(pendingJobId)}`, { state: { email: formData.emailOrPhone.trim(), intent: 'apply', jobId: pendingJobId } });
-        return;
-      }
-      navigate('/dashboard');
     } else {
       navigate('/');
     }

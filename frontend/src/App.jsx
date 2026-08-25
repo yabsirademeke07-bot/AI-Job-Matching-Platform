@@ -1,5 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 
 // Layout Components
@@ -56,44 +55,6 @@ import AdminApproval from './pages/AdminApproval';
 import Communication from './pages/communication';
 import SeekerPageLayout from './components/SeekerPageLayout';
 
-function BackButton() {
-  const location = useLocation();
-  const navigate = useNavigate();
-
-  const sidebarRoutes = [
-    '/dashboard', '/seeker-dashboard', '/seekerDashboard', '/profile',
-    '/profile-completion', '/profile/me', '/profile/edit', '/resume',
-    '/resume/preview', '/applications', '/ai-matches', '/saved-jobs',
-    '/notifications', '/settings',
-    '/cv-analysis',
-  ];
-
-  // Sidebar pages already have their own navigation; avoid rendering a
-  // duplicate global Back button there. Detail pages keep this button.
-  if (sidebarRoutes.includes(location.pathname) || location.pathname === '/') return null;
-
-  const handleBack = () => {
-    if (window.history.length > 1) {
-      navigate(-1);
-    } else {
-      navigate('/');
-    }
-  };
-
-  return (
-    <div className="flex w-full items-center justify-between px-4 pt-5 sm:px-6 lg:px-8">
-      <button
-        type="button"
-        onClick={handleBack}
-        className="flex items-center gap-2 rounded-xl bg-[#56a2d8] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#f0f7fc] hover:text-[#2b73a4] hover:shadow-md"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        <span>Back</span>
-      </button>
-    </div>
-  );
-}
-
 const withSeekerSidebar = (page) => <SeekerPageLayout>{page}</SeekerPageLayout>;
 
 function AppLayout() {
@@ -101,7 +62,6 @@ function AppLayout() {
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans">
       <Navbar />
       <main className="flex-grow">
-        <BackButton />
         <Routes>
           {/* ========================================== */}
           {/* 1. PUBLIC ROUTES                           */}
@@ -337,7 +297,7 @@ function AppLayout() {
             path="/profile-completion"
             element={
               <ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}>
-                {withSeekerSidebar(<MyProfile />)}
+                <Profile />
               </ProtectedRoute>
             }
           />

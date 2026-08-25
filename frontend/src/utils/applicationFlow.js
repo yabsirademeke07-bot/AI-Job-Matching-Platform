@@ -1,6 +1,14 @@
 const PENDING_KEY = 'pendingApplication';
 const APPLICATIONS_KEY = 'mockApplications';
 
+const readStoredObject = (key, fallback = null) => {
+  try {
+    return JSON.parse(localStorage.getItem(key) || 'null') || fallback;
+  } catch {
+    return fallback;
+  }
+};
+
 export function getPendingApplication() {
   try {
     return JSON.parse(localStorage.getItem(PENDING_KEY) || 'null');
@@ -10,7 +18,7 @@ export function getPendingApplication() {
 }
 
 export function setPendingApplication(jobId, job = null, details = {}) {
-  const pending = { jobId: String(jobId), action: 'apply', sourcePage: details.sourcePage || `/job-details/${jobId}`, returnPath: details.returnPath || `/job-details/${jobId}`, currentStep: details.currentStep || 'START', createdAt: new Date().toISOString() };
+  const pending = { jobId: String(jobId), jobTitle: job?.title || '', companyName: job?.companyName || job?.company || '', action: 'apply', sourcePage: details.sourcePage || `/job-details/${jobId}`, returnPath: 'apply-job', currentStep: details.currentStep || 'START', createdAt: new Date().toISOString() };
   localStorage.setItem(PENDING_KEY, JSON.stringify(pending));
   if (job) localStorage.setItem('pendingApplicationJob', JSON.stringify(job));
   return pending;
@@ -26,32 +34,116 @@ export function getApplicationJobId() {
 }
 
 export function hasCompletedProfile() {
-  try {
-    const profile = JSON.parse(localStorage.getItem('userProfile') || 'null');
-    return Boolean(profile && (profile.completionPercentage >= 80 || (profile.name && profile.email && profile.phone && profile.location)));
-  } catch {
-    return false;
-  }
+  const profile = readStoredObject('userProfile', {});
+  const user = readStoredObject('user', {});
+  const name = profile.name || profile.fullName || [profile.firstName, profile.lastName].filter(Boolean).join(' ') || user.full_name || user.name;
+  const email = profile.email || user.email;
+  const phone = profile.phone || user.phone;
+  const location = profile.location || profile.city || profile.preferredCity;
+
+  return Boolean(
+    profile.completionPercentage >= 80 ||
+    profile.profileCompleted ||
+    user.profileComplete ||
+    (name && email && phone && location)
+  );
 }
 
 export function hasCompletedCv() {
-  try {
-    if (JSON.parse(localStorage.getItem('seekerResume') || 'null')?.fileName) return true;
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
-    return Boolean(user?.cvFileName);
-  } catch {
-    return false;
-  }
+  const resume = readStoredObject('seekerResume', {});
+  const user = readStoredObject('user', {});
+  return Boolean(resume.fileName || user.cvFileName);
+}
+
+export function getApplicationRequirements() {
+  const pending = getPendingApplication();
+  const user = readStoredObject('user', {});
+  const role = String(user.role || user.userType || '').toLowerCase().replace(/[\s-]+/g, '_');
+  const isAuthenticated = Boolean(localStorage.getItem('token'));
+  const otpVerified = Boolean(user.is_verified || user.isVerified || user.otpVerified);
+
+  return {
+    pending,
+    isAuthenticated,
+    otpVerified,
+    role,
+    hasResume: hasCompletedCv(),
+    profileCompleted: hasCompletedProfile(),
+  };
+}
+
+export function getApplicationState() {
+  const requirements = getApplicationRequirements();
+  return {
+    pendingApplication: requirements.pending,
+    isLoggedIn: requirements.isAuthenticated,
+    isOtpVerified: requirements.otpVerified,
+    role: requirements.role || null,
+    cvUploaded: requirements.hasResume,
+    profileComplete: requirements.profileCompleted,
+    appliedJobs: getMockApplications(),
+  };
 }
 
 export function getNextApplicationStep(jobId) {
-  if (!hasCompletedCv()) return `/resume?jobId=${encodeURIComponent(jobId)}`;
+  if (!hasCompletedCv()) return `/cv-upload?jobId=${encodeURIComponent(jobId)}`;
   if (!hasCompletedProfile()) return `/profile/me?jobId=${encodeURIComponent(jobId)}`;
   return getApplicationSubmitPath(jobId);
 }
 
 export function getApplicationSubmitPath(jobId) {
   return `/apply/${encodeURIComponent(jobId)}`;
+}
+
+export function getNextOnboardingStep() {
+  const user = readStoredObject('user', {});
+  const role = String(user.role || user.userType || '').toLowerCase().replace(/[\s-]+/g, '_');
+  const seekerRoles = ['job_seeker', 'seeker', 'jobseeker', 'user', 'employee'];
+
+  if (!role || role === 'pending') return '/select-role';
+  if (!seekerRoles.includes(role)) return '/';
+  if (!hasCompletedCv()) return '/upload-cv';
+  if (!hasCompletedProfile()) return '/profile';
+  return '/dashboard';
+}
+
+export function continueApplicationFlow(navigate, details = {}) {
+  const requirements = getApplicationRequirements();
+  const pendingJobId = requirements.pending?.jobId || details.jobId;
+
+  if (!pendingJobId) return false;
+  if (!requirements.isAuthenticated) {
+    navigate('/login', { state: { intent: 'apply', jobId: String(pendingJobId), from: requirements.pending.sourcePage } });
+    return 'AUTH_REQUIRED';
+  }
+  if (!requirements.otpVerified) {
+    navigate(`/verify-otp?jobId=${encodeURIComponent(pendingJobId)}`, { state: { intent: 'apply', jobId: String(pendingJobId) } });
+    return 'OTP_REQUIRED';
+  }
+  if (['employer', 'company', 'recruiter'].includes(requirements.role)) {
+    navigate('/dashboard', { state: { message: 'Employer accounts cannot submit job seeker applications.' } });
+    return 'ROLE_BLOCKED';
+  }
+  if (!['job_seeker', 'seeker', 'jobseeker', 'user', 'employee'].includes(requirements.role)) {
+    navigate(`/select-role?jobId=${encodeURIComponent(pendingJobId)}`);
+    return 'ROLE_REQUIRED';
+  }
+  if (!requirements.hasResume) {
+    navigate(`/cv-upload?jobId=${encodeURIComponent(pendingJobId)}`);
+    return 'RESUME_REQUIRED';
+  }
+  if (!requirements.profileCompleted) {
+    navigate(`/profile/me?jobId=${encodeURIComponent(pendingJobId)}`);
+    return 'PROFILE_REQUIRED';
+  }
+
+  const existing = getApplicationForJob(pendingJobId);
+  if (existing) {
+    navigate(`/applications/${encodeURIComponent(String(existing.id))}`, { state: { application: existing } });
+    return 'ALREADY_APPLIED';
+  }
+  navigate(getApplicationSubmitPath(pendingJobId));
+  return 'READY_TO_APPLY';
 }
 
 export function getMockApplications() {
@@ -74,21 +166,7 @@ export function beginApplication(jobId, job, navigate, details = {}) {
     return 'ALREADY_APPLIED';
   }
   setPendingApplication(jobId, job, details);
-  if (!details.isAuthenticated) {
-    navigate('/login', { state: { intent: 'apply', jobId: String(jobId), from: details.returnPath || `/job-details/${jobId}` } });
-    return 'AUTH_REQUIRED';
-  }
-  const role = String(details.role || '').toLowerCase();
-  if (['employer', 'company', 'recruiter'].includes(role)) {
-    navigate('/dashboard', { state: { message: 'Employer accounts cannot submit job seeker applications.' } });
-    return 'ROLE_BLOCKED';
-  }
-  if (!['job_seeker', 'seeker', 'jobseeker', 'user', 'employee'].includes(role)) {
-    navigate(`/select-role?jobId=${encodeURIComponent(jobId)}`);
-    return 'ROLE_REQUIRED';
-  }
-  navigate(getNextApplicationStep(jobId));
-  return hasCompletedCv() && hasCompletedProfile() ? 'READY_TO_APPLY' : 'REQUIREMENT_REQUIRED';
+  return continueApplicationFlow(navigate, { jobId });
 }
 
 export function saveMockApplication(application) {
@@ -96,4 +174,9 @@ export function saveMockApplication(application) {
   localStorage.setItem(APPLICATIONS_KEY, JSON.stringify(applications));
   clearPendingApplication();
   return applications;
+}
+
+export function recordApplication(application) {
+  const applications = saveMockApplication(application);
+  return applications.find((item) => String(item.id) === String(application.id)) || application;
 }

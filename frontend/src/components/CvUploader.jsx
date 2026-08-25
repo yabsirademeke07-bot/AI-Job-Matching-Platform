@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { UploadCloud, Sparkles, Loader2, ArrowRight, FileText, ShieldCheck } from 'lucide-react';
-import { getApplicationJobId, getNextApplicationStep, hasCompletedProfile, hasCompletedCv } from '../utils/applicationFlow';
+import { continueApplicationFlow, hasCompletedCv } from '../utils/applicationFlow';
 
 const CvUploader = ({
   cvFile: externalCvFile,
@@ -16,7 +16,7 @@ const CvUploader = ({
 }) => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const applicationJobId = searchParams.get('jobId') || getApplicationJobId();
+  const applicationJobId = searchParams.get('jobId');
 
   // Internal state handlers (Props ካልተላኩ በራሱ እንዲሰራ)
   const [internalCvFile, setInternalCvFile] = useState(null);
@@ -101,13 +101,13 @@ const CvUploader = ({
       return;
     }
     if (applicationJobId) {
-      navigate(hasCompletedProfile() ? getNextApplicationStep(applicationJobId) : `/profile?jobId=${encodeURIComponent(applicationJobId)}`);
+      continueApplicationFlow(navigate, { jobId: applicationJobId });
       return;
     }
     if (onNext) {
       onNext();
     } else {
-      navigate('/profile');
+      navigate('/profile-completion', { state: { onboarding: true }, replace: true });
     }
   };
 

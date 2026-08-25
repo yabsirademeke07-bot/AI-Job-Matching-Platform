@@ -1,13 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useGoogleLogin } from '@react-oauth/google';
+import { useAuth } from '../context/AuthContext';
 import {
   Sparkles, ShieldCheck, Cpu, Mail, Lock,
-  ArrowRight, Eye, EyeOff, Target, User, CheckCircle2, Briefcase, RefreshCw, ArrowLeft
+  ArrowRight, Eye, EyeOff, Target, User, Briefcase, RefreshCw, ArrowLeft
 } from 'lucide-react';
 
 const Register = () => {
   const navigate = useNavigate();
+  const { setSession } = useAuth();
 
   // Multi-step Registration State: 1 = Form, 2 = OTP, 3 = Role
   const [step, setStep] = useState(1);
@@ -24,7 +26,7 @@ const Register = () => {
   // OTP State
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [otpTimer, setOtpTimer] = useState(60);
-  const [canResendOtp, setCanResendOtp] = useState(false);
+  const canResendOtp = otpTimer === 0;
 
   // UI States
   const [showPassword, setShowPassword] = useState(false);
@@ -43,7 +45,6 @@ const Register = () => {
     }));
     setStep(2);
     setOtpTimer(60);
-    setCanResendOtp(false);
     setApiSuccess('Backend unavailable. Demo OTP: 123456');
   };
 
@@ -54,8 +55,6 @@ const Register = () => {
       timer = setInterval(() => {
         setOtpTimer((prev) => prev - 1);
       }, 1000);
-    } else if (otpTimer === 0) {
-      setCanResendOtp(true);
     }
     return () => clearInterval(timer);
   }, [step, otpTimer]);
@@ -143,7 +142,6 @@ const Register = () => {
         await sendOtpRequest(formData.email.trim());
         setStep(2);
         setOtpTimer(60);
-        setCanResendOtp(false);
       } else {
         setApiError(data.message || `Server Error (${response.status}). Please check backend.`);
       }
@@ -228,7 +226,6 @@ const Register = () => {
     setApiSuccess('');
     await sendOtpRequest(formData.email.trim());
     setOtpTimer(60);
-    setCanResendOtp(false);
     setIsLoading(false);
   };
 
@@ -239,7 +236,7 @@ const Register = () => {
     setApiError('');
 
     try {
-      const response = await fetch(`${API_URL.replace(/\/$/, '')}/complete-registration`, {
+      await fetch(`${API_URL.replace(/\/$/, '')}/complete-registration`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -248,15 +245,22 @@ const Register = () => {
         }),
       });
 
-      if (response.ok) {
-        navigate('/login', {
-          state: { message: 'Registration completed successfully! Please log in.' }
-        });
-      } else {
-        navigate('/login', {
-          state: { message: 'Account verified! Please login.' }
-        });
-      }
+      const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+      const user = {
+        ...currentUser,
+        id: currentUser.id || `demo-${Date.now()}`,
+        full_name: formData.fullName,
+        email: formData.email,
+        role: selectedRole === 'seeker' ? 'job_seeker' : selectedRole,
+        is_verified: true,
+      };
+      const token = localStorage.getItem('token') || 'frontend-demo-token';
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(user));
+      localStorage.setItem('currentUser', JSON.stringify(user));
+      localStorage.removeItem('pendingRegistration');
+      setSession({ token, user });
+      navigate(user.role === 'employer' ? '/employee-info' : '/upload-cv');
     } catch (err) {
       console.warn('Role selection warning, navigating to login:', err);
       const pending = JSON.parse(localStorage.getItem('pendingRegistration') || '{}');

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
-import { getNextApplicationStep, getPendingApplication } from '../utils/applicationFlow';
+import { continueApplicationFlow, getNextOnboardingStep, getPendingApplication } from '../utils/applicationFlow';
 import { useAuth } from '../context/AuthContext';
 import { ArrowLeft, Cpu, RefreshCw, ShieldCheck, Sparkles, Target } from 'lucide-react';
 
@@ -67,11 +67,13 @@ const OtpVerification = () => {
     try {
       const { data } = await api.post('/verify-otp', { email, otp: otpCode });
       if (data.token) localStorage.setItem('token', data.token);
-      if (data.user) {
-        localStorage.setItem('user', JSON.stringify(data.user));
-        localStorage.setItem('currentUser', JSON.stringify(data.user));
+      const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+      const verifiedUser = { ...currentUser, ...(data.user || {}), is_verified: true, otpVerified: true };
+      if (verifiedUser) {
+        localStorage.setItem('user', JSON.stringify(verifiedUser));
+        localStorage.setItem('currentUser', JSON.stringify(verifiedUser));
       }
-      setSession({ token: data.token, user: data.user });
+      setSession({ token: data.token, user: verifiedUser });
 
       const role = data.user?.role || providedRole;
       if (data.requiresRoleSelection || !role || role === 'pending') {
@@ -82,9 +84,9 @@ const OtpVerification = () => {
       } else if (['employer', 'company', 'recruiter'].includes(role)) {
         navigate('/employee-info');
       } else if (pendingJobId) {
-        navigate(getNextApplicationStep(pendingJobId));
+        continueApplicationFlow(navigate, { jobId: pendingJobId });
       } else {
-        navigate('/upload-cv');
+        navigate(getNextOnboardingStep());
       }
     } catch (err) {
       if (otpCode === '123456') {
@@ -94,12 +96,14 @@ const OtpVerification = () => {
           full_name: (email || 'demo@example.com').split('@')[0],
           role: providedRole && providedRole !== 'pending' ? providedRole : 'job_seeker',
           is_verified: true,
+          otpVerified: true,
         };
         localStorage.setItem('token', 'frontend-demo-token');
         localStorage.setItem('user', JSON.stringify(user));
         localStorage.setItem('currentUser', JSON.stringify(user));
         setSession({ token: 'frontend-demo-token', user });
-        navigate(user.role === 'employer' ? '/employee-info' : pendingJobId ? getNextApplicationStep(pendingJobId) : '/upload-cv');
+        if (pendingJobId) continueApplicationFlow(navigate, { jobId: pendingJobId });
+        else navigate(user.role === 'employer' ? '/employee-info' : getNextOnboardingStep());
       } else {
         setError(err.response?.data?.message || 'Demo OTP is 123456.');
       }
