@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useGoogleLogin } from '@react-oauth/google';
 import './login.css';
-import { setPendingApplication } from '../utils/applicationFlow';
+import { getNextApplicationStep, getPendingApplication, setPendingApplication } from '../utils/applicationFlow';
 import { useAuth } from '../context/AuthContext';
 import {
   Sparkles, ShieldCheck, Cpu, Mail, Lock,
@@ -45,14 +45,24 @@ const Login = () => {
     return Object.keys(nextErrors).length === 0;
   };
 
-  const navigateByRole = (role) => {
+  const navigateByRole = (role, sessionUser = {}) => {
     const normalizedRole = (role || '').toLowerCase().replace(/[\s-]+/g, '_');
     if (['employer', 'company', 'recruiter'].includes(normalizedRole)) {
       navigate('/employer-dashboard');
     } else if (['job_seeker', 'seeker', 'jobseeker', 'user', 'employee'].includes(normalizedRole)) {
-      if (location.state?.intent === 'apply' && location.state?.jobId) {
-        setPendingApplication(location.state.jobId);
-        navigate(`/verify-otp?jobId=${encodeURIComponent(location.state.jobId)}`, { state: { email: formData.emailOrPhone.trim(), intent: 'apply', jobId: location.state.jobId } });
+      const pending = getPendingApplication();
+      const pendingJobId = location.state?.jobId || pending?.jobId;
+      if (!role && pendingJobId) {
+        navigate(`/select-role?jobId=${encodeURIComponent(pendingJobId)}`);
+        return;
+      }
+      if ((location.state?.intent === 'apply' || pendingJobId) && pendingJobId) {
+        if (sessionUser.is_verified || sessionUser.isVerified) {
+          navigate(getNextApplicationStep(pendingJobId));
+          return;
+        }
+        setPendingApplication(pendingJobId, null, { currentStep: 'OTP_REQUIRED' });
+        navigate(`/verify-otp?jobId=${encodeURIComponent(pendingJobId)}`, { state: { email: formData.emailOrPhone.trim(), intent: 'apply', jobId: pendingJobId } });
         return;
       }
       navigate('/dashboard');
@@ -68,14 +78,14 @@ const Login = () => {
       id: savedUser.id || `demo-${Date.now()}`,
       email,
       full_name: savedUser.full_name || email.split('@')[0],
-      role: isApplyFlow ? 'job_seeker' : savedUser.role || 'job_seeker',
+      role: savedUser.role || (isApplyFlow ? 'job_seeker' : 'job_seeker'),
       is_verified: true,
     };
     localStorage.setItem('token', 'frontend-demo-token');
     localStorage.setItem('user', JSON.stringify(user));
     localStorage.setItem('currentUser', JSON.stringify(user));
     setSession({ token: 'frontend-demo-token', user });
-    navigateByRole(user.role);
+    navigateByRole(user.role, user);
   };
 
   // Input Handlers
@@ -134,7 +144,7 @@ const Login = () => {
         }
         setSession({ token: data.token, user: data.user });
 
-        navigateByRole(data.user?.role);
+        navigateByRole(data.user?.role, data.user);
       } else {
         setApiError(data.message || `Login failed (${response.status}). Please check credentials.`);
       }
@@ -210,7 +220,7 @@ const Login = () => {
         if (data.user) localStorage.setItem('user', JSON.stringify(data.user));
         setSession({ token: data.token, user: data.user });
 
-        navigateByRole(data.user?.role);
+        navigateByRole(data.user?.role, data.user);
       } else {
         setApiError(data.message || 'Invalid or expired OTP code.');
       }

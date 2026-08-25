@@ -6,6 +6,7 @@ import {
   Download, Sparkles, Eye, X, LayoutDashboard, Settings,
   Bell, UserRoundCheck, Target, FilePlus2
 } from 'lucide-react';
+import { notifyMockApplication, rescheduleMockInterview, scheduleMockInterview, updateMockInterview } from '../utils/interviewFlow';
 
 const EmployerDashboard = () => {
   const navigate = useNavigate();
@@ -38,7 +39,7 @@ const EmployerDashboard = () => {
 
   // 5. Applicants State
   const [applicants, setApplicants] = useState(() => JSON.parse(localStorage.getItem('employerApplications') || '[]'));
-  const [interviews] = useState(() => JSON.parse(localStorage.getItem('employerInterviews') || '[]'));
+  const [interviews, setInterviews] = useState(() => JSON.parse(localStorage.getItem('employerInterviews') || '[]'));
 
   const navigationItems = [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
@@ -57,6 +58,8 @@ const EmployerDashboard = () => {
   // Modals State
   const [selectedApplicant, setSelectedApplicant] = useState(null);
   const [showJobModal, setShowJobModal] = useState(false);
+  const [showInterviewModal, setShowInterviewModal] = useState(false);
+  const [interviewForm, setInterviewForm] = useState({ date: '', time: '', type: 'Online', location: '', meetingLink: '', instructions: '' });
 
   // New Job Form State
   const [newJob, setNewJob] = useState({
@@ -81,6 +84,10 @@ const EmployerDashboard = () => {
   useEffect(() => {
     localStorage.setItem('employerApplications', JSON.stringify(applicants));
   }, [applicants]);
+
+  useEffect(() => {
+    localStorage.setItem('employerInterviews', JSON.stringify(interviews));
+  }, [interviews]);
 
   // Dynamic Dashboard Stats
   const stats = {
@@ -156,11 +163,40 @@ const EmployerDashboard = () => {
 
   // Candidate Status Update
   const updateCandidateStatus = async (applicantId, newStatus) => {
+      const applicant = applicants.find((item) => item.id === applicantId);
+      if (!applicant) return;
+      setApplicants(applicants.map(a => a.id === applicantId ? { ...a, status: newStatus, applicationStatus: newStatus } : a));
+      if (['Shortlisted', 'Rejected'].includes(newStatus)) notifyMockApplication(applicant, newStatus);
     setApplicants(applicants.map(a => a.id === applicantId ? { ...a, status: newStatus } : a));
     if (selectedApplicant && selectedApplicant.id === applicantId) {
       setSelectedApplicant({ ...selectedApplicant, status: newStatus });
     }
 
+  };
+
+  const handleInterviewStatus = (interview, status) => {
+    const updated = updateMockInterview(interview.id, { status });
+    setInterviews((current) => current.map((item) => item.id === interview.id ? updated : item));
+    setApplicants((current) => current.map((item) => item.id === interview.applicationId ? { ...item, interview: updated } : item));
+  };
+
+  const handleScheduleInterview = (event) => {
+    event.preventDefault();
+    if (!selectedApplicant) return;
+    const interview = selectedApplicant.interview ? rescheduleMockInterview(selectedApplicant.interview, interviewForm) : scheduleMockInterview(selectedApplicant, interviewForm);
+    setApplicants(applicants.map((applicant) => applicant.id === selectedApplicant.id ? { ...applicant, status: 'Interview', interviewId: interview.id, interview } : applicant));
+    setInterviews((current) => [...current.filter((item) => item.applicationId !== selectedApplicant.id), interview]);
+    setSelectedApplicant(null);
+    setShowInterviewModal(false);
+    setInterviewForm({ date: '', time: '', type: 'Online', location: '', meetingLink: '', instructions: '' });
+  };
+
+  const openReschedule = (interview) => {
+    const applicant = applicants.find((item) => item.id === interview.applicationId);
+    if (!applicant) return;
+    setSelectedApplicant({ ...applicant, interview });
+    setInterviewForm({ date: interview.date || '', time: interview.time || '', type: interview.type || 'Online', location: interview.location || '', meetingLink: interview.meetingLink || '', instructions: interview.instructions || '' });
+    setShowInterviewModal(true);
   };
 
   // Safe Filter Applicants
@@ -429,7 +465,7 @@ const EmployerDashboard = () => {
             {activeTab === 'interviews' && (
               <div className={`rounded-3xl border p-6 shadow-sm ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
                 <h3 className="text-lg font-bold">Upcoming Interviews</h3>
-                {interviews.length === 0 ? <p className="py-8 text-center text-sm text-slate-400">No interviews scheduled.</p> : <div className="mt-4 space-y-3">{interviews.map((interview) => <div key={interview.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 p-4"><div><p className="font-semibold">{interview.candidate_name}</p><p className="text-xs text-slate-500">{interview.job_title}</p></div><div className="text-right text-xs text-slate-500"><p>{new Date(interview.scheduled_at).toLocaleString()}</p><p className="capitalize">{interview.interview_status}</p></div></div>)}</div>}
+                {interviews.length === 0 ? <p className="py-8 text-center text-sm text-slate-400">No interviews scheduled.</p> : <div className="mt-4 space-y-3">{interviews.map((interview) => <div key={interview.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 p-4"><div><p className="font-semibold">{interview.jobTitle || interview.job_title}</p><p className="text-xs text-slate-500">{interview.company || interview.candidate_name}</p></div><div className="text-right text-xs text-slate-500"><p>{interview.date || interview.scheduled_at} {interview.time || ''}</p><p className="capitalize">Interview: {interview.status || interview.interview_status}</p><div className="mt-2 flex flex-wrap justify-end gap-2"><button type="button" onClick={() => openReschedule(interview)} className="font-bold text-blue-700">Reschedule</button><button type="button" onClick={() => handleInterviewStatus(interview, 'Completed')} className="font-bold text-emerald-700">Complete</button><button type="button" onClick={() => handleInterviewStatus(interview, 'Cancelled')} className="font-bold text-red-600">Cancel</button></div>{interview.status === 'Completed' && <div className="mt-2 flex justify-end gap-2"><button type="button" onClick={() => updateCandidateStatus(interview.applicationId, 'Hired')} className="font-bold text-emerald-700">Hire</button><button type="button" onClick={() => updateCandidateStatus(interview.applicationId, 'Rejected')} className="font-bold text-red-600">Reject</button></div>}</div></div>)}</div>}
               </div>
             )}
 
@@ -491,13 +527,28 @@ const EmployerDashboard = () => {
                 <Download className="w-4 h-4" /> Download CV
               </a>
               <button 
-                onClick={() => updateCandidateStatus(selectedApplicant.id, 'Interview Scheduled')}
-                className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-semibold flex items-center justify-center gap-1.5 hover:bg-blue-700 cursor-pointer"
+                onClick={() => { if (selectedApplicant.status === 'Shortlisted') setShowInterviewModal(true); }}
+                disabled={selectedApplicant.status !== 'Shortlisted'}
+                className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-semibold flex items-center justify-center gap-1.5 hover:bg-blue-700 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Calendar className="w-4 h-4" /> Schedule Interview
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {showInterviewModal && selectedApplicant && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
+          <form onSubmit={handleScheduleInterview} className="w-full max-w-md space-y-4 rounded-3xl bg-white p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-wider text-blue-600">Interview invitation</p><h3 className="mt-1 text-xl font-black text-slate-900">Schedule Interview</h3><p className="mt-1 text-sm text-slate-500">{selectedApplicant.jobTitle} · {selectedApplicant.name}</p></div><button type="button" onClick={() => setShowInterviewModal(false)} className="text-slate-400"><X className="h-5 w-5" /></button></div>
+            <div className="grid gap-3 sm:grid-cols-2"><label className="text-xs font-bold text-slate-600">Date<input required type="date" value={interviewForm.date} onChange={(event) => setInterviewForm({ ...interviewForm, date: event.target.value })} className="mt-1 min-h-10 w-full rounded-xl border border-slate-200 px-3" /></label><label className="text-xs font-bold text-slate-600">Time<input required type="time" value={interviewForm.time} onChange={(event) => setInterviewForm({ ...interviewForm, time: event.target.value })} className="mt-1 min-h-10 w-full rounded-xl border border-slate-200 px-3" /></label></div>
+            <label className="block text-xs font-bold text-slate-600">Interview type<select value={interviewForm.type} onChange={(event) => setInterviewForm({ ...interviewForm, type: event.target.value })} className="mt-1 min-h-10 w-full rounded-xl border border-slate-200 px-3"><option>Online</option><option>In-person</option><option>Phone</option></select></label>
+            {interviewForm.type === 'Online' && <label className="block text-xs font-bold text-slate-600">Meeting link<input required value={interviewForm.meetingLink} onChange={(event) => setInterviewForm({ ...interviewForm, meetingLink: event.target.value })} placeholder="https://" className="mt-1 min-h-10 w-full rounded-xl border border-slate-200 px-3" /></label>}
+            {interviewForm.type === 'In-person' && <label className="block text-xs font-bold text-slate-600">Location<input required value={interviewForm.location} onChange={(event) => setInterviewForm({ ...interviewForm, location: event.target.value })} className="mt-1 min-h-10 w-full rounded-xl border border-slate-200 px-3" /></label>}
+            <label className="block text-xs font-bold text-slate-600">Instructions<textarea value={interviewForm.instructions} onChange={(event) => setInterviewForm({ ...interviewForm, instructions: event.target.value })} rows={3} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2" /></label>
+            <div className="flex justify-end gap-3"><button type="button" onClick={() => setShowInterviewModal(false)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-600">Cancel</button><button type="submit" className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white">Schedule Interview</button></div>
+          </form>
         </div>
       )}
 

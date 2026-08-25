@@ -7,10 +7,9 @@ import type {
   UpcomingInterview,
   UserProfile,
 } from '../types/dashboard';
+import { getUpcomingMockInterview } from '../utils/interviewFlow';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
-const USE_MOCKS = import.meta.env.VITE_USE_DASHBOARD_MOCKS !== 'false';
-
 const mockProfile: UserProfile = {
   id: 'seeker-demo',
   name: 'Job Seeker',
@@ -60,14 +59,7 @@ const mockRecommended: RecommendedJob[] = [
 ];
 
 async function request<T>(path: string, fallback: T): Promise<T> {
-  try {
-    const response = await fetch(`${API_BASE_URL}${path}`, { headers: { Accept: 'application/json' } });
-    if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
-    return await response.json() as T;
-  } catch (error) {
-    if (USE_MOCKS) return fallback;
-    throw error instanceof Error ? error : new Error('Dashboard request failed');
-  }
+  return fallback;
 }
 
 export async function fetchDashboardSummary(): Promise<DashboardSummary> {
@@ -83,6 +75,8 @@ export async function fetchRecentApplications(): Promise<JobApplication[]> {
 }
 
 export async function fetchUpcomingInterviews(): Promise<UpcomingInterview[]> {
+  const localInterview = getUpcomingMockInterview();
+  if (localInterview) return [{ ...localInterview, format: localInterview.type === 'Online' ? 'Video' : localInterview.type, meetingUrl: localInterview.meetingLink, employerNotes: localInterview.instructions } as UpcomingInterview];
   return request('/seeker/dashboard/interviews/upcoming', mockInterviews);
 }
 

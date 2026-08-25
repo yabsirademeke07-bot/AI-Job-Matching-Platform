@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
-  LayoutDashboard, User, FileText, Target, Search, Bookmark,
-  ClipboardList, Brain, Mic, Bell, Settings, LogOut, Sparkles, CheckCircle2,
+  LayoutDashboard, User, Target, Search, Bookmark,
+  ClipboardList, Bell, Settings, LogOut, Sparkles, CheckCircle2,
   AlertTriangle, MapPin, Briefcase, DollarSign, Send, Globe, Menu, X, Lightbulb
 } from 'lucide-react';
 import heroBannerImg from '../assets/hero.png';
@@ -99,8 +99,6 @@ export default function SeekerDashboard() {
           }, {
             id: 'profile', path: '/profile', label: language === 'EN' ? 'My Profile' : 'የግል መረጃ', icon: User
           }, {
-            id: 'cv', path: '/cv-analysis', label: language === 'EN' ? 'My CV & Analysis' : 'CV እና AI ትንተና', icon: FileText
-          }, {
             id: 'matches', path: '/ai-matches', label: language === 'EN' ? 'AI Job Matches' : 'የተጣጣሙ ስራዎች', icon: Target
           }, {
             id: 'explore', path: '/explore-jobs', label: language === 'EN' ? 'Explore Jobs' : 'ስራዎችን ፈልግ', icon: Search
@@ -108,10 +106,6 @@ export default function SeekerDashboard() {
             id: 'saved', path: '/saved-jobs', label: language === 'EN' ? 'Saved Jobs' : 'የተቀመጡ ስራዎች', icon: Bookmark
           }, {
             id: 'applications', path: '/applications', label: language === 'EN' ? 'My Applications' : 'የማመልከቻዎች ሁኔታ', icon: ClipboardList
-          }, {
-            id: 'skillgap', path: '/skill-gap', label: language === 'EN' ? 'Skill Gap Analysis' : 'የክህሎት ክፍተት ትንተና', icon: Brain
-          }, {
-            id: 'interview', path: '/interview-prep', label: language === 'EN' ? 'AI Interview Prep' : 'AI የቃለ-መጠይቅ ዝግጅት', icon: Mic
           }, {
             id: 'notifications', path: '/notifications', label: language === 'EN' ? 'Notifications' : 'ማሳወቂያዎች', icon: Bell
           }].map(item => {
@@ -259,7 +253,6 @@ export default function SeekerDashboard() {
                 {[
                   { title: language === 'EN' ? 'AI Job Matches' : 'የ AI የተጣጣሙ ስራዎች', count: stats?.matches ?? 0, detail: language === 'EN' ? 'new matches' : 'አዲስ', icon: Target, color: 'text-blue-600', bg: 'bg-blue-50', path: '/ai-matches' },
                   { title: language === 'EN' ? 'Applied Jobs' : 'ያመለከቱባቸው ስራዎች', count: stats?.applications ?? 0, detail: language === 'EN' ? 'applications' : 'ማመልከቻዎች', icon: ClipboardList, color: 'text-indigo-600', bg: 'bg-indigo-50', path: '/applications' },
-                  { title: language === 'EN' ? 'Interviews' : 'ቃለ-መጠይቆች', count: stats?.interviews ?? 0, detail: language === 'EN' ? 'scheduled' : 'የተያዙ', icon: Mic, color: 'text-emerald-600', bg: 'bg-emerald-50', path: '/interview-prep' },
                   { title: language === 'EN' ? 'Saved Jobs' : 'ያስቀመጧቸው ስራዎች', count: stats?.savedJobs ?? 0, detail: language === 'EN' ? 'saved jobs' : 'የተቀመጡ', icon: Bookmark, color: 'text-amber-600', bg: 'bg-amber-50', path: '/saved-jobs' },
                 ].map((stat, idx) => {
                   const Icon = stat.icon;
@@ -436,22 +429,6 @@ export default function SeekerDashboard() {
 
                     <button className="w-full py-2.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold transition">
                       {language === 'EN' ? 'Explore Skill Courses' : 'የክህሎት ማሻሻያዎችን ተመልከት'}
-                    </button>
-                  </div>
-
-                  {/* AI INTERVIEW PREPARATION PROMPT */}
-                  <div className="bg-gradient-to-tr from-indigo-900 to-slate-900 text-white rounded-2xl p-6 shadow-md space-y-4">
-                    <div className="flex items-center gap-2">
-                      <Mic className="w-5 h-5 text-blue-400" />
-                      <h3 className="text-base font-bold">{language === 'EN' ? 'Mock AI Interview' : 'የ AI ቃለ-መጠይቅ ልምምድ'}</h3>
-                    </div>
-                    <p className="text-xs text-slate-300">
-                      {language === 'EN'
-                        ? "Practice role-specific interview questions and get real-time AI feedback."
-                        : "ለስራው የሚሆኑ ጥያቄዎችን በመለማመድ ከ AI ፈጣን አስተያየት ያግኙ።"}
-                    </p>
-                    <button className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-md">
-                      {language === 'EN' ? 'Start Mock Interview' : 'ልምምድ ጀምር'}
                     </button>
                   </div>
 

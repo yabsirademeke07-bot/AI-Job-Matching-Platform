@@ -1507,8 +1507,7 @@ export default function ExploreJobsPage() {
 
   const handleViewDetails = (job) => {
     localStorage.setItem('jobDetailsPreview', JSON.stringify(job));
-    setPendingApplication(job.id, job);
-    navigate('/login', { state: { intent: 'apply', jobId: job.id, from: `/job-details/${job.id}` } });
+    navigate(`/job-details/${job.id}`);
   };
 
   const handleAuthSuccess = (email, mode, targetJob) => {
@@ -1646,15 +1645,11 @@ export default function ExploreJobsPage() {
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
-                Discover Jobs
+                Explore Jobs
               </h1>
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#F0F7FC] border border-[#D0E5F5] text-xs font-black text-[#2B73A4]">
-                <span className="h-2 w-2 rounded-full bg-[#56A2D8] animate-pulse"></span>
-                {jobs.length} Active Positions
-              </span>
             </div>
             <p className="text-sm sm:text-base text-slate-600 font-medium mt-1.5">
-              Explore verified employment opportunities across Ethiopia & Remote
+              Find opportunities that match your skills and experience.
             </p>
           </div>
 
@@ -1704,7 +1699,7 @@ export default function ExploreJobsPage() {
       </div>
 
       {/* EXPANDED FULL-WIDTH CONTAINER */}
-      <div className="w-full px-3 sm:px-5 md:px-6 lg:px-8 xl:px-10 2xl:px-12 py-4 flex-1">
+      <div className="w-full px-3 sm:px-5 md:px-6 lg:px-0 xl:px-0 2xl:px-0 py-4 flex-1">
         {/* TOP SEARCH BAR */}
         <div className="jobs-search-panel mb-8 rounded-2xl border border-slate-200/90 bg-white p-3 shadow-xs text-left">
           <div className="relative">
@@ -1728,10 +1723,10 @@ export default function ExploreJobsPage() {
         </div>
 
         {/* 2-COLUMN MAIN LAYOUT: WIDE CARDS (LEFT) & STICKY AFRIWORK SIDEBAR (RIGHT) */}
-        <div className="flex flex-col lg:flex-row items-start gap-7">
+        <div className="flex flex-col lg:flex-row items-start gap-4">
           {/* LEFT: FILTER SIDEBAR */}
           <aside
-            className={`jobs-filter-panel fixed inset-y-0 right-0 z-40 w-80 shrink-0 overflow-y-auto bg-white p-6 shadow-2xl transition-transform lg:sticky lg:top-6 lg:block lg:max-h-[calc(100vh-3rem)] lg:translate-x-0 lg:rounded-2xl lg:border lg:border-slate-200/90 lg:p-6 lg:shadow-2xs ${
+            className={`brand-sidebar explore-sidebar fixed inset-y-0 right-0 w-72 shrink-0 overflow-y-auto p-6 shadow-2xl transition-transform lg:sticky lg:top-6 lg:left-0 lg:right-auto lg:block lg:max-h-[calc(100vh-3rem)] lg:translate-x-0 lg:rounded-2xl lg:p-6 lg:shadow-2xs ${
               mobileFiltersOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0"
             }`}
           >
@@ -2040,7 +2035,7 @@ export default function ExploreJobsPage() {
           <main className="flex-1 min-w-0 w-full space-y-6">
             <div className="jobs-results-header flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 pb-3.5 text-left">
               <span className="text-lg sm:text-xl font-black text-[#2B73A4] border-b-2 border-[#56A2D8] pb-3.5 px-1 self-start">
-                All Jobs ({filteredJobs.length})
+                All Jobs
               </span>
 
               <div className="flex items-center gap-2.5 text-base self-end sm:self-auto">
