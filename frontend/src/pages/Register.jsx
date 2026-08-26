@@ -5,9 +5,11 @@ import {
   Sparkles, ShieldCheck, Cpu, Mail, Lock,
   ArrowRight, Eye, EyeOff, Target, User, CheckCircle2, Briefcase, RefreshCw, ArrowLeft
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 const Register = () => {
   const navigate = useNavigate();
+  const { setSession } = useAuth();
 
   // Multi-step Registration State: 1 = Form, 2 = OTP, 3 = Role
   const [step, setStep] = useState(1);
@@ -249,13 +251,18 @@ const Register = () => {
       });
 
       if (response.ok) {
-        navigate('/login', {
-          state: { message: 'Registration completed successfully! Please log in.' }
-        });
+        const data = await response.json().catch(() => ({}));
+        if (data.token) localStorage.setItem('token', data.token);
+        if (data.user) {
+          localStorage.setItem('user', JSON.stringify(data.user));
+          localStorage.setItem('currentUser', JSON.stringify(data.user));
+        }
+        setSession({ token: data.token, user: data.user });
+        localStorage.removeItem('pendingRegistration');
+        navigate(selectedRole === 'employer' ? '/employee-info' : '/upload-cv');
       } else {
-        navigate('/login', {
-          state: { message: 'Account verified! Please login.' }
-        });
+        const data = await response.json().catch(() => ({}));
+        setApiError(data.message || 'Unable to complete registration. Please try again.');
       }
     } catch (err) {
       console.warn('Role selection warning, navigating to login:', err);
