@@ -51,9 +51,6 @@ function Footer() {
               <li>
                 <Link to="/about" className="hover:text-[var(--brand-deep)] transition">About Us</Link>
               </li>
-              <li>
-                <Link to="/contact" className="hover:text-[var(--brand-deep)] transition">Contact Us</Link>
-              </li>
             </ul>
           </div>
 

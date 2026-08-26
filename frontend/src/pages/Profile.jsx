@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { getNextApplicationStep, getPendingApplication } from '../utils/applicationFlow';
 import { 
   User, Mail, Phone, GraduationCap, 
   Briefcase, Plus, Trash2, Award, Languages, Link as LinkIcon, 
@@ -137,7 +138,8 @@ const Profile = ({ userData = {}, cvFile = null }) => {
     localStorage.setItem('user', JSON.stringify(updatedUser));
 
     // 3. በቀጥታ ወደ Seeker Dashboard መራት
-    navigate('/seeker-dashboard');
+    const pending = getPendingApplication();
+    navigate(pending?.jobId ? getNextApplicationStep(pending.jobId) : '/seeker-dashboard');
   };
 
   // 2. Back button ሲጫኑ User state-ኡን ጠብቆ የሚመልስ Handler

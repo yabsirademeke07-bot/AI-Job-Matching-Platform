@@ -1,7 +1,7 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
-const USE_MOCKS = false;
+const USE_MOCKS = import.meta.env.VITE_USE_JOB_MOCKS !== 'false';
 const SAVED_JOBS_KEY = 'jobMatchingSavedJobs';
-const APPLICATIONS_KEY = 'jobMatchingApplications';
+const APPLICATIONS_KEY = 'mockApplications';
 
 const mockJobs = [
   {
@@ -244,9 +244,7 @@ export async function searchJobs(queryParams = {}) {
     salary
   });
 
-  const response = await request(`/jobs?${params.toString()}`);
-  return (response.jobs || response).map(normalizeJob);
-  /* return request(`/jobs?${params.toString()}`, {}, () => {
+  return request(`/jobs?${params.toString()}`, {}, () => {
     let filtered = [...mockJobs];
 
     if (query) {
@@ -286,7 +284,7 @@ export async function searchJobs(queryParams = {}) {
     }
 
     return filtered.map(normalizeJob);
-  }); */
+  });
 }
 
 export async function getJobById(jobId) {
@@ -340,10 +338,27 @@ export async function unsaveJob(jobId) {
 
 export async function applyForJob(jobId, payload = {}) {
   const id = String(jobId);
-  return request(`/jobs/${id}/applications`, {
-    method: 'POST',
-    body: JSON.stringify({ coverLetter: payload.coverLetter || '' })
-  });
+  const application = {
+    id: `app-${Date.now()}`,
+    jobId: id,
+    resumeId: payload.resumeId || 'resume-demo',
+    coverLetter: payload.coverLetter || '',
+    job: payload.job || null,
+    status: 'Submitted',
+    createdAt: new Date().toISOString()
+  };
+
+  const current = getStoredApplications();
+  const existing = current.find((item) => String(item.jobId) === id);
+  if (existing) return { success: false, alreadyApplied: true, applicationId: existing.id, data: existing };
+  localStorage.setItem(APPLICATIONS_KEY, JSON.stringify([application, ...current]));
+
+  return {
+    success: true,
+    applicationId: application.id,
+    message: 'Application submitted successfully!',
+    data: application
+  };
 }
 
 export function getApplicationById(applicationId) {

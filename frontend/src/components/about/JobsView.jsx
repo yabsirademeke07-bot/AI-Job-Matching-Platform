@@ -1,8 +1,12 @@
 import { useState } from "react";
-import { BriefcaseBusiness, CheckCircle2, Clock3, MapPin, Search, Star, Bookmark } from "lucide-react";
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
+import { beginApplication } from '../../utils/applicationFlow';
+import { BriefcaseBusiness, Clock3, MapPin, Search, Star, Bookmark } from "lucide-react";
 
 const jobs = [
   {
+    id: 'about-job-1',
     title: "Senior Frontend Engineer",
     company: "Beti Labs",
     location: "Remote",
@@ -13,6 +17,7 @@ const jobs = [
     description: "Build polished customer-facing experiences and help improve product workflows across the platform.",
   },
   {
+    id: 'about-job-2',
     title: "Full Stack Product Engineer",
     company: "Amanu Digital",
     location: "Hybrid",
@@ -23,6 +28,7 @@ const jobs = [
     description: "Lead product engineering across API development, database integration, and responsive frontend delivery.",
   },
   {
+    id: 'about-job-3',
     title: "React Developer",
     company: "NexaWorks",
     location: "On-site",
@@ -37,6 +43,8 @@ const jobs = [
 const filters = ["All", "Remote", "Hybrid", "Contract", "Full-time"];
 
 export default function JobsView() {
+  const navigate = useNavigate();
+  const { user, isAuthenticated } = useAuth();
   const [search, setSearch] = useState("");
   const [selectedFilter, setSelectedFilter] = useState("All");
 
@@ -129,7 +137,7 @@ export default function JobsView() {
             </div>
 
             <div className="mt-5 flex flex-wrap items-center gap-3">
-              <button className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+              <button type="button" onClick={() => beginApplication(job.id, job, navigate, { isAuthenticated, role: user?.role, sourcePage: '/about', returnPath: '/about' })} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
                 Apply Now
               </button>
               <button className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">

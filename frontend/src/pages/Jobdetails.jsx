@@ -3,7 +3,7 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { CheckCircle, Building, MapPin, Briefcase, DollarSign, Calendar, ArrowLeft, LogIn, Send, Sparkles, Loader2, MessageCircle, Copy } from "lucide-react";
 import api from "../api/axiosConfig";
 import { useAuth } from "../context/AuthContext";
-import { getApplicationSubmitPath, getNextApplicationStep, hasCompletedCv, hasCompletedProfile, setPendingApplication } from "../utils/applicationFlow";
+import { beginApplication, getApplicationForJob } from "../utils/applicationFlow";
 
 const getReadableDescription = (description) => {
   if (!description) return "ምንም መግለጫ አልተካተተም።";
@@ -31,7 +31,7 @@ const JobDetails = () => {
     const fetchJobDetails = async () => {
       try {
         setLoading(true);
-        const previewJob = JSON.parse(localStorage.getItem('jobDetailsPreview') || 'null');
+        const previewJob = location.state?.job || JSON.parse(localStorage.getItem('jobDetailsPreview') || 'null');
         if (previewJob && String(previewJob.id) === String(id)) {
           setJob(previewJob);
         } else {
@@ -55,22 +55,11 @@ const JobDetails = () => {
     if (id) {
       fetchJobDetails();
     }
-  }, [id]);
+  }, [id, location.state]);
 
   // 2. Click Logic for "Login to Apply" / "Apply Now"
   const handleApplyAction = () => {
-    const role = (user?.role || '').toLowerCase();
-    if (isAuthenticated && !['job_seeker', 'seeker', 'jobseeker', 'user', 'employee'].includes(role)) {
-      return;
-    }
-    setPendingApplication(id, job);
-    if (!isAuthenticated) {
-      // Login ካላደረገ -> ወደ Login ገጽ ይወስደዋል (የነበረበትን path በ state ይይዛል)
-      navigate("/login", { state: { from: location.pathname, intent: "apply", jobId: id } });
-    } else {
-      const complete = hasCompletedCv() && hasCompletedProfile();
-      navigate(complete ? getApplicationSubmitPath(id) : getNextApplicationStep(id));
-    }
+    beginApplication(id, job, navigate, { isAuthenticated, role: user?.role, sourcePage: location.pathname, returnPath: location.pathname });
   };
 
   const handleCheckMatch = () => {
@@ -103,6 +92,17 @@ const JobDetails = () => {
 
     window.open(shareLinks[network], "_blank", "noopener,noreferrer");
   };
+
+  const matchBreakdown = job && {
+    overall: job.matchBreakdown?.overall ?? job.matchScore ?? job.score,
+    skills: job.matchBreakdown?.skills ?? job.skillsMatch,
+    experience: job.matchBreakdown?.experience ?? job.experienceMatch,
+    matchingSkills: job.matchBreakdown?.matchingSkills ?? job.matchingSkills ?? [],
+    skillsToImprove: job.matchBreakdown?.skillsToImprove ?? job.skillsToImprove ?? [],
+  };
+  const existingApplication = job && getApplicationForJob(id);
+  const deadline = job?.deadlineDate || job?.application_deadline;
+  const isExpired = deadline && new Date(deadline) < new Date();
 
   if (loading) {
     return (
@@ -153,7 +153,7 @@ const JobDetails = () => {
 
               {/* Dynamic Action Button (Login to Apply / Apply Now) */}
               <div>
-                <button
+                {isExpired ? <p className="rounded-lg bg-red-50 px-4 py-3 text-sm font-bold text-red-700">Applications for this job are closed.</p> : existingApplication ? <button type="button" onClick={() => navigate(`/applications/${existingApplication.id}`, { state: { application: existingApplication } })} className="w-full rounded-lg border border-emerald-600 px-8 py-3.5 font-medium text-emerald-700 md:w-auto">Application Submitted</button> : <button
                   onClick={handleApplyAction}
                   className={`w-full md:w-auto px-8 py-3.5 font-medium rounded-lg shadow-sm transition-all flex items-center justify-center gap-2 ${"bg-[#0871D1] text-white hover:bg-[#075EAE]"
                     }`}
@@ -167,7 +167,7 @@ const JobDetails = () => {
                       <Send size={18} /> Apply Now
                     </>
                   )}
-                </button>
+                </button>}
               </div>
             </div>
 
@@ -179,11 +179,11 @@ const JobDetails = () => {
               </div>
               <div className="flex items-center gap-2 text-slate-600">
                 <Briefcase size={18} className="text-[#8FA5BA]" />
-                <span>{job.site || "On-site"}</span>
+                <span>{job.site || job.workplace || "On-site"}</span>
               </div>
               <div className="flex items-center gap-2 text-slate-600">
                 <DollarSign size={18} className="text-[#8FA5BA]" />
-                <span>{job.salary ? `${job.salary} ETB` : "Negotiable"}</span>
+                <span>{job.salary || "Negotiable"}</span>
               </div>
               <div className="flex items-center gap-2 text-slate-600">
                 <Calendar size={18} className="text-[#8FA5BA]" />
@@ -215,8 +215,16 @@ const JobDetails = () => {
 
           <aside className="space-y-5">
             <div className="relative z-10 rounded-2xl border-2 border-[#0871D1] bg-white p-6 shadow-sm">
-              <h2 className="text-xl font-bold text-slate-900">How well do you match?</h2>
-              <p className="mt-3 leading-7 text-slate-600">Get an instant AI match score for this role - free, takes 3 minutes.</p>
+              <h2 className="text-xl font-bold text-slate-900">{matchBreakdown?.overall != null ? 'Your AI Match' : 'How well do you match?'}</h2>
+              {matchBreakdown?.overall != null && <>
+                <div className="mt-4 flex items-end justify-between gap-4"><div><p className="text-4xl font-black text-[#0871D1]">{matchBreakdown.overall}%</p><p className="text-xs font-bold text-slate-500">AI Match Score</p></div><div className="text-right text-sm"><p className="font-bold text-slate-700">Skills Match <span className="text-[#0871D1]">{matchBreakdown.skills}%</span></p><p className="mt-1 font-bold text-slate-700">Experience Match <span className="text-[#0871D1]">{matchBreakdown.experience}%</span></p></div></div>
+                <div className="mt-5 grid gap-4 border-t border-slate-100 pt-4 text-sm sm:grid-cols-2"><div><p className="font-bold text-slate-700">Matching Skills</p><div className="mt-2 flex flex-wrap gap-1.5">{matchBreakdown.matchingSkills.map((skill) => <span key={skill} className="rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">{skill}</span>)}</div></div><div><p className="font-bold text-slate-700">Skills to Improve</p><div className="mt-2 flex flex-wrap gap-1.5">{matchBreakdown.skillsToImprove.map((skill) => <span key={skill} className="rounded-md bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">{skill}</span>)}</div></div></div>
+              </>}
+              <p className="mt-3 leading-7 text-slate-600">
+                {isAuthenticated
+                  ? "Get an instant AI match score for this role - free, takes 3 minutes."
+                  : "Complete your profile to see your personalized match score."}
+              </p>
               <button
                 type="button"
                 onClick={handleCheckMatch}
@@ -224,7 +232,7 @@ const JobDetails = () => {
                 className="mt-5 flex w-full items-center justify-center gap-2 rounded-full bg-[#0871D1] px-5 py-3.5 text-lg font-bold text-white transition hover:bg-[#075EAE] disabled:opacity-70"
               >
                 {matchLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
-                {matchLoading ? "Checking..." : "Check Your Match ->"}
+                {matchLoading ? "Checking..." : isAuthenticated ? "Check Your Match ->" : "Sign In to Continue"}
               </button>
               {matchScore !== null && <p className="mt-4 rounded-xl bg-[#EAF3FF] px-4 py-3 text-center font-bold text-[#0871D1]">{matchScore}% AI match score</p>}
               <p className="mt-4 text-center text-sm text-slate-500">Free · Powered by AI · Results shown instantly</p>
@@ -239,7 +247,7 @@ const JobDetails = () => {
             <div className="relative z-10 bg-white rounded-xl shadow-sm border border-slate-200 p-6">
               <h2 className="text-lg font-semibold text-slate-900 mb-4">Job Overview</h2>
               <p className="text-slate-600 leading-relaxed whitespace-pre-line">
-                {getReadableDescription(job.description)}
+                {getReadableDescription(job.description || job.fullDescription || job.shortDescription)}
               </p>
             </div>
 
@@ -277,7 +285,7 @@ const JobDetails = () => {
                 </div>
                 <div className="flex justify-between pb-2">
                   <span>Education</span>
-                  <span className="font-medium text-slate-900">{job.educationLevel || "Bachelor's"}</span>
+                  <span className="font-medium text-slate-900">{job.educationLevel || job.education || "Bachelor's"}</span>
                 </div>
               </div>
             </div>
