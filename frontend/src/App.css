@@ -16,6 +16,10 @@
   color: #475569;
 }
 
+.employer-workspace aside nav button > span.flex.h-6.w-6 {
+  display: none;
+}
+
 button,
 a,
 input,

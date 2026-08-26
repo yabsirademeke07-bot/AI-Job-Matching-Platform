@@ -52,13 +52,13 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    localStorage.removeItem('currentUser');
     localStorage.removeItem('job_matching_auth_user');
     sessionStorage.removeItem('token');
     sessionStorage.removeItem('user');
     setToken(null);
     setUser(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    window.location.replace('/register');
   };
 
   const isAuthenticated = Boolean(token);

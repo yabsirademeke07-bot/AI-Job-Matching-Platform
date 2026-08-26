@@ -169,7 +169,7 @@ export default function EmployerWorkspace() {
   const scheduleInterview = async (event) => { event.preventDefault(); if (!selected) return; const item = { applicationId: selected.id, candidateId: selected.candidateId, scheduledDate: schedule.date, scheduledTime: schedule.time, interviewType: schedule.type, meetingLink: schedule.link, notes: schedule.notes }; try { await api.post('/interviews', item); setInterviews((current) => [...current, { ...item, candidate_name: selected.name, job_title: selected.jobTitle, scheduled_at: `${schedule.date}T${schedule.time}` }]); updateApplication(selected.id, 'interview-scheduled'); setShowSchedule(false); notify('Interview scheduled'); } catch (error) { notify(error?.response?.data?.message || 'Unable to schedule interview.'); } };
   const hire = (item) => { updateApplication(item.id, 'hired'); confetti({ particleCount: 160, spread: 90, origin: { y: 0.6 } }); notify(`${item.name} marked as hired`); };
 
-  const shell = dark ? 'bg-slate-950 text-slate-100' : 'bg-[#f7f9fc] text-slate-900';
+  const shell = dark ? 'employer-workspace bg-slate-950 text-slate-100' : 'employer-workspace bg-[#f7f9fc] text-slate-900';
   const card = dark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white';
   const employeeName = user?.full_name || user?.name || 'Employee';
   const title = active === 'overview' ? (isAmharic ? `እንኳን ወደ ዳሽቦርድ በደህና መጡ፣ ${employeeName}` : `Welcome, ${employeeName}`) : labelForStage(active, stages.find(([id]) => id === active)?.[1] || 'Dashboard');

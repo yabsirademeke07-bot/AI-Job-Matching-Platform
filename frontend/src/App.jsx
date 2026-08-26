@@ -99,11 +99,23 @@ function BackButton() {
 const withSeekerSidebar = (page) => <SeekerPageLayout>{page}</SeekerPageLayout>;
 
 function AppLayout() {
+  const location = useLocation();
+  const dashboardRoutes = [
+    '/dashboard',
+    '/seeker-dashboard',
+    '/seekerDashboard',
+    '/employer-dashboard',
+    '/employer/dashboard',
+    '/employer/candidates',
+    '/employer/post-job'
+  ];
+  const isDashboardRoute = dashboardRoutes.includes(location.pathname);
+
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans">
-      <Navbar />
+      {!isDashboardRoute && <Navbar />}
       <main className="flex-grow">
-        <BackButton />
+        {!isDashboardRoute && <BackButton />}
         <Routes>
           {/* ========================================== */}
           {/* 1. PUBLIC ROUTES                           */}

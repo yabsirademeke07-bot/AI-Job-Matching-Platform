@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LogIn,
   LayoutDashboard,
@@ -15,20 +15,25 @@ import { useAuth } from '../context/AuthContext';
 
 export default function Navbar() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, isAuthenticated, logout } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const isActive = (path) => location.pathname === path;
   // የ Role ዓይነቶች ማረጋገጫ
-  const isSeeker = ['job_seeker', 'seeker', 'jobseeker', 'user'].includes(user?.role);
-  const isEmployer = ['employer', 'company', 'recruiter'].includes(user?.role);
-  const isAdmin = user?.role === 'admin';
+  const role = (user?.role || user?.userType || '').toString().trim().toLowerCase().replace(/[\s-]+/g, '_');
+  const isSeeker = ['job_seeker', 'seeker', 'jobseeker', 'user', 'employee'].includes(role);
+  const isEmployer = ['employer', 'company', 'recruiter'].includes(role);
+  const isAdmin = role === 'admin';
   const isSeekerDashboardPage = ['/seeker-dashboard', '/seekerDashboard', '/dashboard'].includes(location.pathname);
   const isEmployerDashboardPage = ['/employer-dashboard', '/employer/dashboard', '/employer/candidates', '/employer/post-job'].includes(location.pathname);
 
   const displayName = user?.name || user?.full_name || user?.email || 'User';
   const avatarUrl = user?.avatarUrl || user?.avatar_url;
-  const handleLogout = () => logout();
+  const handleLogout = () => {
+    logout();
+    navigate('/login', { replace: true });
+  };
 
   return (
     <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-sm transition-all w-full">
