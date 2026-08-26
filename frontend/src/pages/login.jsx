@@ -134,7 +134,7 @@ const Login = () => {
         }
         setSession({ token: data.token, user: data.user });
 
-        navigateByRole(data.user?.role);
+        navigateByRole(data.user?.role || data.user?.userType);
       } else {
         setApiError(data.message || `Login failed (${response.status}). Please check credentials.`);
       }
