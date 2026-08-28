@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { AlertCircle, CheckCircle2, Loader2, RefreshCw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import BackToDashboard from "../components/BackToDashboard";
 import {
   deleteResume,
   downloadResume,
@@ -115,7 +114,6 @@ export default function MyResume() {
               readiness.
             </p>
           </div>
-          <BackToDashboard />
           <button
             type="button"
             onClick={load}

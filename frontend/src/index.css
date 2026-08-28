@@ -295,8 +295,6 @@ select:focus-visible {
     background-color: #ffffff;
     color: #0f172a !important;
     appearance: auto;
-    overflow-y: scroll;
-    scrollbar-gutter: stable;
     scrollbar-width: auto;
   }
 

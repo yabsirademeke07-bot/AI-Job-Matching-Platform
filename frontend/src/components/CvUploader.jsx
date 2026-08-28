@@ -17,6 +17,7 @@ const CvUploader = ({
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const applicationJobId = searchParams.get('jobId');
+  const API_URL = import.meta.env.VITE_BACKEND_URL || '/api';
 
   // Internal state handlers (Props ካልተላኩ በራሱ እንዲሰራ)
   const [internalCvFile, setInternalCvFile] = useState(null);
@@ -94,7 +95,7 @@ const CvUploader = ({
   };
 
   // ወደ Profile ገጽ የሚመራው አዝራር (Continue Button) ሲነካ
-  const handleContinue = (e) => {
+  const handleContinue = async (e) => {
     e.preventDefault();
     if (applicationJobId && !cvFile && !hasCompletedCv()) {
       setContinueError('Please upload your CV before continuing.');
@@ -103,6 +104,21 @@ const CvUploader = ({
     if (applicationJobId) {
       continueApplicationFlow(navigate, { jobId: applicationJobId });
       return;
+    }
+    if (cvFile && localStorage.getItem('token')) {
+      const formData = new FormData();
+      formData.append('cv', cvFile);
+      try {
+        const response = await fetch(`${API_URL.replace(/\/$/, '')}/cvs`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+          body: formData,
+        });
+        if (!response.ok) throw new Error('Unable to save CV');
+      } catch (error) {
+        setContinueError('Unable to save your CV. Please try again.');
+        return;
+      }
     }
     if (onNext) {
       onNext();

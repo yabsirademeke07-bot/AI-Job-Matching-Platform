@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import LogoutFlowModals from "../components/LogoutFlowModals";
 import {
   getDashboardSummary,
   getJobMatches,
@@ -54,7 +55,7 @@ function useResource(loader) {
 
 export default function JobSeekerDashboard() {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, token, setSession, logout } = useAuth();
   const location = useLocation();
   const summary = useResource(useCallback(() => getDashboardSummary(), []));
   const matches = useResource(useCallback(() => getJobMatches(), []));
@@ -69,6 +70,7 @@ export default function JobSeekerDashboard() {
     JSON.parse(localStorage.getItem("savedJobs") || "[]"),
   );
   const [logoutOpen, setLogoutOpen] = useState(false);
+  const [logoutSession, setLogoutSession] = useState(null);
   const profile = summary.data?.profile || {
     name: user?.name || user?.full_name || "User",
     profileCompletion: 0,
@@ -145,11 +147,8 @@ export default function JobSeekerDashboard() {
     ["Notifications", "/notifications", Bell],
   ];
   const handleLogout = () => {
+    setLogoutSession({ token, user });
     setLogoutOpen(true);
-  };
-  const confirmLogout = () => {
-    logout();
-    navigate("/login");
   };
   return (
     <div className="information-page min-h-screen bg-slate-50 lg:flex">
@@ -345,57 +344,14 @@ export default function JobSeekerDashboard() {
           />
         </div>
       </main>
-      {logoutOpen && (
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/50 p-4"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setLogoutOpen(false);
-          }}
-        >
-          <div
-            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="logout-title"
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 id="logout-title" className="text-2xl font-black text-slate-900">
-                  Log out?
-                </h2>
-                <p className="mt-3 text-base leading-7 text-slate-600">
-                  Are you sure you want to log out of your account?
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setLogoutOpen(false)}
-                className="text-2xl leading-none text-slate-400 hover:text-slate-700"
-                aria-label="Close logout confirmation"
-              >
-                ×
-              </button>
-            </div>
-            <div className="mt-6 flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setLogoutOpen(false)}
-                className="rounded-xl border border-slate-200 px-5 py-3 font-semibold text-slate-700 hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={confirmLogout}
-                className="rounded-xl bg-red-600 px-5 py-3 font-bold text-white hover:bg-red-700"
-              >
-                Log out
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {logoutOpen && <LogoutFlowModals
+        user={logoutSession?.user}
+        token={logoutSession?.token}
+        logout={logout}
+        setSession={setSession}
+        navigate={navigate}
+        onClose={() => setLogoutOpen(false)}
+      />}
     </div>
   );
 }

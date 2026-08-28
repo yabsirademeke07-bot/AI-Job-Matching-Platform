@@ -236,7 +236,7 @@ const Register = () => {
     setApiError('');
 
     try {
-      await fetch(`${API_URL.replace(/\/$/, '')}/complete-registration`, {
+      const roleResponse = await fetch(`${API_URL.replace(/\/$/, '')}/complete-registration`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -244,17 +244,20 @@ const Register = () => {
           role: selectedRole,
         }),
       });
+      const roleData = await roleResponse.json().catch(() => ({}));
+      if (!roleResponse.ok) throw new Error(roleData.message || 'Unable to save role');
 
       const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
       const user = {
         ...currentUser,
-        id: currentUser.id || `demo-${Date.now()}`,
+        ...(roleData.user || {}),
+        id: currentUser.id || roleData.user?.id || `demo-${Date.now()}`,
         full_name: formData.fullName,
         email: formData.email,
         role: selectedRole === 'seeker' ? 'job_seeker' : selectedRole,
         is_verified: true,
       };
-      const token = localStorage.getItem('token') || 'frontend-demo-token';
+      const token = roleData.token || localStorage.getItem('token') || 'frontend-demo-token';
       localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify(user));
       localStorage.setItem('currentUser', JSON.stringify(user));
