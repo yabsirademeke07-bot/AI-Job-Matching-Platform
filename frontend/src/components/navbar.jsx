@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LogIn,
   LayoutDashboard,
@@ -15,19 +15,29 @@ import { useAuth } from '../context/AuthContext';
 
 export default function Navbar() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, isAuthenticated, logout } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [logoutOpen, setLogoutOpen] = useState(false);
 
   const isActive = (path) => location.pathname === path;
   // የ Role ዓይነቶች ማረጋገጫ
-  const isSeeker = ['job_seeker', 'seeker', 'jobseeker', 'user'].includes(user?.role);
-  const isEmployer = ['employer', 'company', 'recruiter'].includes(user?.role);
-  const isAdmin = user?.role === 'admin';
-  const isSeekerDashboardPage = ['/seeker-dashboard', '/seekerDashboard', '/dashboard'].includes(location.pathname);
-  const isEmployerDashboardPage = ['/employer-dashboard', '/employer/dashboard', '/employer/candidates', '/employer/post-job'].includes(location.pathname);
+  const role = (user?.role || user?.userType || '').toString().trim().toLowerCase().replace(/[\s-]+/g, '_');
+  const isSeeker = ['job_seeker', 'seeker', 'jobseeker', 'user', 'employee'].includes(role);
+  const isEmployer = ['employer', 'company', 'recruiter'].includes(role);
+  const isAdmin = role === 'admin';
+  const isSeekerDashboardPage = ['/dashboard', '/seeker-dashboard', '/seekerDashboard'].includes(location.pathname);
 
   const displayName = user?.name || user?.full_name || user?.email || 'User';
   const avatarUrl = user?.avatarUrl || user?.avatar_url;
+  const handleLogout = () => {
+    setLogoutOpen(true);
+  };
+  const confirmLogout = () => {
+    logout();
+    setLogoutOpen(false);
+    navigate('/login', { replace: true });
+  };
 
   return (
     <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-sm transition-all w-full">
@@ -107,14 +117,14 @@ export default function Navbar() {
           </Link>
 
           {/* ተጠቃሚው Login ካደረገ የሚታዩ Dashboard Links */}
-          {isAuthenticated && isSeeker && isSeekerDashboardPage && (
+          {isAuthenticated && isSeeker && (
             <Link to="/seeker-dashboard" className="text-xs font-extrabold bg-[var(--brand-primary)] text-white px-3.5 py-1.5 rounded-full hover:bg-[var(--brand-primary-hover)] transition flex items-center gap-2 shrink-0">
               <LayoutDashboard className="w-4 h-4" />
               <span>Seeker dashboard</span>
             </Link>
           )}
 
-          {isAuthenticated && isEmployer && isEmployerDashboardPage && (
+          {isAuthenticated && isEmployer && (
             <Link to="/employer-dashboard" className="text-xs font-extrabold bg-indigo-50 text-indigo-600 px-3.5 py-1.5 rounded-full hover:bg-indigo-100 transition flex items-center gap-2 shrink-0">
               <LayoutDashboard className="w-4 h-4" />
               <span>Employer dashboard</span>
@@ -131,11 +141,17 @@ export default function Navbar() {
 
         {/* DESKTOP RIGHT BUTTONS - ሙሉ በሙሉ ወደ ቀኝ */}
         <div className="hidden lg:flex items-center gap-3 shrink-0 ml-auto">
-          {isAuthenticated ? (
+          {isAuthenticated && isSeeker && isSeekerDashboardPage ? null : isAuthenticated && isEmployer ? (
+            <div className="flex items-center gap-3">
+              {avatarUrl ? <img src={avatarUrl} alt={displayName} className="h-9 w-9 rounded-full object-cover" /> : <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 font-bold text-blue-700">{displayName.charAt(0).toUpperCase()}</div>}
+              <span className="max-w-40 truncate text-sm font-bold text-slate-700">{displayName}</span>
+              <button type="button" onClick={handleLogout} className="flex h-10 items-center gap-2 rounded-xl bg-black px-4 text-sm font-bold leading-none text-white shadow-sm transition hover:bg-slate-800" aria-label="Log out"><LogOut className="h-4 w-4" /><span>Log Out</span></button>
+            </div>
+          ) : isAuthenticated ? (
             <div className="flex items-center gap-3">
               {avatarUrl ? <img src={avatarUrl} alt={displayName} className="w-9 h-9 rounded-full object-cover" /> : <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold">{displayName.charAt(0).toUpperCase()}</div>}
               <span className="text-sm font-bold text-slate-700">{displayName}</span>
-              <button onClick={() => { logout(); }} className="brand-button text-sm px-4 py-2" aria-label="Log out">
+              <button type="button" onClick={handleLogout} className="brand-button text-sm px-4 py-2" aria-label="Log out">
                 <LogOut className="w-4 h-4" />
                 <span>Log Out</span>
               </button>
@@ -217,7 +233,7 @@ export default function Navbar() {
             </Link>
 
             {/* Mobile User Consoles */}
-            {isAuthenticated && isSeeker && isSeekerDashboardPage && (
+            {isAuthenticated && isSeeker && (
               <Link
                 to="/seeker-dashboard"
                 onClick={() => setIsMobileMenuOpen(false)}
@@ -252,13 +268,21 @@ export default function Navbar() {
 
             {/* Mobile Action Buttons */}
             <div className="pt-3 mt-2 border-t border-slate-100 flex flex-col gap-2.5">
-              {isAuthenticated ? (
+              {isAuthenticated && isEmployer ? (
                 <>
                   <div className="flex items-center gap-3 px-4 py-2 text-sm font-bold text-slate-700">
                     {avatarUrl ? <img src={avatarUrl} alt={displayName} className="w-9 h-9 rounded-full object-cover" /> : <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center">{displayName.charAt(0).toUpperCase()}</div>}
                     <span>{displayName}</span>
                   </div>
-                  <button onClick={() => { logout(); setIsMobileMenuOpen(false); }} className="brand-button w-full text-base"><LogOut className="w-5 h-5" /><span>Log Out</span></button>
+                  <button type="button" onClick={() => { handleLogout(); setIsMobileMenuOpen(false); }} className="brand-button w-full text-base"><LogOut className="w-5 h-5" /><span>Log Out</span></button>
+                </>
+              ) : isAuthenticated ? (
+                <>
+                  <div className="flex items-center gap-3 px-4 py-2 text-sm font-bold text-slate-700">
+                    {avatarUrl ? <img src={avatarUrl} alt={displayName} className="w-9 h-9 rounded-full object-cover" /> : <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center">{displayName.charAt(0).toUpperCase()}</div>}
+                    <span>{displayName}</span>
+                  </div>
+                  <button type="button" onClick={() => { handleLogout(); setIsMobileMenuOpen(false); }} className="brand-button w-full text-base"><LogOut className="w-5 h-5" /><span>Log Out</span></button>
                 </>
               ) : (
                 <>
@@ -268,6 +292,35 @@ export default function Navbar() {
               )}
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {logoutOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/50 p-4"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setLogoutOpen(false);
+          }}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="navbar-logout-title"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 id="navbar-logout-title" className="text-2xl font-black text-slate-900">Log out?</h2>
+                <p className="mt-3 text-base leading-7 text-slate-600">Are you sure you want to log out of your account?</p>
+              </div>
+              <button type="button" onClick={() => setLogoutOpen(false)} className="text-2xl leading-none text-slate-400 hover:text-slate-700" aria-label="Close logout confirmation">×</button>
+            </div>
+            <div className="mt-6 flex justify-end gap-3">
+              <button type="button" onClick={() => setLogoutOpen(false)} className="rounded-xl border border-slate-200 px-5 py-3 font-semibold text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button type="button" onClick={confirmLogout} className="rounded-xl bg-red-600 px-5 py-3 font-bold text-white hover:bg-red-700">Log out</button>
+            </div>
           </div>
         </div>
       )}

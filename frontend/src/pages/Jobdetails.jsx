@@ -1,9 +1,8 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { CheckCircle, Building, MapPin, Briefcase, DollarSign, Calendar, ArrowLeft, LogIn, Send, Sparkles, Loader2, MessageCircle, Copy } from "lucide-react";
-import api from "../api/axiosConfig";
+import { Building, MapPin, ArrowLeft, LogIn, Send, Sparkles, Loader2, Bookmark } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import { beginApplication, getApplicationForJob } from "../utils/applicationFlow";
+import { beginApplication, getApplicationForJob, getApplyButtonState } from "../utils/applicationFlow";
 
 const getReadableDescription = (description) => {
   if (!description) return "ምንም መግለጫ አልተካተተም።";
@@ -12,6 +11,17 @@ const getReadableDescription = (description) => {
   const container = document.createElement("div");
   container.innerHTML = description;
   return container.textContent?.replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n\n").trim() || "ምንም መግለጫ አልተካተም።";
+};
+
+const asList = (value) => {
+  if (Array.isArray(value)) return value.filter(Boolean);
+  if (typeof value === "string") {
+    return value
+      .split(/\n|\r|•|;/)
+      .map((item) => item.replace(/^[-*]\s*/, "").trim())
+      .filter(Boolean);
+  }
+  return [];
 };
 
 const JobDetails = () => {
@@ -25,35 +35,31 @@ const JobDetails = () => {
   const [error, setError] = useState(null);
   const [matchLoading] = useState(false);
   const [matchScore] = useState(null);
+  const [isSaved, setIsSaved] = useState(false);
 
-  // 1. Fetch Job Details
+  // Job details are passed from Explore Jobs and kept in frontend storage.
   useEffect(() => {
-    const fetchJobDetails = async () => {
-      try {
-        setLoading(true);
-        const previewJob = location.state?.job || JSON.parse(localStorage.getItem('jobDetailsPreview') || 'null');
-        if (previewJob && String(previewJob.id) === String(id)) {
-          setJob(previewJob);
-        } else {
-          const response = await api.get(`/jobs/${id}`);
-          setJob(response.data);
-        }
-      } catch (err) {
-        console.error("Error fetching job details:", err);
-        try {
-          const previewJob = JSON.parse(localStorage.getItem('jobDetailsPreview') || 'null');
-          if (previewJob && String(previewJob.id) === String(id)) setJob(previewJob);
-          else setError("የስራ ዝርዝሩን መጫን አልተቻለም።");
-        } catch {
-          setError("የስራ ዝርዝሩን መጫን አልተቻለም።");
-        }
-      } finally {
-        setLoading(false);
-      }
-    };
+    if (!id) return;
 
-    if (id) {
-      fetchJobDetails();
+    try {
+      const previewJob = location.state?.job || JSON.parse(localStorage.getItem("jobDetailsPreview") || "null");
+      if (previewJob && String(previewJob.id) === String(id)) {
+        // The route preview is external browser state, so sync it into the page model.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setJob(previewJob);
+      } else {
+        setError("Open this job from Explore Jobs to view its details.");
+      }
+    } catch {
+      setError("The job details could not be loaded.");
+    } finally {
+      setLoading(false);
+      try {
+        const savedJobs = JSON.parse(localStorage.getItem("savedJobs") || "[]");
+        setIsSaved(savedJobs.some((savedId) => String(savedId) === String(id)));
+      } catch {
+        setIsSaved(false);
+      }
     }
   }, [id, location.state]);
 
@@ -75,41 +81,42 @@ const JobDetails = () => {
     });
   };
 
-  const handleShare = (network) => {
+  const handleShare = () => {
     const shareUrl = window.location.href;
     const shareText = `${job.title} - ${job.companyName || job.company || "Job opportunity"}`;
-    const shareLinks = {
-      WhatsApp: `https://wa.me/?text=${encodeURIComponent(`${shareText} ${shareUrl}`)}`,
-      Telegram: `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(shareText)}`,
-      LinkedIn: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(shareUrl)}`,
-      Facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`,
-    };
+    const telegramUrl = `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(shareText)}`;
+    window.open(telegramUrl, "_blank", "noopener,noreferrer");
+  };
 
-    if (network === "Copy Link") {
-      navigator.clipboard?.writeText(shareUrl);
-      return;
+  const handleToggleSave = () => {
+    try {
+      const savedJobs = JSON.parse(localStorage.getItem("savedJobs") || "[]");
+      const nextSavedJobs = isSaved
+        ? savedJobs.filter((savedId) => String(savedId) !== String(id))
+        : [...savedJobs, id];
+      localStorage.setItem("savedJobs", JSON.stringify(nextSavedJobs));
+      setIsSaved(!isSaved);
+    } catch {
+      setIsSaved(!isSaved);
     }
-
-    window.open(shareLinks[network], "_blank", "noopener,noreferrer");
   };
 
   const matchBreakdown = job && {
-    overall: job.matchBreakdown?.overall ?? job.matchScore ?? job.score,
+    overall: job.matchBreakdown?.overall ?? job.matchScore ?? job.score ?? job.aiMatchScore,
     skills: job.matchBreakdown?.skills ?? job.skillsMatch,
     experience: job.matchBreakdown?.experience ?? job.experienceMatch,
     matchingSkills: job.matchBreakdown?.matchingSkills ?? job.matchingSkills ?? [],
     skillsToImprove: job.matchBreakdown?.skillsToImprove ?? job.skillsToImprove ?? [],
   };
-  const backPath = location.state?.sourcePath || "/explore-jobs";
-  const backLabel = {
-    "/saved-jobs": "Back to Saved Jobs",
-    "/ai-matches": "Back to AI Job Matches",
-    "/dashboard": "Back to Dashboard",
-    "/applications": "Back to My Applications",
-  }[backPath] || "Back to Jobs";
+  const backLabel = "Back to Explore Jobs";
   const existingApplication = job && getApplicationForJob(id);
+  const applyButtonState = getApplyButtonState();
   const deadline = job?.deadlineDate || job?.application_deadline;
   const isExpired = deadline && new Date(deadline) < new Date();
+  const responsibilities = asList(job?.responsibilities);
+  const requirements = asList(job?.requirements);
+  const skills = asList(job?.skills || job?.requiredSkills || job?.tags);
+  const benefits = asList(job?.benefits);
 
   if (loading) {
     return (
@@ -134,97 +141,84 @@ const JobDetails = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#F4F3F0] px-3 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-[#F4F7FA] px-3 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
         {/* Back Button */}
         <button
-          onClick={() => navigate(backPath)}
+          onClick={() => navigate("/explore-jobs")}
           className="mb-5 flex items-center gap-2 text-sm font-semibold text-slate-600 transition-colors hover:text-slate-900"
         >
           <ArrowLeft size={18} /> {backLabel}
         </button>
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:items-start">
           {/* Header Section */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:p-8 lg:col-span-2">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:p-8 lg:col-span-3">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
               <div>
                 <span className="mb-3 inline-block rounded-full bg-[#EAF3FF] px-3 py-1 text-xs font-semibold text-[#0871D1]">
-                  {job.type || "Full-time"}
+                  {job.type}
                 </span>
                 <h1 className="text-2xl md:text-3xl font-bold text-slate-900">{job.title}</h1>
-                <p className="mt-2 flex items-center gap-2 text-slate-600">
-                  <Building size={16} /> {job.companyName || job.company || "Company Name"}
-                </p>
+                {(job.companyName || job.company) && (
+                  <p className="mt-2 flex items-center gap-2 text-slate-600">
+                    <Building size={16} /> {job.companyName || job.company}
+                  </p>
+                )}
               </div>
 
-              {/* Dynamic Action Button (Login to Apply / Apply Now) */}
-              <div>
-                {isExpired ? <p className="rounded-lg bg-red-50 px-4 py-3 text-sm font-bold text-red-700">Applications for this job are closed.</p> : existingApplication ? <button type="button" onClick={() => navigate(`/applications/${existingApplication.id}`, { state: { application: existingApplication } })} className="w-full rounded-lg border border-emerald-600 px-8 py-3.5 font-medium text-emerald-700 md:w-auto">Application Submitted</button> : <button
-                  onClick={handleApplyAction}
-                  className={`w-full md:w-auto px-8 py-3.5 font-medium rounded-lg shadow-sm transition-all flex items-center justify-center gap-2 ${"bg-[#0871D1] text-white hover:bg-[#075EAE]"
-                    }`}
-                >
-                  {!isAuthenticated ? (
-                    <>
-                      <LogIn size={18} /> Login to Apply
-                    </>
-                  ) : (
-                    <>
-                      <Send size={18} /> Apply Now
-                    </>
-                  )}
-                </button>}
-              </div>
             </div>
 
             {/* Quick Meta Stats */}
-            <div className="mt-8 grid grid-cols-2 gap-4 border-t border-slate-100 pt-6 text-sm md:grid-cols-4">
+            <div className="mt-8 flex flex-wrap items-center justify-start gap-x-10 gap-y-4 border-t border-slate-100 pt-6 text-sm">
               <div className="flex items-center gap-2 text-slate-600">
                 <MapPin size={18} className="text-[#8FA5BA]" />
-                <span>{job.location || "N/A"}</span>
+                <span>{job.location}</span>
               </div>
               <div className="flex items-center gap-2 text-slate-600">
-                <Briefcase size={18} className="text-[#8FA5BA]" />
-                <span>{job.site || job.workplace || "On-site"}</span>
-              </div>
-              <div className="flex items-center gap-2 text-slate-600">
-                <DollarSign size={18} className="text-[#8FA5BA]" />
-                <span>{job.salary || "Negotiable"}</span>
-              </div>
-              <div className="flex items-center gap-2 text-slate-600">
-                <Calendar size={18} className="text-[#8FA5BA]" />
-                <span>{job.deadline ? `Deadline: ${job.deadline}` : "Open"}</span>
+                <span className="font-semibold text-[#8FA5BA]">Posted</span>
+                <span>{job.postedAt || "Recently"}</span>
               </div>
             </div>
 
             <div className="mt-6 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-5">
               <span className="mr-2 text-slate-500">Share:</span>
-              {[
-                ["WhatsApp", "bg-[#20C86B]"],
-                ["Telegram", "bg-[#24A9E0]"],
-                ["LinkedIn", "bg-[#0967B8]"],
-                ["Facebook", "bg-[#1877F2]"],
-                ["Copy Link", "bg-slate-100 text-slate-800 border border-slate-200"],
-              ].map(([label, color]) => (
+              {["Telegram"].map((label) => (
                 <button
                   key={label}
                   type="button"
                   onClick={() => handleShare(label)}
-                  className={`rounded-lg px-4 py-2 text-sm font-bold text-white transition hover:brightness-95 ${color}`}
+                  className="rounded-lg bg-[#24A9E0] px-4 py-2 text-sm font-bold text-white transition hover:brightness-95"
                 >
-                  {label === "Copy Link" && <Copy className="mr-1 inline h-4 w-4" />}
                   {label}
                 </button>
               ))}
             </div>
           </div>
 
-          <aside className="space-y-5">
-            <div className="relative z-10 rounded-2xl border-2 border-[#0871D1] bg-white p-6 shadow-sm">
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6 lg:col-span-3 lg:row-start-2">
+            <h2 className="text-sm font-bold uppercase tracking-wide text-slate-500">Job Overview</h2>
+            <div className="mt-4 grid grid-cols-2 gap-x-5 gap-y-4 text-sm sm:grid-cols-3 lg:grid-cols-5">
+              {[
+                ["Employment", job.type],
+                ["Experience", job.experienceLevel || job.experience],
+                ["Location", job.location],
+                ["Salary", job.salary],
+                ["Deadline", job.deadline],
+              ].filter(([, value]) => value).map(([label, value]) => (
+                <div key={label}>
+                  <p className="text-xs font-semibold text-slate-500">{label}</p>
+                  <p className="mt-1 font-bold text-slate-900">{value}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <aside className="order-2 flex flex-col gap-5 lg:order-none lg:col-start-3 lg:row-start-3">
+            <div className="order-2 relative z-10 rounded-2xl border-2 border-[#0871D1] bg-white p-6 shadow-sm">
               <h2 className="text-xl font-bold text-slate-900">{matchBreakdown?.overall != null ? 'Your AI Match' : 'How well do you match?'}</h2>
               {matchBreakdown?.overall != null && <>
-                <div className="mt-4 flex items-end justify-between gap-4"><div><p className="text-4xl font-black text-[#0871D1]">{matchBreakdown.overall}%</p><p className="text-xs font-bold text-slate-500">AI Match Score</p></div><div className="text-right text-sm"><p className="font-bold text-slate-700">Skills Match <span className="text-[#0871D1]">{matchBreakdown.skills}%</span></p><p className="mt-1 font-bold text-slate-700">Experience Match <span className="text-[#0871D1]">{matchBreakdown.experience}%</span></p></div></div>
+                <div className="mt-4 flex items-end justify-between gap-4"><div><p className="text-4xl font-black text-[#0871D1]">{matchBreakdown.overall}%</p><p className="text-xs font-bold text-slate-500">AI Match Score</p></div><div className="text-right text-sm">{matchBreakdown.skills != null && <p className="font-bold text-slate-700">Skills Match <span className="text-[#0871D1]">{matchBreakdown.skills}%</span></p>}{matchBreakdown.experience != null && <p className="mt-1 font-bold text-slate-700">Experience Match <span className="text-[#0871D1]">{matchBreakdown.experience}%</span></p>}</div></div>
                 <div className="mt-5 grid gap-4 border-t border-slate-100 pt-4 text-sm sm:grid-cols-2"><div><p className="font-bold text-slate-700">Matching Skills</p><div className="mt-2 flex flex-wrap gap-1.5">{matchBreakdown.matchingSkills.map((skill) => <span key={skill} className="rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">{skill}</span>)}</div></div><div><p className="font-bold text-slate-700">Skills to Improve</p><div className="mt-2 flex flex-wrap gap-1.5">{matchBreakdown.skillsToImprove.map((skill) => <span key={skill} className="rounded-md bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">{skill}</span>)}</div></div></div>
               </>}
               <p className="mt-3 leading-7 text-slate-600">
@@ -244,63 +238,98 @@ const JobDetails = () => {
               {matchScore !== null && <p className="mt-4 rounded-xl bg-[#EAF3FF] px-4 py-3 text-center font-bold text-[#0871D1]">{matchScore}% AI match score</p>}
               <p className="mt-4 text-center text-sm text-slate-500">Free · Powered by AI · Results shown instantly</p>
             </div>
-            <button type="button" onClick={handleApplyAction} className="w-full rounded-full border-2 border-[#0871D1] bg-white px-6 py-3.5 text-lg font-bold text-[#0871D1] transition hover:bg-[#EAF3FF]">
-              {isAuthenticated ? "Apply Now ↗" : "Login to Apply ↗"}
-            </button>
+            <div className="order-1 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <h2 className="text-xl font-bold text-slate-900">Apply for this Job</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                Review the requirements and submit your application when you are ready.
+              </p>
+              {isExpired ? (
+                <p className="mt-5 rounded-lg bg-red-50 px-4 py-3 text-center text-sm font-bold text-red-700">
+                  Applications are closed.
+                </p>
+              ) : existingApplication ? (
+                <button type="button" onClick={() => navigate(`/applications/${existingApplication.id}`, { state: { application: existingApplication } })} className="mt-5 w-full rounded-xl border border-emerald-600 px-5 py-3.5 font-bold text-emerald-700 transition hover:bg-emerald-50">
+                  View Application
+                </button>
+              ) : (
+                <button type="button" onClick={handleApplyAction} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-[#0871D1] px-5 py-3.5 font-bold text-white shadow-sm transition hover:bg-[#075EAE]">
+                  {applyButtonState.key === "login" ? <LogIn size={18} /> : <Send size={18} />}
+                  {applyButtonState.label}
+                </button>
+              )}
+              {!isExpired && !existingApplication && (
+                <button type="button" onClick={handleToggleSave} className={`mt-3 flex w-full items-center justify-center gap-2 rounded-xl border px-5 py-3 text-sm font-bold transition ${isSaved ? "border-[#0871D1] bg-[#EAF3FF] text-[#075EAE]" : "border-slate-300 bg-white text-slate-700 hover:border-[#0871D1] hover:text-[#075EAE]"}`}>
+                  <Bookmark className={`h-4 w-4 ${isSaved ? "fill-current" : ""}`} />
+                  {isSaved ? "Saved" : "Save this job"}
+                </button>
+              )}
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+              <h3 className="mb-5 text-lg font-bold text-slate-900">Job Summary</h3>
+              <div className="space-y-0 text-sm text-slate-600">
+                {[
+                  ["Sector", job.sector],
+                  ["Experience", job.experienceLevel || job.experience],
+                  ["Location", job.location],
+                  ["Employment", job.type],
+                  ["Deadline", job.deadline],
+                  ["Education", job.educationLevel || job.education],
+                ].filter(([, value]) => value).map(([label, value], index, items) => (
+                  <div key={label} className={`grid grid-cols-[minmax(5rem,0.7fr)_minmax(0,1.3fr)] items-start gap-4 py-3 ${index < items.length - 1 ? "border-b border-slate-200" : ""}`}>
+                    <span className="font-medium text-slate-500">{label}</span>
+                    <span className="min-w-0 break-words text-right font-semibold text-slate-900">{value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </aside>
 
           {/* Main Content & Requirements (በግራ በኩል የሚታይ) */}
-          <div className="space-y-6 lg:col-span-2">
+          <div className="order-4 space-y-6 lg:order-none lg:col-span-2 lg:row-start-3">
             <div className="relative z-10 bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-              <h2 className="text-lg font-semibold text-slate-900 mb-4">Job Overview</h2>
+              <h2 className="mb-4 text-xl font-bold text-slate-900">About the Job</h2>
               <p className="text-slate-600 leading-relaxed whitespace-pre-line">
                 {getReadableDescription(job.description || job.fullDescription || job.shortDescription)}
               </p>
             </div>
 
-            {job.requirements && (
+            {responsibilities.length > 0 && (
+              <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                <h2 className="mb-4 text-xl font-bold text-slate-900">Responsibilities</h2>
+                <ul className="list-disc space-y-3 pl-5 leading-7 text-slate-600 marker:text-[#0871D1]">
+                  {responsibilities.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}
+                </ul>
+              </div>
+            )}
+
+            {requirements.length > 0 && (
               <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
                 <h2 className="text-lg font-semibold text-slate-900 mb-4">Requirements</h2>
-                <ul className="space-y-2 text-slate-600">
-                  {Array.isArray(job.requirements) ? (
-                    job.requirements.map((req, index) => (
-                      <li key={index} className="flex items-start gap-2">
-                        <CheckCircle size={16} className="mt-1 shrink-0 text-[#0871D1]" />
-                        <span>{req}</span>
-                      </li>
-                    ))
-                  ) : (
-                    <p className="whitespace-pre-line">{job.requirements}</p>
-                  )}
+                <ul className="list-disc space-y-3 pl-5 leading-7 text-slate-600 marker:text-[#0871D1]">
+                  {requirements.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}
+                </ul>
+              </div>
+            )}
+
+            {skills.length > 0 && (
+              <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                <h2 className="mb-4 text-xl font-bold text-slate-900">Required Skills</h2>
+                <div className="flex flex-wrap gap-2">
+                  {skills.map((skill, index) => <span key={`${skill}-${index}`} className="rounded-full bg-[#EAF3FF] px-3 py-1.5 text-sm font-semibold text-[#075EAE]">{skill}</span>)}
+                </div>
+              </div>
+            )}
+
+            {benefits.length > 0 && (
+              <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                <h2 className="mb-4 text-xl font-bold text-slate-900">Benefits & Additional Information</h2>
+                <ul className="list-disc space-y-3 pl-5 leading-7 text-slate-600 marker:text-[#0871D1]">
+                  {benefits.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}
                 </ul>
               </div>
             )}
           </div>
 
-          {/* Summary Side Panel (በቀኝ በኩል የሚታይ) */}
-          <div className="space-y-6">
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-              <h3 className="text-base font-semibold text-slate-900 mb-4">Job Summary</h3>
-              <div className="space-y-3 text-sm text-slate-600">
-                <div className="flex justify-between border-b pb-2">
-                  <span>Sector</span>
-                  <span className="font-medium text-slate-900">{job.sector || "Tech"}</span>
-                </div>
-                <div className="flex justify-between border-b pb-2">
-                  <span>Experience</span>
-                  <span className="font-medium text-slate-900">{job.experienceLevel || "Mid Level"}</span>
-                </div>
-                <div className="flex justify-between pb-2">
-                  <span>Education</span>
-                  <span className="font-medium text-slate-900">{job.educationLevel || job.education || "Bachelor's"}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className="fixed bottom-5 right-5 z-40 flex items-center gap-3 lg:right-[390px]">
-          <a href="https://wa.me/251900000000" target="_blank" rel="noreferrer" aria-label="Contact on WhatsApp" className="flex h-14 w-14 items-center justify-center rounded-full bg-[#20C86B] text-white shadow-lg shadow-emerald-500/30"><MessageCircle className="h-7 w-7" /></a>
-          <a href="/communication" aria-label="Open communication" className="flex h-14 w-14 items-center justify-center rounded-full bg-[#0871D1] text-white shadow-lg shadow-blue-500/30"><MessageCircle className="h-7 w-7" /></a>
         </div>
       </div>
     </div>

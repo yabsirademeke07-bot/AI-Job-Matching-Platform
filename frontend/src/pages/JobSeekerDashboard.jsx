@@ -68,11 +68,14 @@ export default function JobSeekerDashboard() {
   const [savedJobs, setSavedJobs] = useState(() =>
     JSON.parse(localStorage.getItem("savedJobs") || "[]"),
   );
+  const [logoutOpen, setLogoutOpen] = useState(false);
   const profile = summary.data?.profile || {
     name: user?.name || user?.full_name || "User",
     profileCompletion: 0,
     cvReviewScore: 0,
   };
+  const displayName = user?.name || user?.full_name || user?.email || profile.name || "User";
+  const avatarUrl = user?.avatarUrl || user?.avatar_url || profile.avatarUrl;
   const toggleSave = (id) =>
     setSavedJobs((current) => {
       const next = current.includes(id)
@@ -142,6 +145,9 @@ export default function JobSeekerDashboard() {
     ["Notifications", "/notifications", Bell],
   ];
   const handleLogout = () => {
+    setLogoutOpen(true);
+  };
+  const confirmLogout = () => {
     logout();
     navigate("/login");
   };
@@ -149,7 +155,7 @@ export default function JobSeekerDashboard() {
     <div className="information-page min-h-screen bg-slate-50 lg:flex">
       <aside className="hidden w-64 shrink-0 border-r border-slate-200 bg-white lg:block">
         <div className="sticky top-0 flex h-screen flex-col p-5">
-          <div className="mb-8 border-b border-slate-100 pb-5">
+          <div className="mb-8 shrink-0 border-b border-slate-100 pb-5">
             <p className="text-lg font-black lowercase text-slate-900">
               job <span className="text-[var(--brand-deep)]">matching</span>
             </p>
@@ -158,7 +164,7 @@ export default function JobSeekerDashboard() {
             </p>
           </div>
           <nav
-            className="flex-1 space-y-1"
+            className="seeker-sidebar-scroll min-h-0 flex-1 space-y-1 overflow-y-auto"
             aria-label="Seeker dashboard navigation"
           >
             {navItems.map(([label, path, Icon]) => (
@@ -171,23 +177,31 @@ export default function JobSeekerDashboard() {
                 <Icon className="h-4 w-4" /> {label}
               </button>
             ))}
-          </nav>
-          <div className="border-t border-slate-100 pt-4">
             <button
               type="button"
               onClick={() => navigate("/settings")}
-              className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold text-slate-600 hover:bg-[var(--brand-soft)]"
+              className="mt-2 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-[var(--brand-soft)] hover:text-[var(--brand-deep)]"
             >
-              <Settings className="h-4 w-4" /> Settings
+              <Settings className="h-3.5 w-3.5" /> Settings
             </button>
             <button
               type="button"
               onClick={handleLogout}
-              className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold text-red-500 hover:bg-red-50"
+              className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-xs font-semibold text-red-500 hover:bg-red-50"
             >
-              <LogOut className="h-4 w-4" /> Logout
+              <LogOut className="h-3.5 w-3.5" /> Logout
             </button>
-          </div>
+            <div className="mt-2 flex items-center justify-between gap-2 border-t border-slate-100 px-3 pt-3">
+              {avatarUrl ? (
+                <img src={avatarUrl} alt={displayName} className="h-7 w-7 rounded-full object-cover" />
+              ) : (
+                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-700">
+                  {displayName.charAt(0).toUpperCase()}
+                </div>
+              )}
+              <span className="min-w-0 flex-1 truncate text-xs font-semibold text-slate-600">{displayName}</span>
+            </div>
+          </nav>
         </div>
       </aside>
       <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">
@@ -331,6 +345,57 @@ export default function JobSeekerDashboard() {
           />
         </div>
       </main>
+      {logoutOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/50 p-4"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setLogoutOpen(false);
+          }}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="logout-title"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 id="logout-title" className="text-2xl font-black text-slate-900">
+                  Log out?
+                </h2>
+                <p className="mt-3 text-base leading-7 text-slate-600">
+                  Are you sure you want to log out of your account?
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLogoutOpen(false)}
+                className="text-2xl leading-none text-slate-400 hover:text-slate-700"
+                aria-label="Close logout confirmation"
+              >
+                ×
+              </button>
+            </div>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setLogoutOpen(false)}
+                className="rounded-xl border border-slate-200 px-5 py-3 font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmLogout}
+                className="rounded-xl bg-red-600 px-5 py-3 font-bold text-white hover:bg-red-700"
+              >
+                Log out
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

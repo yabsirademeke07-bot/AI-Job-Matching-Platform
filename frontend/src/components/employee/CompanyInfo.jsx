@@ -16,6 +16,8 @@ const CompanyInfo = ({
 }) => {
   const navigate = useNavigate();
   const currentUser = user || JSON.parse(localStorage.getItem('user') || '{}');
+  const [fullName, setFullName] = useState(currentUser.full_name || currentUser.name || '');
+  const [position, setPosition] = useState(currentUser.position || currentUser.job_title || '');
   const [companyName, setCompanyName] = useState('');
   const [industry, setIndustry] = useState('');
   const [companyEmail, setCompanyEmail] = useState(currentUser.email || '');
@@ -34,6 +36,8 @@ const CompanyInfo = ({
       try {
         const company = JSON.parse(localStorage.getItem('user') || '{}').companyInfo;
         if (!company) return;
+        setFullName(company.full_name || currentUser.full_name || currentUser.name || '');
+        setPosition(company.position || currentUser.position || currentUser.job_title || '');
         setCompanyName(company.company_name || '');
         setIndustry(company.industry || '');
         setCompanyEmail(company.company_email || currentUser.email || '');
@@ -57,7 +61,10 @@ const CompanyInfo = ({
     setIsSaving(true);
 
     const profile = {
+      full_name: fullName,
+      position,
       company_name: companyName,
+      company_email: companyEmail,
       phone_number: phoneNumber,
       industry,
       company_type: companyType,
@@ -113,7 +120,23 @@ const CompanyInfo = ({
         </div>
       </div>
 
-      <form onSubmit={handleSave} className="bg-white rounded-3xl p-6 sm:p-8 border-2 border-slate-200 shadow-sm space-y-6">
+      <form onSubmit={handleSave} className="bg-white rounded-3xl p-6 sm:p-8 border-2 border-slate-200 shadow-sm space-y-8">
+        <section>
+          <h3 className="mb-4 text-lg font-black text-slate-900">Employer / Contact Information</h3>
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <div>
+              <label className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1.5">Full Name *</label>
+              <input type="text" required value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="e.g. Hana Bekele" className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-sm outline-none focus:border-indigo-600 focus:bg-white transition-all" />
+            </div>
+            <div>
+              <label className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1.5">Position / Job Title *</label>
+              <input type="text" required value={position} onChange={(e) => setPosition(e.target.value)} placeholder="e.g. Human Resources Manager" className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-sm outline-none focus:border-indigo-600 focus:bg-white transition-all" />
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <h3 className="mb-4 text-lg font-black text-slate-900">Company Information</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           
           <div className="md:col-span-2">
@@ -134,7 +157,7 @@ const CompanyInfo = ({
           </div>
 
           <div>
-            <label className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1.5">Company Email *</label>
+            <label className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1.5">Work Email *</label>
             <input type="email" required readOnly value={companyEmail} className="w-full px-4 py-3 bg-slate-100 border border-slate-300 rounded-xl text-sm sm:text-base text-slate-500" />
           </div>
 
@@ -217,6 +240,7 @@ const CompanyInfo = ({
           </div>
 
         </div>
+  </section>
 
         <button
           id="employer-complete-profile-btn"

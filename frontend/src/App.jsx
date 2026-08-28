@@ -1,9 +1,10 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 
 // Layout Components
 import Navbar from './components/navbar';
 import Footer from './components/Footer';
+import BackToDashboard from './components/BackToDashboard';
 
 // Auth Components & Pages
 import Login from './pages/login';
@@ -26,6 +27,7 @@ import ExploreJobs from './pages/ExploreJobs';
 import JobDetailsPage from './pages/JobDetails';
 import ApplyJob from './pages/ApplyJob';
 import Companies from './pages/Companies';
+import CompanyCommunity from './pages/CompanyCommunity';
 import HowItWorks from './pages/HowItWorks';
 
 // Seeker Components & Pages
@@ -44,7 +46,8 @@ import SeekerModulePage from './pages/SeekerModulePage';
 import SeekerDocumentation from './pages/Seekerdocumentation';
 
 // Employer Pages
-import EmployerDashboard from './pages/EmployerDashboard';
+import EmployerWorkspace from './pages/EmployerWorkspace';
+import DashboardOverview from './pages/DashboardOverview';
 import CvCheck from './pages/Cvcheck';
 
 // Admin Pages
@@ -58,10 +61,23 @@ import SeekerPageLayout from './components/SeekerPageLayout';
 const withSeekerSidebar = (page) => <SeekerPageLayout>{page}</SeekerPageLayout>;
 
 function AppLayout() {
+  const location = useLocation();
+  const dashboardRoutes = [
+    '/dashboard',
+    '/seeker-dashboard',
+    '/seekerDashboard',
+    '/employer-dashboard',
+    '/employer/dashboard',
+    '/employer/candidates',
+    '/employer/post-job'
+  ];
+  const isDashboardRoute = dashboardRoutes.includes(location.pathname);
+
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans">
       <Navbar />
       <main className="flex-grow">
+        {!isDashboardRoute && !location.pathname.startsWith('/job-details/') && <BackToDashboard />}
         <Routes>
           {/* ========================================== */}
           {/* 1. PUBLIC ROUTES                           */}
@@ -79,6 +95,7 @@ function AppLayout() {
           <Route path="/services" element={<About initialSection="services" />} />
           <Route path="/contact" element={<Contact />} />
           <Route path="/companies" element={<Companies />} />
+          <Route path="/companies/:companyId" element={<CompanyCommunity />} />
           <Route path="/find-jobs" element={<ExploreJobs />} />
           <Route path="/company" element={<Companies />} />
 
@@ -214,10 +231,18 @@ function AppLayout() {
           {/* 4. EMPLOYER PROTECTED ROUTES               */}
           {/* ========================================== */}
           <Route
+            path="/employer/dashboard/overview"
+            element={
+              <ProtectedRoute allowedRoles={["employer", "company", "recruiter"]}>
+                <DashboardOverview />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/employer-dashboard"
             element={
               <ProtectedRoute allowedRoles={["employer", "company", "recruiter"]}>
-                <EmployerDashboard />
+                <EmployerWorkspace />
               </ProtectedRoute>
             }
           />
@@ -225,7 +250,7 @@ function AppLayout() {
             path="/employer/dashboard"
             element={
               <ProtectedRoute allowedRoles={["employer", "company", "recruiter"]}>
-                <EmployerDashboard />
+                <EmployerWorkspace />
               </ProtectedRoute>
             }
           />
@@ -233,7 +258,7 @@ function AppLayout() {
             path="/employer/candidates"
             element={
               <ProtectedRoute allowedRoles={["employer", "company", "recruiter"]}>
-                <EmployerDashboard />
+                <EmployerWorkspace />
               </ProtectedRoute>
             }
           />
@@ -241,7 +266,7 @@ function AppLayout() {
             path="/employer/post-job"
             element={
               <ProtectedRoute allowedRoles={["employer", "company", "recruiter"]}>
-                <EmployerDashboard />
+                <EmployerWorkspace />
               </ProtectedRoute>
             }
           />

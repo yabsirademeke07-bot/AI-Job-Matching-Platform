@@ -18,7 +18,20 @@ export function getPendingApplication() {
 }
 
 export function setPendingApplication(jobId, job = null, details = {}) {
-  const pending = { jobId: String(jobId), jobTitle: job?.title || '', companyName: job?.companyName || job?.company || '', action: 'apply', sourcePage: details.sourcePage || `/job-details/${jobId}`, returnPath: 'apply-job', currentStep: details.currentStep || 'START', createdAt: new Date().toISOString() };
+  const sourcePage = details.sourcePage || `/job-details/${jobId}`;
+  const pending = {
+    jobId: String(jobId),
+    selectedJobId: String(jobId),
+    selectedJob: job || null,
+    jobTitle: job?.title || '',
+    companyName: job?.companyName || job?.company || '',
+    action: 'apply',
+    intendedAction: 'apply',
+    sourcePage,
+    returnPath: details.returnPath || sourcePage,
+    currentStep: details.currentStep || 'START',
+    createdAt: new Date().toISOString(),
+  };
   localStorage.setItem(PENDING_KEY, JSON.stringify(pending));
   if (job) localStorage.setItem('pendingApplicationJob', JSON.stringify(job));
   return pending;
@@ -70,6 +83,22 @@ export function getApplicationRequirements() {
     hasResume: hasCompletedCv(),
     profileCompleted: hasCompletedProfile(),
   };
+}
+
+export function getApplyButtonState() {
+  const requirements = getApplicationRequirements();
+  const seekerRoles = ['job_seeker', 'seeker', 'jobseeker', 'user', 'employee'];
+  const employerRoles = ['employer', 'company', 'recruiter'];
+
+  if (!requirements.isAuthenticated) return { key: 'login', label: 'Login to Apply' };
+  if (!requirements.otpVerified) return { key: 'otp', label: 'Verify OTP to Apply' };
+  if (!requirements.role) return { key: 'role', label: 'Select Role to Apply' };
+  if (employerRoles.includes(requirements.role) || !seekerRoles.includes(requirements.role)) {
+    return { key: 'role-blocked', label: 'Job Seeker Account Required' };
+  }
+  if (!requirements.hasResume) return { key: 'cv', label: 'Upload CV to Apply' };
+  if (!requirements.profileCompleted) return { key: 'profile', label: 'Complete Profile to Apply' };
+  return { key: 'apply', label: 'Apply Now' };
 }
 
 export function getApplicationState() {
