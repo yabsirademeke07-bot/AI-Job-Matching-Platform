@@ -240,7 +240,9 @@ app.post('/api/verify-otp', async (req, res) => {
 
     if (record.otp === otp) {
       otpStore.delete(email);
-      return res.status(200).json({ success: true, message: 'Email verified successfully / ኢሜይልዎ በስኬት ተረጋገጠ!' });
+      await db.query('UPDATE users SET is_verified = TRUE WHERE email = ?', [email]);
+      const [users] = await db.query('SELECT id, full_name, email, role, is_verified FROM users WHERE email = ?', [email]);
+      return res.status(200).json({ success: true, message: 'Email verified successfully / ኢሜይልዎ በስኬት ተረጋገጠ!', user: users[0] });
     }
   }
 
@@ -252,7 +254,9 @@ app.post('/api/verify-otp', async (req, res) => {
 
     if (rows.length > 0) {
       await db.query('DELETE FROM otps WHERE email = ?', [email]);
-      return res.status(200).json({ success: true, message: 'Email verified successfully / ኢሜይልዎ በስኬት ተረጋገጠ!' });
+      await db.query('UPDATE users SET is_verified = TRUE WHERE email = ?', [email]);
+      const [users] = await db.query('SELECT id, full_name, email, role, is_verified FROM users WHERE email = ?', [email]);
+      return res.status(200).json({ success: true, message: 'Email verified successfully / ኢሜይልዎ በስኬት ተረጋገጠ!', user: users[0] });
     }
   } catch (dbErr) {
     console.error('DB Verification Error:', dbErr);
@@ -312,6 +316,30 @@ app.post('/api/register', async (req, res) => {
   }
 });
 
+app.post('/api/complete-registration', async (req, res) => {
+  const { email, role } = req.body;
+  const normalizedRole = role === 'seeker' ? 'job_seeker' : role;
+
+  if (!email || !['job_seeker', 'employer'].includes(normalizedRole)) {
+    return res.status(400).json({ success: false, message: 'Email and a valid role are required' });
+  }
+
+  try {
+    const [result] = await db.query('UPDATE users SET role = ? WHERE email = ?', [normalizedRole, email]);
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const [users] = await db.query('SELECT id, full_name, email, role, is_verified FROM users WHERE email = ?', [email]);
+    const user = users[0];
+    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '24h' });
+    res.status(200).json({ success: true, user, token });
+  } catch (error) {
+    console.error('Complete Registration Error:', error);
+    res.status(500).json({ success: false, message: 'Unable to save registration details' });
+  }
+});
+
 // ==========================================
 // 4. USER LOGIN API
 // ==========================================
@@ -336,6 +364,12 @@ app.post('/api/login', async (req, res) => {
       return res.status(400).json({ message: 'Invalid email or password / የተሳሳተ ኢሜይል ወይም ፓስወርድ' });
     }
 
+    const [[profileRows], [cvRows]] = await Promise.all([
+      db.query('SELECT profile_completion_percentage FROM job_seeker_profiles WHERE user_id = ?', [user.id]),
+      db.query('SELECT COUNT(*) AS count FROM cvs WHERE user_id = ? AND is_active = TRUE', [user.id]),
+    ]);
+    const onboardingComplete = Boolean(profileRows[0]?.profile_completion_percentage >= 80 && cvRows[0]?.count > 0);
+
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role }, 
       JWT_SECRET, 
@@ -354,6 +388,7 @@ app.post('/api/login', async (req, res) => {
         role: user.role,
         skills: user.skills,
         is_verified: Boolean(user.is_verified),
+        onboardingComplete,
       },
     });
 
@@ -361,6 +396,45 @@ app.post('/api/login', async (req, res) => {
   } catch (error) {
     console.error('Login Error:', error);
     res.status(500).json({ message: 'Server error / የሰርቨር ስህተት አጋጥሟል' });
+  }
+});
+
+app.post('/api/cvs', authenticateUser, upload.single('cv'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ message: 'CV file is required' });
+
+  try {
+    await db.query('UPDATE cvs SET is_primary = FALSE WHERE user_id = ?', [req.user.id]);
+    const [result] = await db.query(
+      'INSERT INTO cvs (user_id, file_name, file_url, file_size, mime_type, is_primary) VALUES (?, ?, ?, ?, ?, TRUE)',
+      [req.user.id, req.file.originalname, `/uploads/cvs/${req.file.filename}`, req.file.size, req.file.mimetype]
+    );
+    res.status(201).json({ id: result.insertId, fileName: req.file.originalname, fileUrl: `/uploads/cvs/${req.file.filename}` });
+  } catch (error) {
+    console.error('CV Upload Error:', error);
+    res.status(500).json({ message: 'Unable to save CV' });
+  }
+});
+
+app.put('/api/seeker/profile', authenticateUser, async (req, res) => {
+  const { firstName, lastName, email, phone, country, city, preferredJob, employmentType, salaryExpectation, skills = [] } = req.body;
+  try {
+    await db.query('UPDATE users SET full_name = ?, email = ?, phone = ? WHERE id = ?', [
+      `${firstName || ''} ${lastName || ''}`.trim(), email, phone || '', req.user.id
+    ]);
+    await db.query(
+      `INSERT INTO job_seeker_profiles (user_id, country, city, headline, preferred_job_type, salary_expectation_min, profile_completion_percentage)
+       VALUES (?, ?, ?, ?, ?, ?, 100)
+       ON DUPLICATE KEY UPDATE country = VALUES(country), city = VALUES(city), headline = VALUES(headline), preferred_job_type = VALUES(preferred_job_type), salary_expectation_min = VALUES(salary_expectation_min), profile_completion_percentage = 100`,
+      [req.user.id, country || '', city || '', preferredJob || '', (employmentType || 'full-time').toLowerCase().replace('full-time', 'full-time'), parseInt(String(salaryExpectation || '').replace(/[^0-9]/g, ''), 10) || null]
+    );
+    if (Array.isArray(skills)) {
+      await db.query('DELETE FROM seeker_skills WHERE user_id = ?', [req.user.id]);
+      if (skills.length) await db.query('INSERT INTO seeker_skills (user_id, skill_name) VALUES ?', [skills.map((skill) => [req.user.id, String(skill)])]);
+    }
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Profile Save Error:', error);
+    res.status(500).json({ message: 'Unable to save profile' });
   }
 });
 
