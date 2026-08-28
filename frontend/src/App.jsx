@@ -4,7 +4,6 @@ import { AuthProvider } from './context/AuthContext';
 // Layout Components
 import Navbar from './components/navbar';
 import Footer from './components/Footer';
-import BackToDashboard from './components/BackToDashboard';
 
 // Auth Components & Pages
 import Login from './pages/login';
@@ -72,12 +71,18 @@ function AppLayout() {
     '/employer/post-job'
   ];
   const isDashboardRoute = dashboardRoutes.includes(location.pathname);
+  const publicRoutes = [
+    '/', '/jobs', '/explore-jobs', '/about', '/how-it-works', '/services',
+    '/contact', '/companies', '/find-jobs', '/company', '/login', '/register',
+    '/signup', '/sign-up', '/verify-otp', '/role-selection', '/select-role',
+  ];
+  const isPublicRoute = publicRoutes.includes(location.pathname) ||
+    ['/job-details/', '/jobs/', '/apply/', '/companies/'].some((prefix) => location.pathname.startsWith(prefix));
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans">
       <Navbar />
       <main className="flex-grow">
-        {!isDashboardRoute && !location.pathname.startsWith('/job-details/') && <BackToDashboard />}
         <Routes>
           {/* ========================================== */}
           {/* 1. PUBLIC ROUTES                           */}
@@ -330,7 +335,7 @@ function AppLayout() {
             path="/chat/:conversationId"
             element={
               <ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "employer", "admin", "user", "employee"]}>
-                <Communication />
+                {withSeekerSidebar(<Communication />)}
               </ProtectedRoute>
             }
           />
@@ -338,7 +343,7 @@ function AppLayout() {
             path="/chat"
             element={
               <ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "employer", "admin", "user", "employee"]}>
-                <Communication />
+                {withSeekerSidebar(<Communication />)}
               </ProtectedRoute>
             }
           />

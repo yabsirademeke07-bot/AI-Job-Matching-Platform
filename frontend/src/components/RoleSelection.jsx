@@ -42,7 +42,7 @@ const RoleSelection = () => {
 
       // 2. Background Backend Sync (Navigationን ሳያስተጓጉል)
       if (userId) {
-        fetch(`${API_URL.replace(/\/$/, "")}/set-role`, {
+        fetch(`${API_URL.replace(/\/$/, "")}/auth/set-role`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

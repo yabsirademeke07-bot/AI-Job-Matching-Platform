@@ -9,6 +9,7 @@ import {
 
 const Profile = ({ userData = {}, cvFile = null }) => {
   const navigate = useNavigate();
+  const API_URL = import.meta.env.VITE_BACKEND_URL || '/api';
 
   // Safe fallback to load stored user from localStorage
   const getInitialUser = () => {
@@ -112,7 +113,7 @@ const Profile = ({ userData = {}, cvFile = null }) => {
   };
 
   // 1. መረጃውን ለማስቀመጥ እና ወደ Dashboard ለመመለስ የተስተካከለ Handler
-  const handleSaveProfile = () => {
+  const handleSaveProfile = async () => {
     const fullProfile = {
       ...profileData,
       education: educationList,
@@ -136,6 +137,18 @@ const Profile = ({ userData = {}, cvFile = null }) => {
     };
 
     localStorage.setItem('user', JSON.stringify(updatedUser));
+
+    if (localStorage.getItem('token')) {
+      const response = await fetch(`${API_URL.replace(/\/$/, '')}/seeker/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+        },
+        body: JSON.stringify({ ...profileData, skills }),
+      });
+      if (!response.ok) return;
+    }
 
     // 3. በቀጥታ ወደ Seeker Dashboard መራት
     const pending = getPendingApplication();
