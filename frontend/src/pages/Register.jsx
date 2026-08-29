@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useGoogleLogin } from '@react-oauth/google';
+import { useAuth } from '../context/AuthContext';
 import {
   Sparkles, ShieldCheck, Cpu, Mail, Lock,
-  ArrowRight, Eye, EyeOff, Target, User, CheckCircle2, Briefcase, RefreshCw, ArrowLeft
+  ArrowRight, Eye, EyeOff, Target, User, Briefcase, RefreshCw, ArrowLeft
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -26,7 +27,7 @@ const Register = () => {
   // OTP State
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [otpTimer, setOtpTimer] = useState(60);
-  const [canResendOtp, setCanResendOtp] = useState(false);
+  const canResendOtp = otpTimer === 0;
 
   // UI States
   const [showPassword, setShowPassword] = useState(false);
@@ -45,7 +46,6 @@ const Register = () => {
     }));
     setStep(2);
     setOtpTimer(60);
-    setCanResendOtp(false);
     setApiSuccess('Backend unavailable. Demo OTP: 123456');
   };
 
@@ -56,8 +56,6 @@ const Register = () => {
       timer = setInterval(() => {
         setOtpTimer((prev) => prev - 1);
       }, 1000);
-    } else if (otpTimer === 0) {
-      setCanResendOtp(true);
     }
     return () => clearInterval(timer);
   }, [step, otpTimer]);
@@ -145,7 +143,6 @@ const Register = () => {
         await sendOtpRequest(formData.email.trim());
         setStep(2);
         setOtpTimer(60);
-        setCanResendOtp(false);
       } else {
         setApiError(data.message || `Server Error (${response.status}). Please check backend.`);
       }
@@ -230,7 +227,6 @@ const Register = () => {
     setApiSuccess('');
     await sendOtpRequest(formData.email.trim());
     setOtpTimer(60);
-    setCanResendOtp(false);
     setIsLoading(false);
   };
 
@@ -241,7 +237,7 @@ const Register = () => {
     setApiError('');
 
     try {
-      const response = await fetch(`${API_URL.replace(/\/$/, '')}/complete-registration`, {
+      const roleResponse = await fetch(`${API_URL.replace(/\/$/, '')}/complete-registration`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -249,21 +245,26 @@ const Register = () => {
           role: selectedRole,
         }),
       });
+      const roleData = await roleResponse.json().catch(() => ({}));
+      if (!roleResponse.ok) throw new Error(roleData.message || 'Unable to save role');
 
-      if (response.ok) {
-        const data = await response.json().catch(() => ({}));
-        if (data.token) localStorage.setItem('token', data.token);
-        if (data.user) {
-          localStorage.setItem('user', JSON.stringify(data.user));
-          localStorage.setItem('currentUser', JSON.stringify(data.user));
-        }
-        setSession({ token: data.token, user: data.user });
-        localStorage.removeItem('pendingRegistration');
-        navigate(selectedRole === 'employer' ? '/employee-info' : '/upload-cv');
-      } else {
-        const data = await response.json().catch(() => ({}));
-        setApiError(data.message || 'Unable to complete registration. Please try again.');
-      }
+      const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+      const user = {
+        ...currentUser,
+        ...(roleData.user || {}),
+        id: currentUser.id || roleData.user?.id || `demo-${Date.now()}`,
+        full_name: formData.fullName,
+        email: formData.email,
+        role: selectedRole === 'seeker' ? 'job_seeker' : selectedRole,
+        is_verified: true,
+      };
+      const token = roleData.token || localStorage.getItem('token') || 'frontend-demo-token';
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(user));
+      localStorage.setItem('currentUser', JSON.stringify(user));
+      localStorage.removeItem('pendingRegistration');
+      setSession({ token, user });
+      navigate(user.role === 'employer' ? '/employee-info' : '/upload-cv');
     } catch (err) {
       console.warn('Role selection warning, navigating to login:', err);
       const pending = JSON.parse(localStorage.getItem('pendingRegistration') || '{}');

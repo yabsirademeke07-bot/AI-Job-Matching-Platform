@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   User, Mail, Phone, GraduationCap, 
   Briefcase, Plus, Trash2, Award, Languages, Link as LinkIcon, 
@@ -9,6 +9,7 @@ import { getApplicationJobId } from '../utils/applicationFlow';
 
 const Profile = ({ userData = {}, cvFile = null }) => {
   const navigate = useNavigate();
+  const location = useLocation(); 
   const [searchParams] = useSearchParams();
   const applicationJobId = searchParams.get('jobId') || getApplicationJobId();
 
@@ -156,9 +157,7 @@ const Profile = ({ userData = {}, cvFile = null }) => {
 
     setTimeout(() => {
       setIsSaved(false);
-      if (redirect) {
-        navigate(applicationJobId ? `/job-details/${applicationJobId}` : '/seeker-dashboard');
-      }
+      if (redirect) navigate(location.state?.onboarding ? '/dashboard' : applicationJobId ? `/job-details/${applicationJobId}` : '/seeker-dashboard');
     }, 600);
   };
 

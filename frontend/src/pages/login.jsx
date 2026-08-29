@@ -1,18 +1,20 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useGoogleLogin } from '@react-oauth/google';
 import './login.css';
-import { getNextApplicationStep, getPendingApplication, setPendingApplication } from '../utils/applicationFlow';
+import { continueApplicationFlow, getNextOnboardingStep, getPendingApplication } from '../utils/applicationFlow';
 import { useAuth } from '../context/AuthContext';
+import AccountSelectionModal from '../components/AccountSelectionModal';
+import { getStoredAccounts, getUserDestination } from '../utils/authSession';
 import {
   Sparkles, ShieldCheck, Cpu, Mail, Lock,
-  ArrowRight, Eye, EyeOff, Target, ArrowLeft, RefreshCw
+  ArrowRight, Eye, EyeOff, Target, ArrowLeft
 } from 'lucide-react';
 
 const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { setSession } = useAuth();
+  const { login, setSession } = useAuth();
 
   // Redirect or success message passed from Register step
   const successMessage = location.state?.message || '';
@@ -33,7 +35,8 @@ const Login = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState('');
   const [apiSuccess, setApiSuccess] = useState(successMessage);
-  const [otpTimer, setOtpTimer] = useState(0);
+  const [accountSelectionOpen, setAccountSelectionOpen] = useState(() => getStoredAccounts().length > 0);
+  const storedAccounts = getStoredAccounts();
 
   const API_URL = import.meta.env.VITE_BACKEND_URL || '/api';
 
@@ -47,25 +50,30 @@ const Login = () => {
 
   const navigateByRole = (role, sessionUser = {}) => {
     const normalizedRole = (role || '').toLowerCase().replace(/[\s-]+/g, '_');
+    const pending = getPendingApplication();
+    const pendingJobId = location.state?.jobId || pending?.jobId;
+    if (pendingJobId) {
+      continueApplicationFlow(navigate, { jobId: pendingJobId });
+      return;
+    }
+    if (!normalizedRole) {
+      if (!sessionUser.is_verified && !sessionUser.isVerified) {
+        navigate('/verify-otp', { state: { email: formData.emailOrPhone.trim() } });
+      } else {
+        navigate(getNextOnboardingStep());
+      }
+      return;
+    }
     if (['employer', 'company', 'recruiter'].includes(normalizedRole)) {
       navigate('/employer-dashboard');
     } else if (['job_seeker', 'seeker', 'jobseeker', 'user', 'employee'].includes(normalizedRole)) {
-      const pending = getPendingApplication();
-      const pendingJobId = location.state?.jobId || pending?.jobId;
-      if (!role && pendingJobId) {
-        navigate(`/select-role?jobId=${encodeURIComponent(pendingJobId)}`);
-        return;
+      if (sessionUser.onboardingComplete || sessionUser.profileComplete) {
+        navigate('/dashboard');
+      } else if (!sessionUser.is_verified && !sessionUser.isVerified) {
+        navigate('/verify-otp', { state: { email: formData.emailOrPhone.trim() } });
+      } else {
+        navigate(getUserDestination(sessionUser) || getNextOnboardingStep());
       }
-      if ((location.state?.intent === 'apply' || pendingJobId) && pendingJobId) {
-        if (sessionUser.is_verified || sessionUser.isVerified) {
-          navigate(getNextApplicationStep(pendingJobId));
-          return;
-        }
-        setPendingApplication(pendingJobId, null, { currentStep: 'OTP_REQUIRED' });
-        navigate(`/verify-otp?jobId=${encodeURIComponent(pendingJobId)}`, { state: { email: formData.emailOrPhone.trim(), intent: 'apply', jobId: pendingJobId } });
-        return;
-      }
-      navigate('/dashboard');
     } else {
       navigate('/');
     }
@@ -123,36 +131,8 @@ const Login = () => {
     setApiError('');
 
     try {
-      const response = await fetch(`${API_URL.replace(/\/$/, '')}/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: formData.emailOrPhone.trim(),
-          password: formData.password
-        }),
-      });
-
-      const data = await response.json().catch(() => ({}));
-
-      if (response.ok) {
-        // Save Token / Session Handling
-        if (data.token) {
-          localStorage.setItem('token', data.token);
-        }
-        if (data.user) {
-          localStorage.setItem('user', JSON.stringify(data.user));
-        }
-        setSession({ token: data.token, user: data.user });
-
- 
-        navigateByRole(data.user?.role || data.user?.userType);
-        navigateByRole(data.user?.role, data.user); 
-      } else {
-        setApiError(data.message || `Login failed (${response.status}). Please check credentials.`);
-      }
-    } catch (err) {
-      console.error('Login Error:', err);
-      createDemoSession(formData.emailOrPhone.trim());
+      const data = await login({ email: formData.emailOrPhone.trim(), password: formData.password });
+      navigateByRole(data.user?.role || data.user?.userType, data.user);
     } finally {
       setIsLoading(false);
     }
@@ -548,6 +528,17 @@ const Login = () => {
         </div>
 
       </div>
+      {accountSelectionOpen && storedAccounts.length > 0 && <AccountSelectionModal
+        accounts={storedAccounts}
+        onClose={() => setAccountSelectionOpen(false)}
+        onSelect={(account, destination) => {
+          setSession({ token: account.token || 'frontend-demo-token', user: account });
+          setAccountSelectionOpen(false);
+          navigate(destination);
+        }}
+        onAnotherAccount={() => setAccountSelectionOpen(false)}
+        onCreateAccount={() => { setAccountSelectionOpen(false); navigate('/register'); }}
+      />}
     </div>
   );
 };
