@@ -6,6 +6,7 @@ import {
   Sparkles, ShieldCheck, Cpu, Mail, Lock,
   ArrowRight, Eye, EyeOff, Target, User, Briefcase, RefreshCw, ArrowLeft
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 const Register = () => {
   const navigate = useNavigate();
