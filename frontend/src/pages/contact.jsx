@@ -2,13 +2,17 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowRight,
+  AtSign,
   BriefcaseBusiness,
   CheckCircle2,
   ChevronDown,
   Clock3,
+  Globe2,
   Mail,
   MapPin,
   MessageSquareText,
+  MessageCircle,
+  Music2,
   Phone,
   Send,
   ShieldCheck,
@@ -21,6 +25,25 @@ const contactCards = [
   { title: 'Call Us', value: '0952748973', description: 'Available during business hours.', icon: Phone },
   { title: 'Visit Us', value: 'Addis Ababa, Ethiopia', description: 'Serving job seekers and employers across Ethiopia.', icon: MapPin },
   { title: 'Business Hours', value: 'Monday - Friday', description: '8:30 AM - 5:30 PM', icon: Clock3 },
+];
+
+const supportCategories = [
+  { title: 'AI Matching Support', description: 'Questions about recommendations and match scores.', icon: Sparkles },
+  { title: 'CV / Resume Support', description: 'Help uploading or improving your profile and CV.', icon: BriefcaseBusiness },
+  { title: 'Job Application Support', description: 'Guidance with applications and their progress.', icon: Send },
+  { title: 'Employer Support', description: 'Support for companies, vacancies, and hiring.', icon: ShieldCheck },
+  { title: 'Technical Support', description: 'Report an issue or get help using the platform.', icon: MessageSquareText },
+];
+
+const socialLinks = [
+  { name: 'LinkedIn', url: 'https://linkedin.com/company/your-company', icon: Globe2 },
+  { name: 'Facebook', url: 'https://facebook.com/your-page', icon: Globe2 },
+  { name: 'Instagram', url: 'https://instagram.com/your-page', icon: Globe2 },
+  { name: 'Telegram', url: 'https://t.me/your-channel', icon: Send },
+  { name: 'TikTok', url: 'https://tiktok.com/@your-account', icon: Music2 },
+  { name: 'X', url: 'https://x.com/your-account', icon: AtSign },
+  { name: 'YouTube', url: 'https://youtube.com/@your-channel', icon: Globe2 },
+  { name: 'WhatsApp', url: 'https://wa.me/251xxxxxxxxx', icon: MessageCircle },
 ];
 
 const faqs = [
@@ -88,20 +111,40 @@ export default function Contact() {
       <section className="relative overflow-hidden border-b border-[var(--brand-border)] bg-gradient-to-br from-[#f0f7fc] via-white to-[#eaf4fb] px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
         <div className="pointer-events-none absolute -right-28 -top-32 h-80 w-80 rounded-full bg-[#56a2d8]/15 blur-3xl" />
         <div className="relative mx-auto grid max-w-7xl items-center gap-10 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="max-w-2xl">
-            <span className="inline-flex items-center gap-2 rounded-full border border-[var(--brand-border)] bg-white px-4 py-2 text-xs font-black uppercase tracking-[0.18em] brand-text shadow-sm"><MessageSquareText className="h-4 w-4" /> Get In Touch</span>
-            <h1 className="mt-6 text-4xl font-black tracking-tight text-slate-950 sm:text-5xl lg:text-6xl">Let&apos;s Build Better <span className="brand-text">Career Connections</span></h1>
+          <div className="relative max-w-2xl">
+            <div className="pointer-events-none absolute -left-20 top-1/2 h-64 w-64 -translate-y-1/2 rounded-full bg-blue-100/20 blur-3xl" />
+            <span className="inline-flex items-center gap-2 rounded-full border border-[var(--brand-border)] bg-white px-4 py-2 text-xs font-black uppercase tracking-[0.18em] brand-text shadow-sm"><MessageSquareText className="h-4 w-4" /> Contact Us</span>
+            <h1 className="mt-6 text-4xl font-black tracking-tight text-slate-950 sm:text-5xl lg:text-6xl">We&apos;re here to help you with your <span className="brand-text">job matching journey.</span></h1>
             <p className="mt-5 max-w-xl text-base leading-8 text-slate-600 sm:text-lg">Have a question, need help, or want to partner with us? Our team is here to help you connect with the right opportunities and talent.</p>
             <div className="mt-7 flex flex-wrap gap-3 text-sm font-bold brand-text"><span className="inline-flex items-center gap-2"><ShieldCheck className="h-5 w-5" /> Trusted support</span><span className="inline-flex items-center gap-2"><Sparkles className="h-5 w-5" /> AI-powered guidance</span></div>
           </div>
-          <div className="relative mx-auto w-full max-w-md"><div className="absolute -inset-4 rounded-[2rem] brand-gradient opacity-15 blur-2xl" /><div className="relative overflow-hidden rounded-[2rem] border border-white bg-white p-3 shadow-2xl shadow-[#2b73a4]/15"><img src={contactImg} alt="Support team member ready to help" className="h-64 w-full rounded-[1.5rem] object-cover sm:h-80" /><div className="absolute bottom-7 left-7 right-7 flex items-center gap-3 rounded-2xl border border-white/70 bg-white/90 p-3 shadow-lg backdrop-blur"><span className="flex h-10 w-10 items-center justify-center rounded-xl brand-bg text-white"><Sparkles className="h-5 w-5" /></span><span><strong className="block text-sm text-slate-900">Your questions, matched with answers</strong><small className="text-xs text-slate-500">Our support team is here for you</small></span></div></div></div>
+          <div className="relative mx-auto w-full max-w-md">
+            <div className="absolute -inset-4 rounded-[2rem] brand-gradient opacity-15 blur-2xl" />
+            <svg className="absolute -inset-2 pointer-events-none" width="100%" height="100%" viewBox="0 0 400 450" preserveAspectRatio="none">
+              <path d="M 20 40 Q 30 10 80 15 Q 150 8 200 10 Q 300 5 350 30 Q 380 50 385 100 L 385 350 Q 380 400 350 415 Q 250 430 200 420 Q 100 430 60 415 Q 25 405 20 360 L 20 60 Z" fill="none" stroke="#ef4444" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.7" />
+            </svg>
+            <div className="relative overflow-hidden rounded-[2rem] border border-white bg-white p-3 shadow-2xl shadow-[#2b73a4]/15">
+              <img src={contactImg} alt="Support team member ready to help" className="h-64 w-full rounded-[1.5rem] object-cover sm:h-80" />
+              <div className="absolute bottom-7 left-7 right-7 flex items-center gap-3 rounded-2xl border border-white/70 bg-white/90 p-3 shadow-lg backdrop-blur">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl brand-bg text-white">
+                  <Sparkles className="h-5 w-5" />
+                </span>
+                <span>
+                  <strong className="block text-sm text-slate-900">Your questions, matched with answers</strong>
+                  <small className="text-xs text-slate-500">Our support team is here for you</small>
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
       <section className="px-4 py-12 sm:px-6 lg:px-8 lg:py-16"><div className="mx-auto grid max-w-7xl gap-4 sm:grid-cols-2 lg:grid-cols-4">{contactCards.map(({ title, value, description, icon: Icon }) => <article key={title} className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:border-[var(--brand-primary)] hover:shadow-lg"><span className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-soft brand-text transition group-hover:brand-bg group-hover:text-white"><Icon className="h-5 w-5" /></span><h2 className="mt-5 text-base font-black text-slate-900">{title}</h2><p className="mt-2 break-words text-sm font-bold brand-text">{value}</p><p className="mt-2 text-sm leading-6 text-slate-500">{description}</p></article>)}</div></section>
 
+      <section className="px-4 pb-12 sm:px-6 lg:px-8"><div className="mx-auto max-w-7xl"><div className="mb-6"><p className="text-xs font-black uppercase tracking-[0.18em] brand-text">Choose a support area</p><h2 className="mt-2 text-2xl font-black text-slate-950 sm:text-3xl">How can we help?</h2></div><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">{supportCategories.map(({ title, description, icon: Icon }) => <article key={title} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:border-[var(--brand-primary)] hover:shadow-lg"><span className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-soft brand-text"><Icon className="h-5 w-5" /></span><h3 className="mt-4 text-sm font-black leading-5 text-slate-900">{title}</h3><p className="mt-2 text-sm leading-6 text-slate-500">{description}</p></article>)}</div></div></section>
+
       <section className="px-4 pb-16 sm:px-6 lg:px-8 lg:pb-24"><div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[0.8fr_1.2fr]">
-        <aside className="space-y-5"><div className="rounded-3xl brand-gradient p-7 text-white shadow-xl shadow-[#2b73a4]/15"><p className="text-xs font-black uppercase tracking-[0.18em] text-white/75">Support that understands your journey</p><h2 className="mt-4 text-2xl font-black">We&apos;re here to help you move forward.</h2><p className="mt-4 text-sm leading-7 text-white/80">Whether you are searching for your next role or building a high-performing team, tell us what you need.</p><div className="mt-7 space-y-4 text-sm"><p className="flex items-center gap-3"><Mail className="h-5 w-5" /> yabsirademeke07@gmail.com</p><p className="flex items-center gap-3"><Phone className="h-5 w-5" /> 0952748973</p><p className="flex items-center gap-3"><MapPin className="h-5 w-5" /> Addis Ababa, Ethiopia</p></div></div><div className="rounded-3xl border border-[var(--brand-border)] bg-brand-soft p-6 shadow-sm"><p className="text-xs font-black uppercase tracking-[0.16em] brand-text">AI Platform HQ</p><h3 className="mt-3 text-xl font-black text-slate-900">Serving Ethiopia&apos;s career community</h3><p className="mt-2 text-sm leading-6 text-slate-600">Reach us directly for account support, hiring partnerships, or platform questions.</p><div className="mt-5 space-y-3 text-sm font-semibold brand-text"><p className="flex items-center gap-3"><Mail className="h-4 w-4" /> yabsirademeke07@gmail.com</p><p className="flex items-center gap-3"><Phone className="h-4 w-4" /> 0952748973</p></div></div></aside>
+        <aside className="space-y-5"><div className="rounded-3xl brand-gradient p-7 text-white shadow-xl shadow-[#2b73a4]/15"><p className="text-xs font-black uppercase tracking-[0.18em] text-white/75">Support that understands your journey</p><h2 className="mt-4 text-2xl font-black">We&apos;re here to help you move forward.</h2><p className="mt-4 text-sm leading-7 text-white/80">Whether you are searching for your next role or building a high-performing team, tell us what you need.</p><div className="mt-7 space-y-4 text-sm"><p className="flex items-center gap-3"><Mail className="h-5 w-5" /> yabsirademeke07@gmail.com</p><p className="flex items-center gap-3"><Phone className="h-5 w-5" /> 0952748973</p><p className="flex items-center gap-3"><MapPin className="h-5 w-5" /> Addis Ababa, Ethiopia</p></div><div className="mt-7 border-t border-white/20 pt-6"><h3 className="text-lg font-black">Connect With Us</h3><p className="mt-2 text-sm leading-6 text-white/80">Stay connected with us for job opportunities, career tips, and platform updates.</p><div className="mt-4 flex flex-wrap gap-2">{socialLinks.map(({ name, url, icon: Icon }) => <a key={name} href={url} target="_blank" rel="noreferrer" aria-label={`Follow us on ${name}`} className="inline-flex items-center gap-2 rounded-xl border border-white/25 bg-white/10 px-3 py-2 text-xs font-bold text-white transition hover:bg-white/20"><Icon className="h-4 w-4" />{name}</a>)}</div></div></div><div className="rounded-3xl border border-[var(--brand-border)] bg-brand-soft p-6 shadow-sm"><p className="text-xs font-black uppercase tracking-[0.16em] brand-text">AI Platform HQ</p><h3 className="mt-3 text-xl font-black text-slate-900">Serving Ethiopia&apos;s career community</h3><p className="mt-2 text-sm leading-6 text-slate-600">Reach us directly for account support, hiring partnerships, or platform questions.</p><div className="mt-5 space-y-3 text-sm font-semibold brand-text"><p className="flex items-center gap-3"><Mail className="h-4 w-4" /> yabsirademeke07@gmail.com</p><p className="flex items-center gap-3"><Phone className="h-4 w-4" /> 0952748973</p></div></div></aside>
 
         <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8"><div className="mb-7"><h2 className="text-2xl font-black text-slate-950 sm:text-3xl">Send Us a Message</h2><p className="mt-2 text-sm leading-6 text-slate-500">Tell us how we can help and we&apos;ll get back to you as soon as possible.</p></div>{isSent ? <div className="flex min-h-[420px] flex-col items-center justify-center text-center"><span className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-emerald-600"><CheckCircle2 className="h-9 w-9" /></span><h3 className="mt-6 text-2xl font-black text-slate-900">Message Sent Successfully!</h3><p className="mt-3 max-w-md text-sm leading-6 text-slate-500">Thank you for contacting us. Our team will get back to you shortly.</p><button type="button" onClick={resetForm} className="mt-7 inline-flex items-center gap-2 rounded-xl brand-bg px-5 py-3 text-sm font-bold text-white transition hover:opacity-90">Send Another Message <ArrowRight className="h-4 w-4" /></button></div> : <form onSubmit={handleSubmit} noValidate className="space-y-5"><div className="grid gap-5 sm:grid-cols-2"><label className="text-sm font-bold text-slate-700">First Name<input value={form.firstName} onChange={(e) => updateField('firstName', e.target.value)} className="contact-input" /> <FieldError>{errors.firstName}</FieldError></label><label className="text-sm font-bold text-slate-700">Last Name<input value={form.lastName} onChange={(e) => updateField('lastName', e.target.value)} className="contact-input" /> <FieldError>{errors.lastName}</FieldError></label></div><div className="grid gap-5 sm:grid-cols-2"><label className="text-sm font-bold text-slate-700">Email Address<input type="email" value={form.email} onChange={(e) => updateField('email', e.target.value)} className="contact-input" /> <FieldError>{errors.email}</FieldError></label><label className="text-sm font-bold text-slate-700">Phone Number<input type="tel" value={form.phone} onChange={(e) => updateField('phone', e.target.value)} className="contact-input" /></label></div><div className="grid gap-5 sm:grid-cols-2"><label className="text-sm font-bold text-slate-700">Subject<select value={form.subject} onChange={(e) => updateField('subject', e.target.value)} className="contact-input"><option value="">Choose a subject</option><option>Account Support</option><option>Job Application</option><option>Employer Support</option><option>Technical Issue</option><option>Partnership</option><option>General Question</option><option>Other</option></select><FieldError>{errors.subject}</FieldError></label><label className="text-sm font-bold text-slate-700">User Type<select value={form.userType} onChange={(e) => updateField('userType', e.target.value)} className="contact-input"><option value="">Choose user type</option><option>Job Seeker</option><option>Employer</option><option>Business Partner</option><option>General Inquiry</option><option>Other</option></select></label></div><label className="block text-sm font-bold text-slate-700">Message<textarea value={form.message} onChange={(e) => updateField('message', e.target.value)} maxLength={1000} rows={6} placeholder="Tell us more about your question or issue..." className="contact-input resize-none" /><span className="mt-1 block text-right text-xs text-slate-400">{form.message.length}/1000</span><FieldError>{errors.message}</FieldError></label><button type="submit" disabled={isSending} className="inline-flex w-full items-center justify-center gap-2 rounded-xl brand-gradient px-5 py-3.5 text-sm font-black text-white shadow-lg shadow-[#56a2d8]/20 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"><Send className="h-4 w-4" />{isSending ? 'Sending...' : 'Send Message'}</button></form>}</section>
       </div></section>

@@ -23,6 +23,12 @@ import {
   Timer,
   UserRound,
   UsersRound,
+  BarChart3,
+  Shield,
+  Settings,
+  TrendingUp,
+  CheckCircle2,
+  AlertCircle,
 } from 'lucide-react';
 
 const seekerSteps = [
@@ -111,6 +117,49 @@ const employerSteps = [
   },
 ];
 
+const adminSteps = [
+  {
+    number: '01',
+    title: 'Manage Platform Users',
+    description: 'Admin oversees all users including Job Seekers, Employers, and Company Representatives.',
+    icon: UsersRound,
+    accent: 'brand-gradient',
+    type: 'profile',
+  },
+  {
+    number: '02',
+    title: 'Control Employers & Companies',
+    description: 'Verify and manage employer accounts, company profiles, and their hiring activities.',
+    icon: BuildingIcon,
+    accent: 'brand-gradient',
+    type: 'search',
+  },
+  {
+    number: '03',
+    title: 'Monitor AI Matching Performance',
+    description: 'Track and optimize the AI matching engine to ensure accurate candidate-job alignment.',
+    icon: BrainCircuit,
+    accent: 'brand-gradient',
+    type: 'ai',
+  },
+  {
+    number: '04',
+    title: 'Review Analytics & Reports',
+    description: 'Access detailed analytics, match statistics, user activity, and platform performance metrics.',
+    icon: BarChart3,
+    accent: 'brand-gradient',
+    type: 'score',
+  },
+  {
+    number: '05',
+    title: 'System Settings & Notifications',
+    description: 'Configure platform notifications, security settings, and manage system-wide operations.',
+    icon: Settings,
+    accent: 'brand-gradient',
+    type: 'connect',
+  },
+];
+
 const pillars = [
   { title: 'Smart Matching', description: 'AI matches skills, experience, and job requirements accurately with zero keyword fluff.', icon: ShieldCheck, color: 'bg-blue-50 text-blue-600' },
   { title: 'Save Time', description: 'Find the right opportunities faster and reduce time-consuming manual searches.', icon: Timer, color: 'brand-soft text-brand' },
@@ -164,7 +213,7 @@ function Illustration({ type }) {
 
 export default function HowItWorks() {
   const [audience, setAudience] = useState('seekers');
-  const steps = audience === 'seekers' ? seekerSteps : employerSteps;
+  const steps = audience === 'seekers' ? seekerSteps : audience === 'employers' ? employerSteps : adminSteps;
 
   return (
     <div className="brand-how-it-works min-h-screen overflow-hidden bg-white text-slate-900">
@@ -176,26 +225,135 @@ export default function HowItWorks() {
           <p className="mx-auto mt-5 max-w-2xl text-base leading-8 text-slate-600 sm:text-lg">Our AI-powered platform makes job searching and hiring simple, smart, and efficient for everyone.</p>
           <div className="mx-auto mt-9 inline-flex rounded-2xl border border-slate-200 bg-white p-1.5 shadow-lg shadow-indigo-100/60">
             <button type="button" onClick={() => setAudience('seekers')} className={`rounded-xl px-5 py-3 text-sm font-bold transition sm:px-7 ${audience === 'seekers' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/25' : 'text-slate-600 hover:bg-slate-50'}`}>For Job Seekers</button>
-            <button type="button" onClick={() => setAudience('employers')} className={`rounded-xl px-5 py-3 text-sm font-bold transition sm:px-7 ${audience === 'employers' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/25' : 'text-slate-600 hover:bg-slate-50'}`}>For Employers / Companies</button>
+            <button type="button" onClick={() => setAudience('employers')} className={`rounded-xl px-5 py-3 text-sm font-bold transition sm:px-7 ${audience === 'employers' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/25' : 'text-slate-600 hover:bg-slate-50'}`}>For Employers</button>
+            <button type="button" onClick={() => setAudience('admin')} className={`rounded-xl px-5 py-3 text-sm font-bold transition sm:px-7 ${audience === 'admin' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/25' : 'text-slate-600 hover:bg-slate-50'}`}>For Admins</button>
           </div>
         </div>
       </section>
 
-      <section className="px-4 pb-20 sm:px-6 lg:px-8 lg:pb-28">
+      <section className="relative overflow-hidden px-4 pb-20 sm:px-6 lg:px-8 lg:pb-28">
+        {/* Background with gradient overlay */}
+        <div className="absolute inset-0 -z-10">
+          <div className="absolute inset-0 bg-gradient-to-br from-slate-100 via-blue-50 to-slate-100" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(99,102,241,0.08),transparent)]" />
+        </div>
+
         <div className="mx-auto max-w-7xl">
-          <div className="grid gap-8 md:grid-cols-2 xl:grid-cols-5 xl:gap-0">
-            {steps.map((step, index) => {
-              const Icon = step.icon;
-              return (
-                <div key={step.number} className="relative flex flex-col px-0 md:px-3 xl:px-4">
-                  {index < steps.length - 1 && <div className="absolute right-[-18px] top-[210px] z-10 hidden w-9 items-center justify-center xl:flex"><div className="w-full border-t-2 border-dashed border-indigo-200" /><ChevronRight className="absolute h-4 w-4 bg-white text-indigo-400" /></div>}
-                  <div className="mb-5 flex items-center gap-3"><span className={`flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br ${step.accent} text-sm font-black text-white shadow-lg`}>{step.number}</span><div className="h-px flex-1 bg-indigo-100 xl:hidden" /><Icon className="h-5 w-5 text-indigo-500" /></div>
-                  <div className="mb-5 min-h-[160px]"> <h2 className="text-xl font-black tracking-tight text-slate-900">{step.title}</h2><p className="mt-3 text-sm leading-6 text-slate-600">{step.description}</p></div>
-                  <Illustration type={step.type} />
+          {/* For Job Seekers - Card Layout */}
+          {audience === 'seekers' && (
+            <div className="relative">
+              {/* Background profile image with overlay */}
+              <div className="relative mb-8 h-[500px] rounded-3xl overflow-hidden bg-gradient-to-br from-slate-200 to-slate-300">
+                {/* Simulated background image with overlay */}
+                <div className="absolute inset-0 bg-gradient-to-r from-slate-900/40 via-slate-900/20 to-transparent" />
+                <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjUwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjUwMCIgZmlsbD0iIzZCNzI4MCIvPjwvc3ZnPg==')]" />
+              </div>
+
+              {/* Card overlay with step information */}
+              <div className="absolute inset-0 flex items-center pointer-events-none">
+                <div className="w-full px-4 sm:px-8 py-12">
+                  <div className="grid gap-6 md:grid-cols-2 lg:gap-8">
+                    {/* Step 01 - Profile */}
+                    <div className="pointer-events-auto">
+                      <div className="rounded-2xl bg-white p-6 shadow-xl border border-blue-100/50 backdrop-blur-sm">
+                        <div className="flex items-start gap-3 mb-4">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-100">
+                            <span className="text-xs font-bold text-indigo-600">📄</span>
+                          </div>
+                          <span className="text-xs font-bold text-indigo-500 tracking-wider">STEP 01</span>
+                        </div>
+                        <h3 className="text-xl font-black text-slate-900 mb-3">CV / Profile</h3>
+                        <div className="flex flex-wrap gap-2">
+                          <span className="inline-flex px-3 py-1 rounded-full text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200">React</span>
+                          <span className="inline-flex px-3 py-1 rounded-full text-xs font-bold text-green-700 bg-green-50 border border-green-200">Node.js</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Step 02 - AI Analysis */}
+                    <div className="pointer-events-auto">
+                      <div className="rounded-2xl bg-white p-6 shadow-xl border border-purple-100/50 backdrop-blur-sm">
+                        <div className="flex items-start gap-3 mb-4">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-100">
+                            <span className="text-xs font-bold text-purple-600">⚡</span>
+                          </div>
+                          <span className="text-xs font-bold text-purple-500 tracking-wider">STEP 02</span>
+                        </div>
+                        <h3 className="text-xl font-black text-slate-900 mb-3">AI Analysis</h3>
+                        <div className="h-1.5 w-24 rounded-full bg-gradient-to-r from-purple-400 to-purple-600" />
+                      </div>
+                    </div>
+
+                    {/* Central Profile Circle */}
+                    <div className="pointer-events-auto col-span-1 md:col-span-2 flex justify-center -my-20">
+                      <div className="relative">
+                        <div className="absolute inset-0 rounded-full bg-gradient-to-br from-indigo-400 to-blue-500 blur-lg opacity-40" />
+                        <div className="relative w-40 h-40 rounded-full border-4 border-white bg-gradient-to-br from-slate-300 to-slate-400 flex items-center justify-center shadow-2xl">
+                          <div className="text-6xl">👤</div>
+                        </div>
+                        <div className="absolute bottom-2 right-2 bg-white rounded-full p-3 shadow-lg border-2 border-blue-500">
+                          <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center">
+                            <span className="text-white text-xs font-bold">🏢</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 text-center pointer-events-none">
+                        <h2 className="text-2xl font-black text-slate-900">JOB SEEKER</h2>
+                      </div>
+                    </div>
+
+                    {/* Step 03 - Job Matching */}
+                    <div className="pointer-events-auto">
+                      <div className="rounded-2xl bg-white p-6 shadow-xl border border-teal-100/50 backdrop-blur-sm">
+                        <div className="flex items-start gap-3 mb-4">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-teal-100">
+                            <span className="text-xs font-bold text-teal-600">📍</span>
+                          </div>
+                          <span className="text-xs font-bold text-teal-500 tracking-wider">STEP 03</span>
+                        </div>
+                        <h3 className="text-xl font-black text-slate-900 mb-2">Job Matching</h3>
+                        <p className="text-sm text-slate-600 flex items-center gap-1">📍 Best fit found</p>
+                      </div>
+                    </div>
+
+                    {/* Step 04 - Recommended Jobs */}
+                    <div className="pointer-events-auto">
+                      <div className="rounded-2xl bg-white p-6 shadow-xl border border-orange-100/50 backdrop-blur-sm">
+                        <div className="flex items-start gap-3 mb-4">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-100">
+                            <span className="text-xs font-bold text-orange-600">⭐</span>
+                          </div>
+                          <span className="text-xs font-bold text-orange-500 tracking-wider">STEP 04</span>
+                        </div>
+                        <h3 className="text-xl font-black text-slate-900 mb-2">Recommended Jobs</h3>
+                        <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-700">
+                          <span className="w-2 h-2 rounded-full bg-orange-400" />
+                          View opportunities
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              );
-            })}
-          </div>
+              </div>
+            </div>
+          )}
+
+          {/* For Employers & Admins - Traditional Grid Layout */}
+          {(audience === 'employers' || audience === 'admin') && (
+            <div className="grid gap-8 md:grid-cols-2 xl:grid-cols-5 xl:gap-0">
+              {steps.map((step, index) => {
+                const Icon = step.icon;
+                return (
+                  <div key={step.number} className="relative flex flex-col px-0 md:px-3 xl:px-4">
+                    {index < steps.length - 1 && <div className="absolute right-[-18px] top-[210px] z-10 hidden w-9 items-center justify-center xl:flex"><div className="w-full border-t-2 border-dashed border-indigo-200" /><ChevronRight className="absolute h-4 w-4 bg-white text-indigo-400" /></div>}
+                    <div className="mb-5 flex items-center gap-3"><span className={`flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br ${step.accent} text-sm font-black text-white shadow-lg`}>{step.number}</span><div className="h-px flex-1 bg-indigo-100 xl:hidden" /><Icon className="h-5 w-5 text-indigo-500" /></div>
+                    <div className="mb-5 min-h-[160px]"> <h2 className="text-xl font-black tracking-tight text-slate-900">{step.title}</h2><p className="mt-3 text-sm leading-6 text-slate-600">{step.description}</p></div>
+                    <Illustration type={step.type} />
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </section>
 

@@ -194,38 +194,53 @@ const JobDetails = () => {
               </dl>
             </section>
 
-            <section className="py-8" aria-labelledby="description-heading">
-              <h2 id="description-heading" className="text-xl font-black text-slate-900">About the Job</h2>
-              <div className="mt-5 max-w-3xl whitespace-pre-line text-base leading-8 text-slate-600">
+            <section className="py-8 rounded-2xl border border-slate-100 bg-gradient-to-br from-[#f0f7fc]/50 via-white to-[#eaf4fb]/30 p-6" aria-labelledby="description-heading">
+              <div className="relative inline-block">
+                <h2 id="description-heading" className="text-xl font-black text-slate-900">About the Job</h2>
+                <div className="absolute -bottom-1 left-0 h-1 w-24 rounded-full bg-gradient-to-r from-red-400 to-transparent opacity-60"></div>
+              </div>
+              <div className="mt-5 max-w-3xl whitespace-pre-line text-base leading-8 text-slate-700">
                 {getReadableDescription(job.description || job.fullDescription || job.shortDescription)}
               </div>
             </section>
 
-            {responsibilities.length > 0 && <section className="border-t border-slate-200 py-8" aria-labelledby="responsibilities-heading">
-              <h2 id="responsibilities-heading" className="text-xl font-black text-slate-900">Responsibilities</h2>
-              <ul className="mt-4 list-disc space-y-2 pl-5 leading-7 text-slate-600 marker:text-[#0871D1]">
-                {responsibilities.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}
+            {responsibilities.length > 0 && <section className="border-t border-slate-200 py-8 rounded-2xl bg-gradient-to-br from-white to-slate-50/40 -mx-6 px-6" aria-labelledby="responsibilities-heading">
+              <div className="relative inline-block">
+                <h2 id="responsibilities-heading" className="text-xl font-black text-slate-900">Responsibilities</h2>
+                <div className="absolute -bottom-1 left-0 h-1 w-36 rounded-full bg-gradient-to-r from-blue-400 to-transparent opacity-60"></div>
+              </div>
+              <ul className="mt-6 list-disc space-y-3 pl-5 leading-7 text-slate-700 marker:text-[#56A2D8] marker:font-bold">
+                {responsibilities.map((item, index) => <li key={`${item}-${index}`} className="font-medium">{item}</li>)}
               </ul>
             </section>}
 
-            {requirements.length > 0 && <section className="border-t border-slate-200 py-8" aria-labelledby="requirements-heading">
-              <h2 id="requirements-heading" className="text-xl font-black text-slate-900">Requirements</h2>
-              <ul className="mt-4 list-disc space-y-2 pl-5 leading-7 text-slate-600 marker:text-[#0871D1]">
-                {requirements.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}
+            {requirements.length > 0 && <section className="border-t border-slate-200 py-8 rounded-2xl bg-gradient-to-br from-white to-slate-50/40 -mx-6 px-6" aria-labelledby="requirements-heading">
+              <div className="relative inline-block">
+                <h2 id="requirements-heading" className="text-xl font-black text-slate-900">Requirements</h2>
+                <div className="absolute -bottom-1 left-0 h-1 w-32 rounded-full bg-gradient-to-r from-purple-400 to-transparent opacity-60"></div>
+              </div>
+              <ul className="mt-6 list-disc space-y-3 pl-5 leading-7 text-slate-700 marker:text-[#56A2D8] marker:font-bold">
+                {requirements.map((item, index) => <li key={`${item}-${index}`} className="font-medium">{item}</li>)}
               </ul>
             </section>}
 
-            {skills.length > 0 && <section className="border-t border-slate-200 py-8" aria-labelledby="skills-heading">
-              <h2 id="skills-heading" className="text-xl font-black text-slate-900">Required Skills</h2>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {skills.map((skill, index) => <span key={`${skill}-${index}`} className="rounded-full bg-[#EAF3FF] px-3 py-1.5 text-sm font-semibold text-[#075EAE]">{skill}</span>)}
+            {skills.length > 0 && <section className="border-t border-slate-200 py-8 rounded-2xl bg-gradient-to-br from-white to-slate-50/40 -mx-6 px-6" aria-labelledby="skills-heading">
+              <div className="relative inline-block">
+                <h2 id="skills-heading" className="text-xl font-black text-slate-900">Required Skills</h2>
+                <div className="absolute -bottom-1 left-0 h-1 w-40 rounded-full bg-gradient-to-r from-indigo-400 to-transparent opacity-60"></div>
+              </div>
+              <div className="mt-6 flex flex-wrap gap-2.5">
+                {skills.map((skill, index) => <span key={`${skill}-${index}`} className="rounded-full bg-gradient-to-r from-[#EAF3FF] to-[#F0F7FC] px-4 py-2 text-sm font-semibold text-[#2B73A4] border border-[#D0E5F5] hover:border-[#56A2D8] transition-colors duration-200">{skill}</span>)}
               </div>
             </section>}
 
-            {benefits.length > 0 && <section className="border-t border-slate-200 py-8" aria-labelledby="benefits-heading">
-              <h2 id="benefits-heading" className="text-xl font-black text-slate-900">Benefits</h2>
-              <ul className="mt-4 list-disc space-y-2 pl-5 leading-7 text-slate-600 marker:text-[#0871D1]">
-                {benefits.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}
+            {benefits.length > 0 && <section className="border-t border-slate-200 py-8 rounded-2xl bg-gradient-to-br from-white to-slate-50/40 -mx-6 px-6" aria-labelledby="benefits-heading">
+              <div className="relative inline-block">
+                <h2 id="benefits-heading" className="text-xl font-black text-slate-900">Benefits</h2>
+                <div className="absolute -bottom-1 left-0 h-1 w-20 rounded-full bg-gradient-to-r from-green-400 to-transparent opacity-60"></div>
+              </div>
+              <ul className="mt-6 list-disc space-y-3 pl-5 leading-7 text-slate-700 marker:text-[#56A2D8] marker:font-bold">
+                {benefits.map((item, index) => <li key={`${item}-${index}`} className="font-medium">{item}</li>)}
               </ul>
             </section>}
 

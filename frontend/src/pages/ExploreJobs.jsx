@@ -660,11 +660,11 @@ function CleanJobCard({ job, saved, onToggleSave, onShare, onViewDetails }) {
   return (
     <div
       onClick={() => onViewDetails(job)}
-      className="job-listing-card group relative rounded-2xl border border-slate-200/90 bg-white p-7 sm:p-9 shadow-xs hover:-translate-y-1 hover:border-[#56A2D8] hover:shadow-xl hover:shadow-[#56A2D8]/15 transition-all duration-200 ease-out text-left cursor-pointer"
+      className="job-listing-card group relative rounded-2xl border border-slate-200/90 bg-white p-7 sm:p-9 shadow-xs hover:-translate-y-2 hover:border-[#56A2D8] hover:bg-gradient-to-br hover:from-[#f0f7fc] hover:to-[#e8f1f8] hover:shadow-xl hover:shadow-[#56A2D8]/20 transition-all duration-300 ease-out text-left cursor-pointer"
     >
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
-          <h3 className="text-2xl sm:text-3xl font-extrabold text-slate-900 group-hover:text-[#2B73A4] transition-colors leading-snug tracking-tight">
+          <h3 className="text-2xl sm:text-3xl font-extrabold text-slate-900 group-hover:text-[#56A2D8] transition-colors duration-300 leading-snug tracking-tight">
             {job.title}
           </h3>
 
@@ -686,23 +686,23 @@ function CleanJobCard({ job, saved, onToggleSave, onShare, onViewDetails }) {
           <button
             type="button"
             onClick={() => onShare(job)}
-            className="p-2.5 rounded-xl text-slate-400 hover:text-[#2B73A4] hover:bg-[#F0F7FC] transition cursor-pointer"
+            className="p-2.5 rounded-xl text-slate-400 hover:text-[#56A2D8] hover:bg-[#F0F7FC] transition-all duration-200 cursor-pointer group/share"
             title="Share Job"
           >
-            <Share2 className="h-5 w-5" />
+            <Share2 className="h-5 w-5 group-hover/share:scale-110 transition-transform" />
           </button>
 
           <button
             type="button"
             onClick={() => onToggleSave(job.id)}
-            className={`p-2.5 rounded-xl transition cursor-pointer ${
+            className={`p-2.5 rounded-xl transition-all duration-200 cursor-pointer group/bookmark ${
               saved
-                ? "text-[#2B73A4] bg-[#F0F7FC] border border-[#D0E5F5] hover:bg-white"
-                : "text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                ? "text-[#56A2D8] bg-[#F0F7FC] border border-[#D0E5F5] hover:bg-[#E8F1F8]"
+                : "text-slate-400 hover:text-[#56A2D8] hover:bg-[#F0F7FC] border border-transparent"
             }`}
             title={saved ? "Remove bookmark" : "Bookmark Job"}
           >
-            <Bookmark className={`h-5 w-5 ${saved ? "fill-current" : ""}`} />
+            <Bookmark className={`h-5 w-5 group-hover/bookmark:scale-110 transition-transform ${saved ? "fill-current" : ""}`} />
           </button>
         </div>
       </div>
@@ -719,7 +719,7 @@ function CleanJobCard({ job, saved, onToggleSave, onShare, onViewDetails }) {
             e.stopPropagation();
             setShowFullShort(!showFullShort);
           }}
-          className="mt-2.5 text-base font-bold text-[#2B73A4] hover:underline cursor-pointer inline-block"
+          className="mt-2.5 text-base font-bold text-[#56A2D8] hover:text-[#2B73A4] hover:underline transition-colors duration-200 cursor-pointer inline-block"
         >
           {showFullShort ? "Show Less" : "Show More"}
         </button>
@@ -1897,9 +1897,9 @@ export default function ExploreJobsPage() {
             <button
               type="button"
               onClick={() => setIsAiAssistantOpen(true)}
-              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-sky-600 hover:from-blue-700 hover:to-indigo-700 text-white text-sm sm:text-base font-extrabold shadow-sm shadow-blue-500/30 hover:shadow-md transition-all duration-200 cursor-pointer flex items-center gap-2.5 tracking-tight group"
+              className="px-5 py-2.5 rounded-xl brand-gradient text-white text-sm sm:text-base font-extrabold shadow-lg shadow-indigo-500/30 hover:shadow-xl transition-all duration-200 cursor-pointer flex items-center gap-2.5 tracking-tight group hover:scale-105"
             >
-              <Sparkles className="h-5 w-5 text-sky-200 group-hover:rotate-12 transition-transform" />
+              <Sparkles className="h-5 w-5 text-white/80 group-hover:rotate-12 transition-transform" />
               <span>AI Google Assistant</span>
             </button>
           </div>

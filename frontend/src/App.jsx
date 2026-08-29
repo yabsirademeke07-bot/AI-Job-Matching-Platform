@@ -96,6 +96,14 @@ function AppLayout() {
           <Route path="/jobs/:id/apply" element={<ApplyJob />} />
           <Route path="/apply/:id" element={<ApplyJob />} />
           <Route path="/about" element={<About />} />
+          <Route path="/profile/create" element={<About initialSection="createProfile" />} />
+          <Route path="/about/overview" element={<About initialSection="overview" />} />
+          <Route path="/experience" element={<About initialSection="experience" />} />
+          <Route path="/about/services" element={<About initialSection="services" />} />
+          <Route path="/about/jobs" element={<About initialSection="jobs" />} />
+          <Route path="/about/prompts" element={<About initialSection="prompts" />} />
+                    <Route path="/skills" element={<About initialSection="skills" />} />
+          <Route path="/projects" element={<About initialSection="projects" />} />
           <Route path="/how-it-works" element={<HowItWorks />} />
           <Route path="/services" element={<About initialSection="services" />} />
           <Route path="/contact" element={<Contact />} />

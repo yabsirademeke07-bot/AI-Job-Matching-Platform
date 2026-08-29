@@ -7,10 +7,16 @@ import ServicesView from "./ServicesView";
 import JobsView from "./JobsView";
 import PromptStudioView from "./PromptStudioView";
 import ContactView from "./ContactView";
+import PlatformAboutView from "./PlatformAboutView";
+import CreateProfileView from "./CreateProfileView";
 
 export default function AboutView({ activeTab = "overview", onNavigate }) {
   const renderSection = () => {
     switch (activeTab) {
+      case "about":
+        return <PlatformAboutView onNavigate={onNavigate} />;
+      case "createProfile":
+        return <CreateProfileView />;
       case "overview":
         return <OverviewView onNavigate={onNavigate} />;
       case "experience":

@@ -12,7 +12,7 @@ const navItems = [
   { id: "jobs", label: "Jobs", path: "/about/jobs" },
   { id: "about", label: "About", path: "/about" },
   { id: "prompts", label: "Prompt Studio", path: "/about/prompts" },
-  { id: "contact", label: "Contact", path: "/about/contact" },
+  { id: "contact", label: "Contact", path: "/contact" },
   { id: "createProfile", label: "Create Profile", path: "/profile/create" },
 ];
 
@@ -29,6 +29,7 @@ export default function AboutPage({ initialSection = "services" }) {
     "/about/services": "services",
     "/about/prompts": "prompts",
     "/about/contact": "contact",
+    "/contact": "contact",
     "/experience": "experience",
     "/skills": "skills",
     "/projects": "projects",
