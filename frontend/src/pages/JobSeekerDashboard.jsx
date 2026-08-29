@@ -13,6 +13,7 @@ import {
   Bell,
   Settings,
   LogOut,
+  Sparkles,
 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
@@ -27,6 +28,7 @@ import AIJobMatches from "../components/dashboard/AIJobMatches";
 import RecentApplications from "../components/dashboard/RecentApplications";
 import UpcomingInterview from "../components/dashboard/UpcomingInterview";
 import RecommendedJobs from "../components/dashboard/RecommendedJobs";
+import RecommendedJobsFeed from "../components/candidate/RecommendedJobsFeed";
 
 function useResource(loader) {
   const [state, setState] = useState({
@@ -136,6 +138,8 @@ export default function JobSeekerDashboard() {
   const navItems = [
     ["Dashboard", "/dashboard", LayoutDashboard],
     ["My Profile", "/profile", User],
+    ["AI Profile Setup", "/candidate-profile", Sparkles],
+    ["AI Profile Setup", "/candidate-profile", Sparkles],
     ["My Resume", "/resume", FileText],
     ["Explore Jobs", "/explore-jobs", Search],
     ["AI Job Matches", "/ai-matches", Target],
@@ -288,6 +292,7 @@ export default function JobSeekerDashboard() {
               ))}
             </div>
           </section>
+          <RecommendedJobsFeed onViewDetails={(id) => navigate(`/jobs/${id}`)} />
           {interviews.isLoading ? (
             <div className="h-28 animate-pulse rounded-xl bg-slate-200" />
           ) : upcomingInterview ? (

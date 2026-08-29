@@ -49,6 +49,7 @@ import SeekerDocumentation from './pages/Seekerdocumentation';
 import EmployerWorkspace from './pages/EmployerWorkspace';
 import DashboardOverview from './pages/DashboardOverview';
 import CvCheck from './pages/Cvcheck';
+import CandidateProfileSetup from './components/candidate/CandidateProfileSetup';
 
 // Admin Pages
 import AdminDashboard from './pages/AdminDashboard';
@@ -90,7 +91,16 @@ function AppLayout() {
           <Route path="/jobs/:id" element={<JobDetailsPage />} />
           <Route path="/jobs/:id/apply" element={<ApplyJob />} />
           <Route path="/apply/:id" element={<ApplyJob />} />
-          <Route path="/about" element={<About />} />
+          <Route path="/about" element={<About initialSection="about" />} />
+          <Route path="/about/overview" element={<About initialSection="overview" />} />
+          <Route path="/about/experience" element={<About initialSection="experience" />} />
+          <Route path="/about/skills" element={<About initialSection="skills" />} />
+          <Route path="/about/projects" element={<About initialSection="projects" />} />
+          <Route path="/about/services" element={<About initialSection="services" />} />
+          <Route path="/about/jobs" element={<About initialSection="jobs" />} />
+          <Route path="/about/prompts" element={<About initialSection="prompts" />} />
+          <Route path="/about/contact" element={<About initialSection="contact" />} />
+          <Route path="/about/create-profile" element={<About initialSection="create-profile" />} />
           <Route path="/how-it-works" element={<HowItWorks />} />
           <Route path="/services" element={<About initialSection="services" />} />
           <Route path="/contact" element={<Contact />} />
@@ -172,6 +182,14 @@ function AppLayout() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/candidate-profile"
+            element={
+              <ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}>
+                {withSeekerSidebar(<CandidateProfileSetup />)}
+              </ProtectedRoute>
+            }
+          />
           <Route path="/ai-matches" element={<ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}>{withSeekerSidebar(<SeekerModulePage module="matches" />)}</ProtectedRoute>} />
           <Route path="/saved-jobs" element={<ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}>{withSeekerSidebar(<SeekerModulePage module="saved" />)}</ProtectedRoute>} />
           <Route path="/notifications" element={<ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}>{withSeekerSidebar(<SeekerModulePage module="notifications" />)}</ProtectedRoute>} />
@@ -195,6 +213,8 @@ function AppLayout() {
           <Route path="/resume" element={<ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}>{withSeekerSidebar(<MyResume />)}</ProtectedRoute>} />
           <Route path="/resume/preview" element={<ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}>{withSeekerSidebar(<ResumePreview />)}</ProtectedRoute>} />
           <Route path="/profile/me" element={<ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}>{withSeekerSidebar(<MyProfile />)}</ProtectedRoute>} />
+          <Route path="/profile/create" element={<ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}>{withSeekerSidebar(<About initialSection="create-profile" />)}</ProtectedRoute>} />
+          <Route path="/profile/portfolio" element={<ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}>{withSeekerSidebar(<About initialSection="about" />)}</ProtectedRoute>} />
           <Route path="/profile/edit" element={<ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}>{withSeekerSidebar(<EditProfile />)}</ProtectedRoute>} />
           <Route path="/profile/certificates/:id" element={<ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}>{withSeekerSidebar(<CertificatePreview />)}</ProtectedRoute>} />
           <Route path="/applications" element={<ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}>{withSeekerSidebar(<MyApplications />)}</ProtectedRoute>} />

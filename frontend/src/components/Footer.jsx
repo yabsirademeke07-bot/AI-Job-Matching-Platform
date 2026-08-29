@@ -3,7 +3,7 @@ import { Sparkles, Mail, Phone, MapPin, Globe, Share2, MessageSquare } from 'luc
 
 function Footer() {
   return (
-    <footer className="border-t border-[var(--brand-border)] bg-[var(--brand-soft)] text-slate-600 text-sm">
+    <footer className="relative z-[60] border-t border-[var(--brand-border)] bg-[var(--brand-soft)] text-slate-600 text-sm">
       <div className="max-w-7xl mx-auto px-6 py-12 md:py-16">
         
         {/* Top Grid Section */}
