@@ -20,6 +20,34 @@
   display: none;
 }
 
+.employer-workspace > .flex > aside {
+  display: none;
+}
+
+.employer-workspace .employer-sidebar {
+  position: fixed;
+}
+
+.employer-workspace main > div > form:not([data-company-legal-form='true']) {
+  display: none;
+}
+
+.employer-workspace > header > div:last-child > button:last-child {
+  display: none;
+}
+
+.employer-workspace > .flex > main {
+  min-width: 0;
+  width: 100%;
+  padding-left: 19rem;
+}
+
+@media (max-width: 1023px) {
+  .employer-workspace > .flex > main {
+    padding-left: 0;
+  }
+}
+
 button,
 a,
 input,
