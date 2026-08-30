@@ -106,19 +106,30 @@ const CvUploader = ({
       return;
     }
     if (cvFile && localStorage.getItem('token')) {
-      const formData = new FormData();
-      formData.append('cv', cvFile);
-      try {
-        const response = await fetch(`${API_URL.replace(/\/$/, '')}/cvs`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-          body: formData,
-        });
-        if (!response.ok) throw new Error('Unable to save CV');
-      } catch (error) {
-        setContinueError('Unable to save your CV. Please try again.');
-        return;
+      const token = localStorage.getItem('token');
+      if (token !== 'frontend-demo-token') {
+        const uploadData = new FormData();
+        uploadData.append('cv', cvFile);
+        try {
+          const response = await fetch(`${API_URL.replace(/\/$/, '')}/cvs`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+            body: uploadData,
+          });
+          if (!response.ok) throw new Error('Unable to save CV');
+        } catch (error) {
+          setContinueError('Unable to save your CV. Please try again.');
+          return;
+        }
       }
+      localStorage.setItem('seekerResume', JSON.stringify({
+        id: `resume-${Date.now()}`,
+        fileName: cvFile.name,
+        fileType: cvFile.name.split('.').pop()?.toUpperCase() || 'FILE',
+        fileSize: cvFile.size,
+        fileUrl: URL.createObjectURL(cvFile),
+        uploadedAt: new Date().toISOString(),
+      }));
     }
     if (onNext) {
       onNext();

@@ -107,7 +107,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage: storage,
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowedTypes = /pdf|doc|docx/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
@@ -145,6 +145,32 @@ const authenticateUser = (req, res, next) => {
     });
   }
 };
+
+// ==========================================
+//  CV UPLOAD API
+// ==========================================
+app.post('/api/cvs', authenticateUser, upload.single('cv'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ message: 'Please upload a CV file.' });
+  }
+
+  try {
+    await db.query('UPDATE cvs SET is_primary = FALSE WHERE user_id = ?', [req.user.id]);
+    const fileUrl = `/uploads/cvs/${req.file.filename}`;
+    const [result] = await db.query(
+      'INSERT INTO cvs (user_id, file_name, file_url, file_size, mime_type, is_primary, is_active) VALUES (?, ?, ?, ?, ?, TRUE, TRUE)',
+      [req.user.id, req.file.originalname, fileUrl, req.file.size, req.file.mimetype]
+    );
+
+    return res.status(201).json({
+      success: true,
+      cv: { id: result.insertId, fileName: req.file.originalname, fileUrl }
+    });
+  } catch (error) {
+    console.error('CV Upload Error:', error);
+    return res.status(500).json({ message: 'Unable to save your CV.' });
+  }
+});
 
 // ==========================================
 // 💡 HELPER: Smart Skill Matching Engine
