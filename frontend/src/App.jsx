@@ -63,28 +63,12 @@ const withSeekerSidebar = (page) => <SeekerPageLayout>{page}</SeekerPageLayout>;
 
 function AppLayout() {
   const location = useLocation();
-  const dashboardRoutes = [
-    '/dashboard',
-    '/seeker-dashboard',
-    '/seekerDashboard',
-    '/employer-dashboard',
-    '/employer/dashboard',
-    '/employer/candidates',
-    '/employer/post-job'
-  ];
-  const isDashboardRoute = dashboardRoutes.includes(location.pathname);
-  const publicRoutes = [
-    '/', '/jobs', '/explore-jobs', '/about', '/how-it-works', '/services',
-    '/contact', '/companies', '/find-jobs', '/company', '/login', '/register',
-    '/signup', '/sign-up', '/verify-otp', '/role-selection', '/select-role',
-  ];
-  const isPublicRoute = publicRoutes.includes(location.pathname) ||
-    ['/job-details/', '/jobs/', '/apply/', '/companies/'].some((prefix) => location.pathname.startsWith(prefix));
+  const isAdminRoute = location.pathname.startsWith('/admin') || location.pathname === '/admin-dashboard';
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans">
-      <Navbar />
-      <main className="flex-grow">
+      {!isAdminRoute && <Navbar />}
+      <main className="grow">
         <Routes>
           {/* ========================================== */}
           {/* 1. PUBLIC ROUTES                           */}
@@ -129,6 +113,7 @@ function AppLayout() {
           <Route path="/select-role" element={<RoleSelection />} />
 
           <Route path="/auth/google/callback" element={<GoogleCallback />} />
+          <Route path="/auth/callback" element={<GoogleCallback />} />
 
           {/* ========================================== */}
           {/* 3. JOB SEEKER / EMPLOYEE PROTECTED ROUTES  */}
@@ -193,6 +178,14 @@ function AppLayout() {
           />
           <Route
             path="/seeker-dashboard"
+            element={
+              <ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}>
+                <JobSeekerDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/seeker/dashboard"
             element={
               <ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}>
                 <JobSeekerDashboard />
@@ -301,6 +294,22 @@ function AppLayout() {
             }
           />
           <Route
+            path="/employer/jobs/new"
+            element={
+              <ProtectedRoute allowedRoles={["employer", "company", "recruiter"]}>
+                <EmployerWorkspace />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/employer/jobs/:id/applicants"
+            element={
+              <ProtectedRoute allowedRoles={["employer", "company", "recruiter"]}>
+                <EmployerWorkspace />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/employer-profile"
             element={
               <ProtectedRoute allowedRoles={["employer", "company", "recruiter"]}>
@@ -328,6 +337,7 @@ function AppLayout() {
               </ProtectedRoute>
             }
           />
+          <Route path="/admin/dashboard" element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminDashboard /></ProtectedRoute>} />
           <Route path="/admin/desk" element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminDashboard /></ProtectedRoute>} />
           <Route
             path="/admin-approval"
@@ -380,7 +390,7 @@ function AppLayout() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
-      <Footer />
+      {!isAdminRoute && <Footer />}
     </div>
   );
 }

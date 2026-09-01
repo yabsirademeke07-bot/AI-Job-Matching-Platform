@@ -8,16 +8,30 @@ SET SQL_MODE = '';
 -- CORE AUTHENTICATION & USER MANAGEMENT
 -- ============================================================================
 
+CREATE TABLE IF NOT EXISTS otps (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    email VARCHAR(100) NOT NULL,
+    otp_code VARCHAR(10) NOT NULL,
+    purpose ENUM('registration', 'password-reset', 'email-verification') DEFAULT 'registration',
+    is_used BOOLEAN DEFAULT FALSE,
+    expires_at TIMESTAMP NULL DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_email_expires (email, expires_at)
+);
+
 CREATE TABLE IF NOT EXISTS users (
     id INT AUTO_INCREMENT PRIMARY KEY,
     full_name VARCHAR(100) NOT NULL,
     email VARCHAR(100) UNIQUE NOT NULL,
     phone VARCHAR(20),
-    password VARCHAR(255),
-    role ENUM('admin', 'employer', 'job_seeker') NOT NULL DEFAULT 'job_seeker',
+    password VARCHAR(255) NULL,
+    role ENUM('super_admin', 'admin', 'employer', 'job_seeker') NOT NULL DEFAULT 'job_seeker',
     is_verified BOOLEAN DEFAULT FALSE,
     is_active BOOLEAN DEFAULT TRUE,
     profile_picture_url VARCHAR(255),
+    avatar_url VARCHAR(255) NULL,
+    google_id VARCHAR(255) NULL,
+    auth_provider VARCHAR(50) NOT NULL DEFAULT 'email',
     bio TEXT,
     preferred_language VARCHAR(20) DEFAULT 'en',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -168,12 +182,17 @@ CREATE TABLE IF NOT EXISTS company_profiles (
     id INT AUTO_INCREMENT PRIMARY KEY,
     employer_id INT NOT NULL UNIQUE,
     company_name VARCHAR(150) NOT NULL,
+    representative_name VARCHAR(100),
+    representative_title VARCHAR(100),
+    work_email VARCHAR(150),
+    phone VARCHAR(20),
     company_registration_number VARCHAR(50) UNIQUE,
     industry VARCHAR(100),
     company_size ENUM('1-10', '11-50', '51-200', '201-500', '501-1000', '1000+') DEFAULT '11-50',
     website VARCHAR(255),
     logo_url VARCHAR(255),
     description TEXT,
+    company_summary TEXT,
     location VARCHAR(100),
     country VARCHAR(100),
     city VARCHAR(100),
@@ -186,6 +205,8 @@ CREATE TABLE IF NOT EXISTS company_profiles (
     verification_status ENUM('pending', 'verified', 'rejected') DEFAULT 'pending',
     verified_at TIMESTAMP NULL DEFAULT NULL,
     social_media_urls JSON,
+    hiring_volume VARCHAR(50),
+    linkedin VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (employer_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -535,7 +556,7 @@ CREATE TABLE IF NOT EXISTS system_settings (
 CREATE TABLE IF NOT EXISTS user_activity_log (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
-    activity_type ENUM('login', 'profile-update', 'job-view', 'job-apply', 'profile-view', 'message-sent', 'cv-upload') NOT NULL,
+    activity_type ENUM('login', 'profile-update', 'job-view', 'job-apply', 'profile-view', 'message-sent', 'cv-upload', 'role_selected') NOT NULL,
     related_job_id INT,
     related_user_id INT,
     ip_address VARCHAR(45),
@@ -559,18 +580,6 @@ CREATE TABLE IF NOT EXISTS job_analytics (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
-);
-
--- OTP Storage
-CREATE TABLE IF NOT EXISTS otps (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    email VARCHAR(100) NOT NULL,
-    otp_code VARCHAR(10) NOT NULL,
-    purpose ENUM('registration', 'password-reset', 'email-verification') DEFAULT 'registration',
-    is_used BOOLEAN DEFAULT FALSE,
-    expires_at TIMESTAMP NULL DEFAULT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_email_expires (email, expires_at)
 );
 
 COMMIT;

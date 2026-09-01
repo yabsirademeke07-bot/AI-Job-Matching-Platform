@@ -90,7 +90,7 @@ const OtpVerification = () => {
       } else if (['employer', 'company', 'recruiter'].includes(role)) {
         navigate('/employer/dashboard');
       } else if (['admin', 'super_admin'].includes(role)) {
-        navigate('/admin/desk');
+        navigate('/admin/dashboard');
       } else if (pendingJobId) {
         continueApplicationFlow(navigate, { jobId: pendingJobId });
       } else {
@@ -106,14 +106,21 @@ const OtpVerification = () => {
   const handleResendOtp = async () => {
     if (otpTimer > 0) return;
     try {
-      await api.post('/send-otp', { email });
+      let response;
+      try {
+        response = await api.post('/send-otp', { email });
+      } catch (requestError) {
+        if (requestError.response?.status !== 404) throw requestError;
+        response = await api.post('/auth/resend-otp', { email });
+      }
+      if (!response.data?.success) throw new Error(response.data?.message || 'Unable to resend OTP.');
       setOtpTimer(180);
       setOtp(['', '', '', '', '', '']);
       setInfo('A new verification code was sent to your email.');
       setError('');
       setTimeout(() => otpInputRefs.current[0]?.focus(), 0);
     } catch (err) {
-      setError(err.response?.data?.message || 'Unable to resend OTP.');
+      setError(err.response?.data?.message || err.message || 'Unable to resend OTP.');
     }
   };
 

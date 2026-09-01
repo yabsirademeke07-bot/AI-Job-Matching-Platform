@@ -6,8 +6,11 @@ export const GoogleAuthButton = ({ label = 'Continue with Google' }) => {
 
   const handleGoogleAuth = () => {
     setIsLoading(true);
-    const backendUrl = import.meta.env.VITE_API_URL || '';
-    window.location.href = `${backendUrl}/api/auth/google`;
+    const configuredUrl = import.meta.env.VITE_BACKEND_URL || import.meta.env.VITE_API_URL || '';
+    const backendUrl = configuredUrl.replace(/\/$/, '');
+    window.location.href = backendUrl.endsWith('/api')
+      ? `${backendUrl}/auth/google`
+      : `${backendUrl}/api/auth/google`;
   };
 
   return (
@@ -15,7 +18,7 @@ export const GoogleAuthButton = ({ label = 'Continue with Google' }) => {
       type="button"
       disabled={isLoading}
       onClick={handleGoogleAuth}
-      className="w-full h-12 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/80 active:scale-[0.99] border-2 border-slate-200 dark:border-slate-700 rounded-2xl text-slate-800 dark:text-slate-100 text-xs sm:text-sm font-bold shadow-xs transition-all flex items-center justify-center gap-3 cursor-pointer disabled:opacity-60 select-none"
+      className="w-full h-12 bg-[#4285F4] hover:bg-[#3367D6] active:scale-[0.99] border-2 border-[#4285F4] rounded-2xl text-white text-xs sm:text-sm font-bold shadow-lg shadow-blue-500/20 transition-all flex items-center justify-center gap-3 cursor-pointer disabled:opacity-60 select-none"
     >
       {isLoading ? (
         <Loader2 className="w-5 h-5 animate-spin text-blue-600" />

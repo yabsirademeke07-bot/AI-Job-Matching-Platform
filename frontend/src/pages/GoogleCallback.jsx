@@ -46,7 +46,7 @@ export default function GoogleCallback() {
       'employer/onboarding': '/employer/onboarding',
       'employer/dashboard': '/employer/dashboard',
       dashboard: '/dashboard',
-      'seeker/dashboard': '/dashboard',
+      'seeker/dashboard': '/seeker/dashboard',
     };
 
     if (step && stepMap[step]) {

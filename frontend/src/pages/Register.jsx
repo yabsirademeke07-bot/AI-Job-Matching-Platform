@@ -150,6 +150,13 @@ const Register = () => {
         if (Object.keys(fieldErrors).length > 0) {
           setErrors((currentErrors) => ({ ...currentErrors, ...fieldErrors }));
         }
+        if (response.status === 409 && data.isAlreadyVerified) {
+          navigate('/login', {
+            replace: true,
+            state: { message: 'This email is already registered. Please log in.' },
+          });
+          return;
+        }
         throw new Error(Object.values(fieldErrors)[0] || data.message || 'Unable to create your account.');
       }
 
