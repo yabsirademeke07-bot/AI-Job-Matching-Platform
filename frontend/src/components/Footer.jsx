@@ -46,7 +46,7 @@ function Footer() {
                 <Link to="/" className="hover:text-[var(--brand-deep)] transition">Home</Link>
               </li>
               <li>
-                <Link to="/jobs" className="hover:text-[var(--brand-deep)] transition">Explore Jobs</Link>
+                <Link to="/jobs" className="hover:text-[var(--brand-deep)] transition">Find Jobs</Link>
               </li>
               <li>
                 <Link to="/about" className="hover:text-[var(--brand-deep)] transition">About Us</Link>

@@ -100,7 +100,7 @@ export default function Home() {
           {[
             ['How It Works', '#how-it-works'],
             ['AI Matching', '#ai-matching'],
-            ['Explore Jobs', '#explore-jobs'],
+            ['Find Jobs', '#explore-jobs'],
             ['For Job Seekers', '#for-job-seekers'],
             ['For Employers', '#for-employers'],
             ['Why Choose Us', '#why-choose-us'],

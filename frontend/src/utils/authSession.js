@@ -34,12 +34,26 @@ export const removeStoredAccount = (email) => {
 
 export const getUserDestination = (user) => {
   const role = normalizeRole(user?.role || user?.userType);
-  if (['employer', 'company', 'recruiter'].includes(role)) return '/employer-dashboard';
+  if (['admin', 'super_admin'].includes(role)) return '/admin/desk';
+  if (['employer', 'company', 'recruiter'].includes(role)) return '/employer/dashboard';
   if (['job_seeker', 'seeker', 'jobseeker', 'user', 'employee'].includes(role)) {
     if (!user?.is_verified && !user?.isVerified && !user?.otpVerified) return '/verify-otp';
     if (!user?.role && !user?.userType) return '/select-role';
-    if (!user?.onboardingComplete && !user?.cvFileName && !localStorage.getItem('seekerResume')) return '/upload-cv';
-    if (!user?.onboardingComplete && !user?.profileComplete && !localStorage.getItem('userProfile')) return '/profile';
+
+    const userProfile = JSON.parse(localStorage.getItem('userProfile') || 'null') || {};
+    const hasResume = Boolean(user?.cvFileName || user?.resumeName || localStorage.getItem('seekerResume') || userProfile?.resumeUploaded);
+    const hasProfile = Boolean(
+      user?.onboardingProfileCompleted ||
+      user?.profileComplete ||
+      userProfile?.name ||
+      userProfile?.fullName ||
+      localStorage.getItem('userProfile')
+    );
+
+    if (user?.onboardingRoleSelected === false || !role) return '/select-role';
+    if (user?.onboardingCvUploaded === false || (!user?.onboardingCvUploaded && !hasResume)) return '/seeker/cv-upload';
+    if (user?.onboardingProfileCompleted === false || (!user?.onboardingProfileCompleted && !hasProfile)) return '/seeker/personal-info';
+
     return '/dashboard';
   }
   if (!role) return '/select-role';

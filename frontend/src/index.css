@@ -218,7 +218,7 @@ select:focus-visible {
 
   /* Explore Jobs uses coordinated tinted sections and elevated card surfaces. */
   .jobs-page {
-    background: #eef4f8;
+    background: #ffffff;
   }
 
   .jobs-page .jobs-search-panel,
@@ -334,13 +334,13 @@ select:focus-visible {
   }
 
   .jobs-page .job-listing-card {
-    background: #f5fafd !important;
+    background: #ffffff !important;
     border-color: #cfe2ee;
     box-shadow: 0 8px 18px rgb(15 23 42 / 8%), 0 2px 5px rgb(86 162 216 / 10%);
   }
 
   .jobs-page .job-listing-card:nth-child(even) {
-    background: #edf6fb !important;
+    background: #ffffff !important;
   }
 
   .jobs-page .job-listing-card:hover,

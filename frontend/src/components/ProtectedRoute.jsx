@@ -1,5 +1,7 @@
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
+import { getNextOnboardingStep } from '../utils/applicationFlow';
+import { normalizeRole } from '../utils/authSession';
 
 const ProtectedRoute = ({ 
   children, 
@@ -34,16 +36,16 @@ const ProtectedRoute = ({
     return <Navigate to="/select-role" state={{ from: location }} replace />;
   }
 
-  // ሮሎችን ወደ አንድ ወጥ አጻጻፍ መቀየሪያ ረዳት ፈንክሽን
-  const normalizeRole = (roleStr) => {
-    if (!roleStr) return '';
-    const clean = roleStr.toString().trim().toLowerCase().replace(/[\s_-]+/g, '');
-    if (clean === 'jobseeker' || clean === 'seeker') return 'seeker';
-    return clean;
-  };
-
   const rawUserRole = user.role || user.userType || '';
   const userRole = normalizeRole(rawUserRole);
+
+  if (['job_seeker', 'seeker', 'jobseeker', 'user', 'employee'].includes(userRole) && ['/select-role', '/cv-upload', '/seeker/cv-upload', '/upload-cv', '/profile', '/dashboard'].includes(location.pathname)) {
+    const expectedPath = getNextOnboardingStep();
+    const expectedPaths = expectedPath === '/seeker/cv-upload' ? ['/seeker/cv-upload', '/cv-upload', '/upload-cv'] : [expectedPath];
+    if (!expectedPaths.includes(location.pathname)) {
+      return <Navigate to={expectedPath} replace />;
+    }
+  }
 
   // 4. allowedRoles ከተሰጠ የነሱን ፍቃድ ማረጋገጥ
   if (allowedRoles && allowedRoles.length > 0) {
