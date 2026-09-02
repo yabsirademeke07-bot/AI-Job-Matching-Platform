@@ -213,6 +213,127 @@ CREATE TABLE IF NOT EXISTS company_profiles (
     INDEX idx_verified (is_verified)
 );
 
+CREATE TABLE IF NOT EXISTS employers (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    userId INT NOT NULL UNIQUE,
+    companyName VARCHAR(150) NOT NULL,
+    legalBusinessName VARCHAR(150),
+    tinNumber VARCHAR(50),
+    licenseDocumentUrl VARCHAR(255),
+    logoUrl VARCHAR(255),
+    website VARCHAR(255),
+    industry VARCHAR(100),
+    companySize VARCHAR(50) DEFAULT '11-50',
+    location VARCHAR(150),
+    verificationStatus ENUM('pending', 'verified', 'rejected') DEFAULT 'pending',
+    createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_employer_user (userId),
+    INDEX idx_employer_verification (verificationStatus)
+);
+
+CREATE TABLE IF NOT EXISTS talent_pool (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    employerId INT NOT NULL,
+    candidateId INT NOT NULL,
+    candidateName VARCHAR(150) NOT NULL,
+    primaryRole VARCHAR(150),
+    skills JSON,
+    aiMatchScore DECIMAL(5,2) DEFAULT 0,
+    notes TEXT,
+    savedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (employerId) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (candidateId) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE KEY unique_saved_candidate (employerId, candidateId),
+    INDEX idx_talent_pool_employer (employerId)
+);
+
+CREATE TABLE IF NOT EXISTS job_invitations (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    employerId INT NOT NULL,
+    candidateId INT NOT NULL,
+    jobId INT NOT NULL,
+    message TEXT,
+    status ENUM('invited', 'accepted', 'declined', 'expired') DEFAULT 'invited',
+    sentAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (employerId) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (candidateId) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (jobId) REFERENCES jobs(id) ON DELETE CASCADE,
+    UNIQUE KEY unique_job_invitation (employerId, candidateId, jobId),
+    INDEX idx_invitation_status (status),
+    INDEX idx_invitation_candidate (candidateId)
+);
+
+CREATE TABLE IF NOT EXISTS employer_settings (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    userId INT NOT NULL UNIQUE,
+    emailAlerts BOOLEAN DEFAULT TRUE,
+    matchingAlerts BOOLEAN DEFAULT TRUE,
+    weeklyDigest BOOLEAN DEFAULT FALSE,
+    notificationEmail VARCHAR(150),
+    teamPermissions JSON,
+    createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS employer_notifications (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    employerId INT NOT NULL,
+    title VARCHAR(200) NOT NULL,
+    body TEXT NOT NULL,
+    isRead BOOLEAN DEFAULT FALSE,
+    related_job_id INT NULL,
+    related_application_id INT NULL,
+    createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (employerId) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_employer_notification_read (employerId, isRead)
+);
+
+CREATE TABLE IF NOT EXISTS employer_messages (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    employerId INT NOT NULL,
+    candidateId INT NOT NULL,
+    subject VARCHAR(200),
+    body TEXT NOT NULL,
+    isRead BOOLEAN DEFAULT FALSE,
+    createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (employerId) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (candidateId) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_employer_message_participants (employerId, candidateId, isRead)
+);
+
+CREATE TABLE IF NOT EXISTS offers (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    applicationId INT NOT NULL UNIQUE,
+    employerId INT NOT NULL,
+    candidateId INT NOT NULL,
+    offeredSalary DECIMAL(12,2),
+    startDate DATE,
+    offerLetterUrl VARCHAR(255),
+    status ENUM('draft', 'sent', 'accepted', 'declined') DEFAULT 'draft',
+    sentAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (applicationId) REFERENCES applications(id) ON DELETE CASCADE,
+    FOREIGN KEY (employerId) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (candidateId) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_offers_employer (employerId)
+);
+
+CREATE TABLE IF NOT EXISTS onboarding_tasks (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    candidateId INT NOT NULL,
+    employerId INT NOT NULL,
+    taskTitle VARCHAR(200) NOT NULL,
+    isCompleted BOOLEAN DEFAULT FALSE,
+    documentUrl VARCHAR(255),
+    updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (candidateId) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (employerId) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE KEY unique_candidate_task (candidateId, taskTitle),
+    INDEX idx_onboarding_employer (employerId, isCompleted)
+);
+
 -- Company Verification Requests
 CREATE TABLE IF NOT EXISTS company_verification_requests (
     id INT AUTO_INCREMENT PRIMARY KEY,
