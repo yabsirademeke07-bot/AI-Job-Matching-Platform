@@ -2,35 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { BriefcaseBusiness, Filter, Search, Star, UserRound, FileText, UserPlus, ArrowUpRight } from 'lucide-react';
 import api from '../../services/api';
 
-const demoCandidates = [
-  {
-    id: 'pool-1',
-    fullName: 'Marta Bekele',
-    email: 'marta@example.com',
-    phone: '+251912345678',
-    preferredDepartment: 'Engineering',
-    preferredJobType: 'Full-time',
-    keySkills: ['React', 'TypeScript', 'Node.js'],
-    experience: '5 years',
-    cvFileName: 'marta_resume.pdf',
-    coverNote: 'Looking for senior frontend product roles in a collaborative team.',
-  },
-  {
-    id: 'pool-2',
-    fullName: 'Nahom Tesfaye',
-    email: 'nahom@example.com',
-    phone: '+251911223344',
-    preferredDepartment: 'Design',
-    preferredJobType: 'Remote',
-    keySkills: ['Figma', 'UI/UX', 'Product Design'],
-    experience: '3 years',
-    cvFileName: 'nahom_resume.pdf',
-    coverNote: 'Interested in remote design roles focused on SaaS product experiences.',
-  },
-];
-
 export default function TalentPool() {
-  const [candidates, setCandidates] = useState(demoCandidates);
+  const [candidates, setCandidates] = useState([]);
   const [search, setSearch] = useState('');
   const [department, setDepartment] = useState('All');
   const [skillFilter, setSkillFilter] = useState('All');
@@ -40,11 +13,10 @@ export default function TalentPool() {
     const loadPool = async () => {
       try {
         const { data } = await api.get('/employer/talent-pool');
-        const items = data?.candidates || data || demoCandidates;
-        setCandidates(items.length ? items : demoCandidates);
+        const items = data?.candidates || data || [];
+        setCandidates(items);
       } catch {
-        const stored = JSON.parse(localStorage.getItem('company-open-applications:default') || '[]');
-        setCandidates(stored.length ? stored : demoCandidates);
+        setCandidates([]);
       }
     };
 

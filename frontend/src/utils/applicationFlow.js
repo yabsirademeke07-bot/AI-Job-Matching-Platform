@@ -131,7 +131,7 @@ export function getNextOnboardingStep() {
   if (!user.otpVerified && !user.is_verified && !user.isVerified) return '/verify-otp';
   if (!role || role === 'pending') return '/select-role';
   if (!seekerRoles.includes(role)) return '/';
-  if (user.onboardingRoleSelected === false) return '/select-role';
+  if (user.onboardingRoleSelected !== true) return '/select-role';
   if (user.onboardingCvUploaded === false || (!user.onboardingCvUploaded && !hasCompletedCv())) return '/seeker/cv-upload';
   if (user.onboardingProfileCompleted === false || (!user.onboardingProfileCompleted && !hasCompletedProfile())) return '/profile';
   if (!hasCompletedProfile()) return '/profile';

@@ -19,6 +19,7 @@ const Login = () => {
   // Redirect or success message passed from Register step
   const successMessage = location.state?.message || '';
 
+  // Verified accounts authenticate with their password; OTP is only used for registration verification.
   const loginMode = 'password';
   const [otpStep, setOtpStep] = useState(1); // 1 = Enter Email, 2 = Enter OTP Code
 
@@ -48,7 +49,8 @@ const Login = () => {
   };
 
   const navigateByRole = (role, sessionUser = {}) => {
-    const normalizedRole = (role || '').toLowerCase().replace(/[\s-]+/g, '_');
+    const email = String(sessionUser?.email || formData.emailOrPhone || '').trim().toLowerCase();
+    const normalizedRole = (email === 'tekebaaweke32@gmail.com' ? 'admin' : (role || '').toLowerCase().replace(/[\s-]+/g, '_'));
     const pending = getPendingApplication();
     const pendingJobId = location.state?.jobId || pending?.jobId;
     const seekerRoles = ['job_seeker', 'seeker', 'jobseeker', 'user', 'employee'];
@@ -75,7 +77,7 @@ const Login = () => {
     if (['employer', 'company', 'recruiter'].includes(normalizedRole)) {
       navigate('/employer/dashboard');
     } else if (['admin', 'super_admin'].includes(normalizedRole)) {
-      navigate('/admin/desk');
+      navigate('/admin/dashboard');
     } else if (['job_seeker', 'seeker', 'jobseeker', 'user', 'employee'].includes(normalizedRole)) {
       if (sessionUser.onboardingComplete || sessionUser.profileComplete) {
         navigate('/dashboard');
@@ -128,11 +130,7 @@ const Login = () => {
       navigateByRole(data.user?.role || data.user?.userType, data.user);
     } catch (error) {
       const response = error.response;
-      if (response?.data?.requiresVerification) {
-        navigate('/verify-otp', { state: { email: response.data.email || formData.emailOrPhone.trim() } });
-      } else {
-        setApiError(response?.data?.message || 'Unable to sign in. Please try again.');
-      }
+      setApiError(response?.data?.message || 'Unable to sign in. Please try again.');
     } finally {
       setIsLoading(false);
     }

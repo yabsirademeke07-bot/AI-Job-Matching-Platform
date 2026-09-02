@@ -2,20 +2,15 @@ import { useEffect, useState } from 'react';
 import { CheckCircle2, Mail, Star, UserRound } from 'lucide-react';
 import api from '../../services/api';
 
-const fallbackTalent = [
-  { id: 'registered-1', name: 'Marta Bekele', currentTitle: 'Frontend Engineer', experienceYears: 5, matchScore: 96, skills: ['React', 'TypeScript', 'Node.js'], snapshot: 'Open to senior product engineering roles.' },
-  { id: 'registered-2', name: 'Nahom Tesfaye', currentTitle: 'Product Designer', experienceYears: 3, matchScore: 89, skills: ['Figma', 'UI/UX', 'Research'], snapshot: 'Available for remote design opportunities.' },
-];
-
 export default function AIRecommendedTalent({ jobId }) {
-  const [talent, setTalent] = useState(fallbackTalent);
+  const [talent, setTalent] = useState([]);
   const [message, setMessage] = useState('');
 
   useEffect(() => {
     if (!jobId) return;
     api.get(`/employer/jobs/${jobId}/ai-talent-pool`).then(({ data }) => {
       const items = data?.candidates || data || [];
-      if (items.length) setTalent(items);
+      setTalent(items);
     }).catch(() => {});
   }, [jobId]);
 
