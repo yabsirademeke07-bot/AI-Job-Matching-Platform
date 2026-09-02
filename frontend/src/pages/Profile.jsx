@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { getNextApplicationStep, getPendingApplication } from '../utils/applicationFlow';
+import { getPendingApplication } from '../utils/applicationFlow';
 import { 
   User, Mail, Phone, GraduationCap, 
   Briefcase, Plus, Trash2, Award, Languages, Link as LinkIcon, 
-  Target, CheckCircle2, Sparkles, X, Globe, Save, ArrowLeft
+  Target, CheckCircle2, Sparkles, X, Globe, Save
 } from 'lucide-react';
 
 const Profile = ({ userData = {}, cvFile = null }) => {
@@ -133,7 +133,8 @@ const Profile = ({ userData = {}, cvFile = null }) => {
       email: profileData.email,
       phone: profileData.phone,
       // የቆየውን role መያዝ ወይም ከሌለ 'job_seeker' መስጠት
-      role: currentUser.role || currentUser.userType || 'job_seeker'
+      role: currentUser.role || currentUser.userType || 'job_seeker',
+      onboardingProfileCompleted: true
     };
 
     localStorage.setItem('user', JSON.stringify(updatedUser));
@@ -150,36 +151,22 @@ const Profile = ({ userData = {}, cvFile = null }) => {
       if (!response.ok) return;
     }
 
-    // 3. በቀጥታ ወደ Seeker Dashboard መራት
+    // Return applicants to the original job so the updated Apply state is visible.
     const pending = getPendingApplication();
-    navigate(pending?.jobId ? getNextApplicationStep(pending.jobId) : '/seeker-dashboard');
-  };
-
-  // 2. Back button ሲጫኑ User state-ኡን ጠብቆ የሚመልስ Handler
-  const handleBackToDashboard = () => {
-    const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
-    if (!currentUser.role) {
-      currentUser.role = 'job_seeker';
-      localStorage.setItem('user', JSON.stringify(currentUser));
+    if (pending?.jobId) {
+      navigate(pending.returnPath || `/job-details/${encodeURIComponent(pending.jobId)}`, {
+        state: { job: pending.selectedJob || undefined },
+        replace: true,
+      });
+    } else {
+      navigate('/dashboard');
     }
-    navigate('/seeker-dashboard');
   };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300 max-w-4xl mx-auto p-4 pb-10">
       
-      {/* Navigation Top Bar with Link */}
       <div className="flex items-center justify-between">
-        
-        {/* ወደ Dashboard የመመለሻ አዝራር */}
-        <button
-          type="button"
-          onClick={handleBackToDashboard}
-          className="flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-white px-3.5 py-2 rounded-xl border border-slate-200 shadow-sm cursor-pointer"
-        >
-          <ArrowLeft className="w-4 h-4" /> Back to Dashboard
-        </button>
-
         {/* Save Profile Button */}
         <button
           type="button"

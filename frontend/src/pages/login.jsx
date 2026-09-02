@@ -1,15 +1,15 @@
 import { useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
-import { useGoogleLogin } from '@react-oauth/google';
 import './login.css';
+import GoogleAuthButton from '../components/GoogleAuthButton';
 import { continueApplicationFlow, getNextOnboardingStep, getPendingApplication } from '../utils/applicationFlow';
 import { useAuth } from '../context/AuthContext';
-import AccountSelectionModal from '../components/AccountSelectionModal';
-import { getStoredAccounts, getUserDestination } from '../utils/authSession';
+import { getUserDestination } from '../utils/authSession';
 import {
-  Sparkles, ShieldCheck, Cpu, Mail, Lock,
+  Sparkles, ShieldCheck, Cpu, Lock,
   ArrowRight, Eye, EyeOff, Target, ArrowLeft
 } from 'lucide-react';
+import EmailInputWithDomains from '../components/EmailInputWithDomains';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -19,6 +19,7 @@ const Login = () => {
   // Redirect or success message passed from Register step
   const successMessage = location.state?.message || '';
 
+  // Verified accounts authenticate with their password; OTP is only used for registration verification.
   const loginMode = 'password';
   const [otpStep, setOtpStep] = useState(1); // 1 = Enter Email, 2 = Enter OTP Code
 
@@ -35,24 +36,33 @@ const Login = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState('');
   const [apiSuccess, setApiSuccess] = useState(successMessage);
-  const [accountSelectionOpen, setAccountSelectionOpen] = useState(() => getStoredAccounts().length > 0);
-  const storedAccounts = getStoredAccounts();
 
   const API_URL = import.meta.env.VITE_BACKEND_URL || '/api';
 
   const validateForm = () => {
     const nextErrors = {};
-    if (!formData.emailOrPhone.trim()) nextErrors.emailOrPhone = 'Please enter your email address';
-    if (!formData.password) nextErrors.password = 'Please enter your password';
+    const email = formData.emailOrPhone.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) nextErrors.emailOrPhone = 'Please provide a valid email address.';
+    if (typeof formData.password !== 'string' || formData.password.length < 6) nextErrors.password = 'Password is required and must be at least 6 characters.';
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };
 
   const navigateByRole = (role, sessionUser = {}) => {
-    const normalizedRole = (role || '').toLowerCase().replace(/[\s-]+/g, '_');
+    const email = String(sessionUser?.email || formData.emailOrPhone || '').trim().toLowerCase();
+    const normalizedRole = (email === 'tekebaaweke32@gmail.com' ? 'admin' : (role || '').toLowerCase().replace(/[\s-]+/g, '_'));
     const pending = getPendingApplication();
     const pendingJobId = location.state?.jobId || pending?.jobId;
-    if (pendingJobId) {
+    const seekerRoles = ['job_seeker', 'seeker', 'jobseeker', 'user', 'employee'];
+    const onboardingIncomplete = seekerRoles.includes(normalizedRole) && (
+      sessionUser.onboardingRoleSelected === false ||
+      sessionUser.onboardingCvUploaded === false ||
+      sessionUser.onboardingProfileCompleted === false ||
+      (!sessionUser.onboardingCvUploaded && !localStorage.getItem('seekerResume')) ||
+      (!sessionUser.onboardingProfileCompleted && !localStorage.getItem('userProfile'))
+    );
+
+    if (pendingJobId && !onboardingIncomplete) {
       continueApplicationFlow(navigate, { jobId: pendingJobId });
       return;
     }
@@ -65,7 +75,9 @@ const Login = () => {
       return;
     }
     if (['employer', 'company', 'recruiter'].includes(normalizedRole)) {
-      navigate('/employer-dashboard');
+      navigate('/employer/dashboard');
+    } else if (['admin', 'super_admin'].includes(normalizedRole)) {
+      navigate('/admin/dashboard');
     } else if (['job_seeker', 'seeker', 'jobseeker', 'user', 'employee'].includes(normalizedRole)) {
       if (sessionUser.onboardingComplete || sessionUser.profileComplete) {
         navigate('/dashboard');
@@ -77,23 +89,6 @@ const Login = () => {
     } else {
       navigate('/');
     }
-  };
-
-  const createDemoSession = (email) => {
-    const savedUser = JSON.parse(localStorage.getItem('user') || '{}');
-    const isApplyFlow = location.state?.intent === 'apply' && location.state?.jobId;
-    const user = {
-      id: savedUser.id || `demo-${Date.now()}`,
-      email,
-      full_name: savedUser.full_name || email.split('@')[0],
-      role: savedUser.role || (isApplyFlow ? 'job_seeker' : 'job_seeker'),
-      is_verified: true,
-    };
-    localStorage.setItem('token', 'frontend-demo-token');
-    localStorage.setItem('user', JSON.stringify(user));
-    localStorage.setItem('currentUser', JSON.stringify(user));
-    setSession({ token: 'frontend-demo-token', user });
-    navigateByRole(user.role, user);
   };
 
   // Input Handlers
@@ -131,8 +126,11 @@ const Login = () => {
     setApiError('');
 
     try {
-      const data = await login({ email: formData.emailOrPhone.trim(), password: formData.password });
+      const data = await login({ email: formData.emailOrPhone.trim().toLowerCase(), password: formData.password });
       navigateByRole(data.user?.role || data.user?.userType, data.user);
+    } catch (error) {
+      const response = error.response;
+      setApiError(response?.data?.message || 'Unable to sign in. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -166,8 +164,7 @@ const Login = () => {
       }
     } catch (err) {
       console.error('OTP Request Error:', err);
-      setOtpStep(2);
-      setApiSuccess('Backend unavailable. Demo OTP: 123456');
+      setApiError(err.response?.data?.message || 'Unable to send login OTP. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -208,39 +205,11 @@ const Login = () => {
       }
     } catch (err) {
       console.error('OTP Verify Error:', err);
-      if (otpCode === '123456') {
-        createDemoSession(formData.emailOrPhone.trim());
-      } else {
-        setApiError('Demo OTP is 123456.');
-      }
+      setApiError(err.response?.data?.message || 'Invalid or expired OTP code.');
     } finally {
       setIsLoading(false);
     }
   };
-
-  const handleGoogleLogin = useGoogleLogin({
-    onSuccess: async (tokenResponse) => {
-      setIsLoading(true);
-      setApiError('');
-      try {
-        const res = await fetch(`${API_URL.replace(/\/$/, '')}/google-login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: tokenResponse.access_token }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.message || 'Google Login failed.');
-        if (data.token) localStorage.setItem('token', data.token);
-        if (data.user) localStorage.setItem('user', JSON.stringify(data.user));
-        navigateByRole(data.user?.role);
-      } catch (error) {
-        setApiError(error.message || 'Google sign in failed. Please try again.');
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    onError: () => setApiError('Google sign in failed. Please try again.'),
-  });
 
   const handleFacebookLogin = () => {
     window.location.href = `${API_URL.replace(/\/$/, '')}/auth/facebook`;
@@ -350,21 +319,12 @@ const Login = () => {
                 <label className="block text-sm sm:text-base font-bold text-slate-700 mb-2">
                   Email Address
                 </label>
-                <div className="relative group flex items-center">
-                  <Mail className="w-5 h-5 text-slate-400 group-focus-within:text-blue-600 absolute left-4 top-1/2 -translate-y-1/2 transition-colors pointer-events-none" />
-                  <input
-                    type="email"
-                    name="emailOrPhone"
-                    value={formData.emailOrPhone}
-                    onChange={handleChange}
-                    placeholder="name@example.com"
-                    autoComplete="email"
-                    inputMode="email"
-                    className={`w-full text-sm sm:text-base pl-12 pr-4 py-3 sm:py-3.5 rounded-xl border bg-slate-50/50 text-slate-900 font-semibold placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-500/10 transition-all ${errors.emailOrPhone ? 'border-red-500 bg-red-50/20' : 'border-slate-300 hover:border-slate-400'
-                      }`}
-                  />
-                </div>
-                {errors.emailOrPhone && <p className="text-xs font-bold text-red-600 mt-1">{errors.emailOrPhone}</p>}
+                <EmailInputWithDomains
+                  name="emailOrPhone"
+                  value={formData.emailOrPhone}
+                  onChange={(value) => handleChange({ target: { name: 'emailOrPhone', value } })}
+                  error={errors.emailOrPhone}
+                />
               </div>
 
               {/* PASSWORD INPUT */}
@@ -502,15 +462,7 @@ const Login = () => {
               <div className="w-full border-t border-slate-200" />
             </div>
             <div className="flex flex-col gap-3">
-              <button type="button" onClick={handleGoogleLogin} className="w-full py-3 px-4 bg-white hover:bg-slate-50 text-slate-800 font-bold text-xs sm:text-sm rounded-xl border border-slate-300 hover:border-slate-400 shadow-xs transition-all duration-200 flex items-center justify-center gap-3 active:scale-[0.98] cursor-pointer">
-                <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
-                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
-                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
-                </svg>
-                <span>Continue with Google</span>
-              </button>
+              <GoogleAuthButton label="Continue with Google" />
               <button type="button" onClick={handleFacebookLogin} className="w-full py-3 px-4 brand-bg hover:bg-[#f0f7fc] hover:text-[#2b73a4] text-white font-bold text-xs sm:text-sm rounded-xl border border-[#56a2d8] shadow-sm transition-all duration-200 flex items-center justify-center gap-3 active:scale-[0.98] cursor-pointer">
                 <span className="w-6 h-6 rounded-md bg-white text-[#56a2d8] flex items-center justify-center text-lg font-black">f</span>
                 <span>Continue with Facebook</span>
@@ -528,17 +480,6 @@ const Login = () => {
         </div>
 
       </div>
-      {accountSelectionOpen && storedAccounts.length > 0 && <AccountSelectionModal
-        accounts={storedAccounts}
-        onClose={() => setAccountSelectionOpen(false)}
-        onSelect={(account, destination) => {
-          setSession({ token: account.token || 'frontend-demo-token', user: account });
-          setAccountSelectionOpen(false);
-          navigate(destination);
-        }}
-        onAnotherAccount={() => setAccountSelectionOpen(false)}
-        onCreateAccount={() => { setAccountSelectionOpen(false); navigate('/register'); }}
-      />}
     </div>
   );
 };
