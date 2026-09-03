@@ -215,6 +215,14 @@ select:focus-visible {
     transform: translateY(0);
   }
 
+  .card-floating {
+    @apply rounded-[26px] border border-slate-200/90 bg-white p-8 shadow-[0_16px_36px_-10px_rgba(0,0,0,0.12),0_6px_16px_-4px_rgba(0,0,0,0.06)] transition-all duration-300 ease-out;
+  }
+
+  .card-floating:hover {
+    @apply -translate-y-3 cursor-pointer border-emerald-500/40 shadow-[0_26px_50px_-12px_rgba(0,0,0,0.18),0_8px_20px_-6px_rgba(0,0,0,0.08)];
+  }
+
   .dashboard-action-button {
     background-color: var(--brand-primary) !important;
     transition: background-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;

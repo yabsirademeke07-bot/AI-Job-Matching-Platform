@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 
 // የፎቶ Path — use local asset fallback in project
-import heroBannerImg from '../assets/hero.png';
+import siteLogo from '../pages/images/logo1.png';
 import { useAuth } from '../context/AuthContext';
 import LogoutFlowModals from './LogoutFlowModals';
 
@@ -42,21 +42,13 @@ export default function Navbar() {
       <div className="w-full px-4 sm:px-6 lg:px-8 h-20 sm:h-24 flex items-center justify-between gap-4">
 
         {/* BRAND LOGO - ሙሉ በሙሉ ወደ ግራ */}
-        <Link to="/" className="flex items-center gap-2.5 sm:gap-3.5 group shrink-0">
-          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl overflow-hidden shadow-md shadow-blue-500/10 group-hover:scale-105 transition-transform duration-200 border border-slate-100">
+        <Link to="/" className="flex items-center gap-2.5 group shrink-0">
+          <div className="h-10 w-10 overflow-hidden rounded-full border border-slate-200 bg-slate-950 shadow-md shadow-blue-500/10 transition-transform duration-200 group-hover:scale-[1.02] sm:h-12 sm:w-12">
             <img
-              src={heroBannerImg}
-              alt="Job Matching Logo"
-              className="w-full h-full object-cover"
+              src={siteLogo}
+              alt="AI Job Match"
+              className="h-full w-full object-contain object-center"
             />
-          </div>
-          <div className="flex flex-col">
-            <span className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 group-hover:text-blue-600 transition-colors lowercase leading-none">
-              job <span className="text-blue-600">matching</span>
-            </span>
-            <span className="text-[10px] sm:text-xs font-extrabold text-slate-400 tracking-wider uppercase mt-0.5 sm:mt-1">
-              AI Platform
-            </span>
           </div>
         </Link>
 

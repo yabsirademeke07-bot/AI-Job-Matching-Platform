@@ -1,15 +1,15 @@
- import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useRef, useState } from 'react';
-import homeImg from '../../pages/images/home.jpg';
+import peopleImg from '../../pages/images/peoples.jpg';
 
 export default function HeroSection() {
   const navigate = useNavigate();
   const headlineRef = useRef(null);
   const [hoveredLine, setHoveredLine] = useState(null);
 
-  // 🎯 Navigation Handlers
+  //  Navigation Handlers
   const handleStartNow = () => {
     navigate('/register');
   };
@@ -24,7 +24,7 @@ export default function HeroSection() {
       {/* BACKGROUND LAYER - Hero Image (lowest z-index) */}
       <div className="absolute inset-0 z-0 w-full h-full">
         <img
-          src={homeImg}
+          src={peopleImg}
           alt="Hero Background"
           className="w-full h-full object-cover object-center pointer-events-none select-none"
         />
@@ -85,8 +85,7 @@ export default function HeroSection() {
               </motion.div>
             </h1>
           </div>
-
-          {/* Clean, Readable Subtitle (Pure High-Contrast White) */}
+ {/* Clean, Readable Subtitle (Pure High-Contrast White) */}
           <p className="text-sm sm:text-base lg:text-lg text-slate-100 font-semibold max-w-2xl mx-auto leading-relaxed drop-shadow-[0_1px_4px_rgba(0,0,0,0.8)]">
             Connect with top verified employers across Ethiopia. Upload your CV and let AI instantly match and score opportunities tailored to your career.
           </p>
