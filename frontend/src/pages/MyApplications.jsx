@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getMockApplications } from "../utils/interviewFlow";
-import BackToDashboard from "../components/BackToDashboard";
 
 const tabs = [
   "All",
@@ -119,7 +118,6 @@ export default function MyApplications() {
               <h1 className="text-3xl font-black text-slate-900">My Applications</h1>
               <p className="mt-2 text-sm text-slate-500">Track and manage your job applications in one place.</p>
             </div>
-            <BackToDashboard />
           </div>
         </header>
 
@@ -191,7 +189,7 @@ export default function MyApplications() {
                 onClick={() => navigate("/explore-jobs")}
                 className="mt-5 rounded-xl bg-[var(--brand-primary)] px-5 py-3 text-sm font-bold text-white hover:bg-[var(--brand-primary-hover)]"
               >
-                Explore Jobs
+                Find Jobs
               </button>
             </div>
           )}

@@ -6,6 +6,23 @@ import {
   Target, CheckCircle2, Sparkles, X, Globe, Save, Check, ArrowRight
 } from 'lucide-react';
 import { getApplicationJobId } from '../utils/applicationFlow';
+import skyscraperImage from '../pages/images/image.png';
+
+const countryOptions = ['Ethiopia', 'Kenya', 'Rwanda', 'Tanzania', 'Uganda', 'South Africa', 'United States', 'United Kingdom', 'Canada', 'Other'];
+const cityOptionsByCountry = {
+  Ethiopia: ['Addis Ababa', 'Bahir Dar', 'Hawassa', 'Mekelle', 'Dire Dawa', 'Adama', 'Gondar', 'Jimma', 'Dessie', 'Jijiga'],
+  Kenya: ['Nairobi', 'Mombasa', 'Kisumu', 'Nakuru'],
+  Rwanda: ['Kigali', 'Butare', 'Gisenyi'],
+  Tanzania: ['Dar es Salaam', 'Arusha', 'Mwanza', 'Dodoma'],
+  Uganda: ['Kampala', 'Entebbe', 'Jinja', 'Mbarara'],
+  'South Africa': ['Johannesburg', 'Cape Town', 'Durban', 'Pretoria'],
+  'United States': ['New York', 'Los Angeles', 'Chicago', 'Washington, D.C.'],
+  'United Kingdom': ['London', 'Manchester', 'Birmingham', 'Liverpool'],
+  Canada: ['Toronto', 'Vancouver', 'Montreal', 'Ottawa'],
+  Other: ['Other'],
+};
+const fieldClass = 'h-12 w-full rounded-xl border-[1.5px] border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 placeholder:text-slate-400 outline-none transition-all focus:border-blue-600 focus:ring-4 focus:ring-blue-500/15';
+const labelClass = 'mb-2 block text-sm font-bold text-slate-800';
 
 const Profile = ({ userData = {}, cvFile = null }) => {
   const navigate = useNavigate();
@@ -52,7 +69,7 @@ const Profile = ({ userData = {}, cvFile = null }) => {
     phone: savedProfile?.phone || savedUser?.phone || '',
     dob: savedProfile?.dob || '',
     gender: savedProfile?.gender || '',
-    country: savedProfile?.country || '',
+    country: savedProfile?.country || 'Ethiopia',
     city: savedProfile?.city || '',
     github: savedProfile?.github || '',
     linkedin: savedProfile?.linkedin || '',
@@ -142,7 +159,7 @@ const Profile = ({ userData = {}, cvFile = null }) => {
   };
 
   // Profile Save Handler
-  const handleSaveProfile = (redirect = false) => {
+  const handleSaveProfile = async (redirect = false) => {
     const fullProfile = {
       ...profileData,
       education: educationList,
@@ -153,105 +170,112 @@ const Profile = ({ userData = {}, cvFile = null }) => {
     };
     
     localStorage.setItem('userProfile', JSON.stringify(fullProfile));
+    const token = localStorage.getItem('token');
+    if (token) {
+      const response = await fetch('/api/seeker/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(fullProfile),
+      });
+      if (!response.ok) return;
+    }
+    const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+    localStorage.setItem('user', JSON.stringify({
+      ...currentUser,
+      onboardingProfileCompleted: completionPercentage >= 80,
+      profileComplete: completionPercentage >= 80,
+    }));
     setIsSaved(true);
 
     setTimeout(() => {
       setIsSaved(false);
-      if (redirect) navigate(location.state?.onboarding ? '/dashboard' : applicationJobId ? `/job-details/${applicationJobId}` : '/seeker-dashboard');
+      if (redirect) navigate(location.state?.onboarding ? '/seeker/dashboard' : applicationJobId ? `/job-details/${applicationJobId}` : '/seeker/dashboard');
     }, 600);
   };
 
   return (
-    <div className="information-page profile-readable space-y-7 animate-in fade-in duration-300 max-w-5xl mx-auto p-4 pb-12 sm:p-6">
+    <div className="min-h-screen bg-[#eef5f9] text-slate-900 lg:flex lg:h-screen lg:overflow-hidden">
+      <section className="relative flex min-h-[360px] w-full items-end overflow-hidden bg-slate-950 lg:h-screen lg:w-1/2 lg:items-end">
+        <img src={skyscraperImage} alt="Modern skyscrapers" className="absolute inset-0 h-full w-full object-cover object-center" />
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/95 via-blue-950/45 to-transparent" />
+        <div className="relative z-10 w-full p-7 sm:p-10 lg:p-12">
+          <div className="mb-10 flex items-center gap-3 text-white">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/25 bg-white/15 backdrop-blur-md"><Sparkles className="h-5 w-5" /></div>
+            <div><p className="text-lg font-black tracking-tight">SmartRecruit AI</p><p className="text-xs font-medium text-blue-100/75">Build the profile your next opportunity can find.</p></div>
+          </div>
+          <div className="max-w-lg">
+            <p className="mb-3 text-xs font-black uppercase tracking-[0.28em] text-cyan-200">Your career, intelligently matched</p>
+            <h1 className="text-4xl font-black leading-[1.05] tracking-tight text-white sm:text-5xl">AI-driven career matching.</h1>
+            <p className="mt-5 max-w-md text-sm leading-7 text-slate-200 sm:text-base">A complete profile gives our matching engine the signal it needs to connect you with work that fits.</p>
+          </div>
+          <div className="mt-8 max-w-md rounded-3xl border border-white/20 bg-white/10 p-5 shadow-2xl backdrop-blur-xl">
+            <div className="flex items-start gap-4"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-cyan-300/20 text-cyan-100"><Target className="h-5 w-5" /></div><div><p className="text-sm font-black text-white">AI-Driven Career Matching</p><p className="mt-1 text-xs leading-5 text-blue-100/80">Skills, experience, education, and goals come together in one professional profile.</p></div></div>
+            <div className="mt-5 flex items-center gap-3 border-t border-white/15 pt-4 text-xs font-bold text-blue-100"><CheckCircle2 className="h-4 w-4 text-emerald-300" />Your profile powers better recommendations</div>
+          </div>
+        </div>
+      </section>
+
+      <section className="h-auto w-full overflow-y-auto bg-[#f8fbfd] lg:h-screen lg:w-1/2">
+      <div className="information-page profile-readable mx-auto max-w-4xl space-y-7 p-5 pb-12 sm:p-8 lg:p-12">
       
-      {/* 1. Header Bar (Back button ተወግዶ Save Button ብቻ ወደ ቀኝ ተደርጓል) */}
-      <div className="flex items-center justify-between">
+      <header className="flex flex-wrap items-start justify-between gap-5 border-b border-slate-200 pb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Job Seeker Profile</h1>
-          <p className="text-base text-slate-500">Manage your profile details and preferences</p>
+          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-black text-blue-700"><Sparkles className="h-4 w-4" /> Step 4 of 4 • Smart Profile Builder</div>
+          <h1 className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">የግል መረጃዎን ያሟሉ <span className="text-blue-700">(Personal Profile Setup)</span></h1>
+          <p className="mt-2 text-sm text-slate-600">Complete your information to activate AI-matched job recommendations.</p>
         </div>
-
-        <button
-          type="button"
-          onClick={() => handleSaveProfile(false)}
-          className={`flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold text-white shadow-md transition cursor-pointer ${
-            isSaved ? 'bg-emerald-600' : 'bg-blue-600 hover:bg-blue-700'
-          }`}
-        >
-          {isSaved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
-          {isSaved ? 'Saved!' : 'Save Profile'}
+        <button type="button" onClick={() => handleSaveProfile(false)} className={`flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-bold text-white shadow-md transition ${isSaved ? 'bg-emerald-600' : 'bg-blue-600 hover:bg-blue-700'}`}>
+          {isSaved ? <Check className="h-4 w-4" /> : <Save className="h-4 w-4" />}{isSaved ? 'Saved!' : 'Save Profile'}
         </button>
-      </div>
+      </header>
 
-      {/* Profile Progress Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm space-y-2">
-        <div className="flex items-center justify-between text-sm font-semibold">
-          <span className="text-slate-700 flex items-center gap-1.5">
-            <Sparkles className="w-4 h-4 text-blue-600" /> Profile Completion
-          </span>
-          <span className="text-blue-600 font-bold">{completionPercentage}%</span>
-        </div>
-        <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
-          <div 
-            className="bg-gradient-to-r from-blue-600 to-indigo-600 h-full rounded-full transition-all duration-500"
-            style={{ width: `${completionPercentage}%` }}
-          />
-        </div>
-      </div>
-
-      {/* Header Badge */}
-      <div className="text-center mb-4">
-        <div className="w-12 h-12 rounded-full bg-emerald-500/10 text-emerald-600 flex items-center justify-center mx-auto mb-2 border border-emerald-500/20 shadow-sm">
-          <CheckCircle2 className="w-6 h-6" />
-        </div>
-        <h2 className="text-2xl font-bold text-slate-900">User Profile Setup</h2>
-        <p className="text-base text-slate-500">
-          Complete your information to get AI-matched job recommendations.
-        </p>
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="mb-2 flex items-center justify-between text-sm font-bold text-slate-800"><span className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-blue-600" /> Profile Completion</span><span className="text-blue-700">{completionPercentage}%</span></div>
+        <div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-600 transition-all duration-500" style={{ width: `${completionPercentage}%` }} /></div>
       </div>
 
       {/* Personal Information */}
-      <div className="bg-slate-50/90 rounded-2xl border border-slate-200/80 p-6 space-y-5 shadow-sm">
+      <div className="rounded-2xl border border-slate-300 bg-white p-6 space-y-5 shadow-sm">
         <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 border-b pb-3 border-slate-200">
           <User className="w-4 h-4 text-blue-600" /> Personal Information
         </h3>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-sm">
           <div>
-            <label className="block text-slate-600 mb-1 font-medium">First Name</label>
+            <label className={labelClass}>First Name <span className="ml-1 font-bold text-rose-500">*</span></label>
             <input 
               type="text" 
               placeholder="Your first name"
               value={profileData.firstName} 
               onChange={(e) => setProfileData({ ...profileData, firstName: e.target.value })}
-              className="w-full p-2.5 rounded-xl border border-slate-200 bg-white font-semibold text-slate-800 outline-none focus:border-blue-500"
+              className={fieldClass}
             />
           </div>
 
           <div>
-            <label className="block text-slate-600 mb-1 font-medium">Last Name</label>
+            <label className={labelClass}>Last Name <span className="ml-1 font-bold text-rose-500">*</span></label>
             <input 
               type="text" 
               placeholder="Your last name"
               value={profileData.lastName} 
               onChange={(e) => setProfileData({ ...profileData, lastName: e.target.value })}
-              className="w-full p-2.5 rounded-xl border border-slate-200 bg-white font-semibold text-slate-800 outline-none focus:border-blue-500"
+              className={fieldClass}
             />
           </div>
 
           <div>
-            <label className="block text-slate-600 mb-1 font-medium">Email</label>
+            <label className={labelClass}>Email <span className="ml-1 font-bold text-rose-500">*</span></label>
             <input 
               type="email" 
               placeholder="you@example.com"
               value={profileData.email} 
               onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
-              className="w-full p-2.5 rounded-xl border border-slate-200 bg-white font-semibold text-slate-800 outline-none focus:border-blue-500"
+              className={fieldClass}
             />
           </div>
 
           <div>
-            <label className="block text-slate-600 mb-1 font-medium">Phone Number</label>
+            <label className={labelClass}>Phone Number <span className="ml-1 font-bold text-rose-500">*</span></label>
             <div className="relative flex items-center">
               <Phone className="w-4 h-4 text-slate-400 absolute left-3" />
               <input 
@@ -259,27 +283,27 @@ const Profile = ({ userData = {}, cvFile = null }) => {
                 placeholder="+251 9XX XXX XXX"
                 value={profileData.phone} 
                 onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
-                className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:border-blue-500"
+                className={`${fieldClass} pl-10 pr-3`}
               />
             </div>
           </div>
 
           <div className="hidden">
-            <label className="block text-slate-600 mb-1 font-medium">Date of Birth (Optional)</label>
+            <label className={labelClass}>Date of Birth (Optional)</label>
             <input 
               type="date" 
               value={profileData.dob} 
               onChange={(e) => setProfileData({ ...profileData, dob: e.target.value })}
-              className="w-full p-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:border-blue-500"
+              className={fieldClass}
             />
           </div>
 
           <div className="hidden">
-            <label className="block text-slate-600 mb-1 font-medium">Gender (Optional)</label>
+            <label className={labelClass}>Gender (Optional)</label>
             <select 
               value={profileData.gender} 
               onChange={(e) => setProfileData({ ...profileData, gender: e.target.value })}
-              className="w-full p-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:border-blue-500"
+              className={fieldClass}
             >
               <option value="" disabled>Select gender</option>
               <option value="Male">Male</option>
@@ -290,24 +314,25 @@ const Profile = ({ userData = {}, cvFile = null }) => {
 
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="block text-slate-600 mb-1 font-medium">Country</label>
-              <input 
-                type="text" 
-                placeholder="Country"
-                value={profileData.country} 
-                onChange={(e) => setProfileData({ ...profileData, country: e.target.value })}
-                className="w-full p-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:border-blue-500"
-              />
+              <label className={labelClass}>Country <span className="ml-1 font-bold text-rose-500">*</span></label>
+              <select
+                value={profileData.country}
+                onChange={(e) => setProfileData({ ...profileData, country: e.target.value, city: '' })}
+                className={fieldClass}
+              >
+                {countryOptions.map((country) => <option key={country} value={country}>{country}</option>)}
+              </select>
             </div>
             <div>
-              <label className="block text-slate-600 mb-1 font-medium">City</label>
-              <input 
-                type="text" 
-                placeholder="City"
-                value={profileData.city} 
+              <label className={labelClass}>City <span className="ml-1 font-bold text-rose-500">*</span></label>
+              <select
+                value={profileData.city}
                 onChange={(e) => setProfileData({ ...profileData, city: e.target.value })}
-                className="w-full p-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:border-blue-500"
-              />
+                className={fieldClass}
+              >
+                <option value="">Select city</option>
+                {(cityOptionsByCountry[profileData.country] || ['Other']).map((city) => <option key={city} value={city}>{city}</option>)}
+              </select>
             </div>
           </div>
         </div>
@@ -329,7 +354,7 @@ const Profile = ({ userData = {}, cvFile = null }) => {
         </div>
 
         {educationList.map((edu) => (
-          <div key={edu.id} className="p-3.5 bg-white rounded-xl border border-slate-200 relative space-y-3">
+          <div key={edu.id} className="relative space-y-3 rounded-xl border border-slate-300 bg-white p-4">
             {educationList.length > 1 && (
               <button 
                 type="button" 
@@ -339,34 +364,34 @@ const Profile = ({ userData = {}, cvFile = null }) => {
                 <Trash2 className="w-4 h-4" />
               </button>
             )}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+            <div className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
               <input 
                 type="text" 
                 placeholder="University / Institution" 
                 value={edu.university} 
                 onChange={(e) => handleEducationChange(edu.id, 'university', e.target.value)}
-                className="p-2 rounded-lg border border-slate-200 outline-none focus:border-blue-500" 
+                className={fieldClass}
               />
               <input 
                 type="text" 
                 placeholder="Degree / Qualification" 
                 value={edu.degree} 
                 onChange={(e) => handleEducationChange(edu.id, 'degree', e.target.value)}
-                className="p-2 rounded-lg border border-slate-200 outline-none focus:border-blue-500" 
+                className={fieldClass}
               />
               <input 
                 type="text" 
                 placeholder="Department / Field of Study" 
                 value={edu.department} 
                 onChange={(e) => handleEducationChange(edu.id, 'department', e.target.value)}
-                className="p-2 rounded-lg border border-slate-200 outline-none focus:border-blue-500" 
+                className={fieldClass}
               />
               <input 
                 type="text" 
                 placeholder="Graduation Year" 
                 value={edu.graduationYear} 
                 onChange={(e) => handleEducationChange(edu.id, 'graduationYear', e.target.value)}
-                className="p-2 rounded-lg border border-slate-200 outline-none focus:border-blue-500" 
+                className={fieldClass}
               />
             </div>
           </div>
@@ -389,7 +414,7 @@ const Profile = ({ userData = {}, cvFile = null }) => {
         </div>
 
         {experienceList.map((exp) => (
-          <div key={exp.id} className="p-3.5 bg-white rounded-xl border border-slate-200 relative space-y-3">
+          <div key={exp.id} className="relative space-y-3 rounded-xl border border-slate-300 bg-white p-4">
             {experienceList.length > 1 && (
               <button 
                 type="button" 
@@ -399,33 +424,33 @@ const Profile = ({ userData = {}, cvFile = null }) => {
                 <Trash2 className="w-4 h-4" />
               </button>
             )}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+            <div className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
               <input 
                 type="text" 
                 placeholder="Company Name" 
                 value={exp.company} 
                 onChange={(e) => handleExperienceChange(exp.id, 'company', e.target.value)}
-                className="p-2 rounded-lg border border-slate-200 outline-none focus:border-blue-500" 
+                className={fieldClass}
               />
               <input 
                 type="text" 
                 placeholder="Position / Title" 
                 value={exp.position} 
                 onChange={(e) => handleExperienceChange(exp.id, 'position', e.target.value)}
-                className="p-2 rounded-lg border border-slate-200 outline-none focus:border-blue-500" 
+                className={fieldClass}
               />
               <input 
                 type="month" 
                 value={exp.startDate} 
                 onChange={(e) => handleExperienceChange(exp.id, 'startDate', e.target.value)}
-                className="p-2 rounded-lg border border-slate-200 outline-none focus:border-blue-500" 
+                className={fieldClass}
               />
               <input 
                 type="text" 
                 placeholder="End Date (or Present)" 
                 value={exp.endDate} 
                 onChange={(e) => handleExperienceChange(exp.id, 'endDate', e.target.value)}
-                className="p-2 rounded-lg border border-slate-200 outline-none focus:border-blue-500" 
+                className={fieldClass}
               />
             </div>
             <textarea 
@@ -433,7 +458,7 @@ const Profile = ({ userData = {}, cvFile = null }) => {
               placeholder="Key responsibilities and achievements..." 
               value={exp.responsibilities} 
               onChange={(e) => handleExperienceChange(exp.id, 'responsibilities', e.target.value)}
-              className="w-full p-2 text-xs rounded-lg border border-slate-200 outline-none focus:border-blue-500"
+              className={`${fieldClass} h-auto min-h-24`}
             />
           </div>
         ))}
@@ -463,7 +488,7 @@ const Profile = ({ userData = {}, cvFile = null }) => {
             value={newSkill} 
             onChange={(e) => setNewSkill(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddSkill())}
-            className="text-xs p-2.5 rounded-xl border border-slate-200 flex-1 bg-white outline-none focus:border-blue-500"
+            className={`${fieldClass} flex-1`}
           />
           <button 
             type="button" 
@@ -499,7 +524,7 @@ const Profile = ({ userData = {}, cvFile = null }) => {
             value={newLang} 
             onChange={(e) => setNewLang(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddLanguage())}
-            className="text-xs p-2.5 rounded-xl border border-slate-200 flex-1 bg-white outline-none focus:border-purple-500"
+            className={`${fieldClass} flex-1`}
           />
           <button 
             type="button" 
@@ -525,7 +550,7 @@ const Profile = ({ userData = {}, cvFile = null }) => {
               placeholder="GitHub Profile" 
               value={profileData.github} 
               onChange={(e) => setProfileData({ ...profileData, github: e.target.value })}
-              className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:border-blue-500"
+              className={`${fieldClass} pl-10 pr-3`}
             />
           </div>
 
@@ -536,7 +561,7 @@ const Profile = ({ userData = {}, cvFile = null }) => {
               placeholder="LinkedIn Profile" 
               value={profileData.linkedin} 
               onChange={(e) => setProfileData({ ...profileData, linkedin: e.target.value })}
-              className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:border-blue-500"
+              className={`${fieldClass} pl-10 pr-3`}
             />
           </div>
 
@@ -547,7 +572,7 @@ const Profile = ({ userData = {}, cvFile = null }) => {
               placeholder="Portfolio Website" 
               value={profileData.portfolio} 
               onChange={(e) => setProfileData({ ...profileData, portfolio: e.target.value })}
-              className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:border-blue-500"
+              className={`${fieldClass} pl-10 pr-3`}
             />
           </div>
         </div>
@@ -561,33 +586,33 @@ const Profile = ({ userData = {}, cvFile = null }) => {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
           <div>
-            <label className="block text-slate-600 mb-1 font-medium">Desired Position</label>
+            <label className={labelClass}>Desired Position</label>
             <input 
               type="text" 
               placeholder="e.g. Frontend Developer"
               value={profileData.preferredJob} 
               onChange={(e) => setProfileData({ ...profileData, preferredJob: e.target.value })}
-              className="w-full p-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:border-blue-500"
+              className={fieldClass}
             />
           </div>
 
           <div>
-            <label className="block text-slate-600 mb-1 font-medium">Job Category</label>
+            <label className={labelClass}>Job Category</label>
             <input 
               type="text" 
               placeholder="e.g. Software Engineering"
               value={profileData.jobCategory} 
               onChange={(e) => setProfileData({ ...profileData, jobCategory: e.target.value })}
-              className="w-full p-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:border-blue-500"
+              className={fieldClass}
             />
           </div>
 
           <div>
-            <label className="block text-slate-600 mb-1 font-medium">Employment Type</label>
+            <label className={labelClass}>Employment Type</label>
             <select 
               value={profileData.employmentType} 
               onChange={(e) => setProfileData({ ...profileData, employmentType: e.target.value })}
-              className="w-full p-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:border-blue-500"
+              className={fieldClass}
             >
               <option value="" disabled>Select employment type</option>
               <option value="Full-Time">Full-Time</option>
@@ -598,33 +623,33 @@ const Profile = ({ userData = {}, cvFile = null }) => {
           </div>
 
           <div>
-            <label className="block text-slate-600 mb-1 font-medium">Salary Expectation</label>
+            <label className={labelClass}>Salary Expectation</label>
             <input 
               type="text" 
               placeholder="e.g. 25,000 ETB / month"
               value={profileData.salaryExpectation} 
               onChange={(e) => setProfileData({ ...profileData, salaryExpectation: e.target.value })}
-              className="w-full p-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:border-blue-500"
+              className={fieldClass}
             />
           </div>
 
           <div>
-            <label className="block text-slate-600 mb-1 font-medium">Preferred Location (City)</label>
+            <label className={labelClass}>Preferred Location (City)</label>
             <input 
               type="text" 
               placeholder="e.g. Addis Ababa or Remote"
               value={profileData.preferredCity} 
               onChange={(e) => setProfileData({ ...profileData, preferredCity: e.target.value })}
-              className="w-full p-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:border-blue-500"
+              className={fieldClass}
             />
           </div>
 
           <div>
-            <label className="block text-slate-600 mb-1 font-medium">Work Setup</label>
+            <label className={labelClass}>Work Setup</label>
             <select 
               value={profileData.preferredWorkSetup} 
               onChange={(e) => setProfileData({ ...profileData, preferredWorkSetup: e.target.value })}
-              className="w-full p-2.5 rounded-xl border border-slate-200 bg-white outline-none focus:border-blue-500"
+              className={fieldClass}
             >
               <option value="" disabled>Select work setup</option>
               <option value="Remote">Remote</option>
@@ -647,6 +672,8 @@ const Profile = ({ userData = {}, cvFile = null }) => {
         </button>
       </div>
 
+      </div>
+      </section>
     </div>
   );
 };

@@ -28,6 +28,7 @@ import AIJobMatches from "../components/dashboard/AIJobMatches";
 import RecentApplications from "../components/dashboard/RecentApplications";
 import UpcomingInterview from "../components/dashboard/UpcomingInterview";
 import RecommendedJobs from "../components/dashboard/RecommendedJobs";
+import RecommendedJobsFeed from "../components/candidate/RecommendedJobsFeed";
 
 function useResource(loader) {
   const [state, setState] = useState({
@@ -138,8 +139,8 @@ export default function JobSeekerDashboard() {
   const navItems = [
     ["Dashboard", "/dashboard", LayoutDashboard],
     ["My Profile", "/profile", User],
-    ["My Resume", "/resume", FileText],
-    ["Explore Jobs", "/explore-jobs", Search],
+    ["View Resume", "/resume", FileText],
+    ["Find Jobs", "/explore-jobs", Search],
     ["AI Job Matches", "/ai-matches", Target],
     ["Saved Jobs", "/saved-jobs", Bookmark],
     ["My Applications", "/applications", ClipboardList],
@@ -219,13 +220,6 @@ export default function JobSeekerDashboard() {
             <div className="flex flex-col gap-3 self-start sm:flex-row sm:items-center">
               <button
                 type="button"
-                onClick={() => navigate("/explore-jobs")}
-                className="inline-flex min-h-10 items-center justify-center rounded-xl bg-[var(--brand-primary)] px-5 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-[var(--brand-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2"
-              >
-                Find Jobs
-              </button>
-              <button
-                type="button"
                 onClick={refreshAll}
                 className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-600 shadow-sm"
               >
@@ -287,6 +281,7 @@ export default function JobSeekerDashboard() {
               ))}
             </div>
           </section>
+          <RecommendedJobsFeed onViewDetails={(id) => navigate(`/jobs/${id}`)} />
           {interviews.isLoading ? (
             <div className="h-28 animate-pulse rounded-xl bg-slate-200" />
           ) : upcomingInterview ? (
@@ -337,7 +332,7 @@ export default function JobSeekerDashboard() {
           <RecommendedJobs
             jobs={recommendationPreview}
             onViewDetails={(id) => navigate(`/jobs/${id}`)}
-            onViewAll={() => navigate("/explore-jobs")}
+            onViewAll={() => navigate("/explore-jobs?from=dashboard")}
             isLoading={recommended.isLoading}
             error={recommended.error}
             onRetry={recommended.retry}

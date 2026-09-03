@@ -5,15 +5,15 @@ import AboutView from "../components/about/AboutView";
 
 const navItems = [
   { id: "overview", label: "Overview", path: "/about/overview" },
-  { id: "experience", label: "Experience", path: "/experience" },
-  { id: "skills", label: "Skills", path: "/skills" },
-  { id: "projects", label: "Projects", path: "/projects" },
+  { id: "experience", label: "Experience", path: "/about/experience" },
+  { id: "skills", label: "Skills", path: "/about/skills" },
+  { id: "projects", label: "Projects", path: "/about/projects" },
   { id: "services", label: "Services", path: "/about/services" },
   { id: "jobs", label: "Jobs", path: "/about/jobs" },
   { id: "about", label: "About", path: "/about" },
   { id: "prompts", label: "Prompt Studio", path: "/about/prompts" },
   { id: "contact", label: "Contact", path: "/about/contact" },
-  { id: "createProfile", label: "Create Profile", path: "/profile/create" },
+  { id: "create-profile", label: "Create / Edit Profile", path: "/about/create-profile" },
 ];
 
 export default function AboutPage({ initialSection = "services" }) {
@@ -26,16 +26,15 @@ export default function AboutPage({ initialSection = "services" }) {
   const routeSections = {
     "/about": "about",
     "/about/overview": "overview",
+    "/about/experience": "experience",
+    "/about/skills": "skills",
+    "/about/projects": "projects",
     "/about/services": "services",
     "/about/prompts": "prompts",
     "/about/contact": "contact",
-    "/experience": "experience",
-    "/skills": "skills",
-    "/projects": "projects",
     "/about/jobs": "jobs",
-    "/prompt-studio": "prompts",
-    "/services": "services",
-    "/profile/create": "createProfile",
+    "/about/create-profile": "create-profile",
+    "/profile/create": "create-profile",
   };
   const activeSection = routeSections[location.pathname] || activeTab;
 
@@ -52,8 +51,8 @@ export default function AboutPage({ initialSection = "services" }) {
   return (
     <div className="min-h-screen w-full bg-slate-50 text-slate-900">
       <div className="min-h-screen w-full bg-slate-50 pb-12">
-        <div className="w-full px-4 sm:px-6 lg:px-0">
-          <div className="flex items-start gap-3 lg:gap-4">
+        <div className="w-full px-4 sm:px-6 lg:px-8">
+          <div className="flex items-start gap-4 lg:gap-6">
             {sidebarOpen && (
               <button
                 type="button"
@@ -63,7 +62,7 @@ export default function AboutPage({ initialSection = "services" }) {
               />
             )}
 
-            <aside className={`${sidebarOpen ? "fixed inset-0 z-50 block w-full" : "hidden"} shrink-0 self-start md:sticky md:top-4 md:block md:h-fit md:w-72`}>
+            <aside className={`${sidebarOpen ? "fixed inset-0 z-50 block w-full" : "hidden"} shrink-0 self-start md:sticky md:top-20 md:block md:h-[calc(100vh-5rem)] md:w-72 md:overflow-y-auto`}>
               <Sidebar
                 navItems={navItems}
                 currentSection={activeSection}
@@ -74,7 +73,7 @@ export default function AboutPage({ initialSection = "services" }) {
               />
             </aside>
 
-            <main className="min-w-0 flex-1 bg-slate-50">
+            <main className="min-w-0 flex-1 overflow-y-auto bg-slate-50 md:h-[calc(100vh-5rem)] md:p-2">
               <AboutView activeTab={activeSection} onNavigate={handleSectionChange} lang={lang} />
             </main>
           </div>

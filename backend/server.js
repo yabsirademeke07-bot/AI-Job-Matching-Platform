@@ -1,16 +1,19 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 
 const express = require('express');
 const cors = require('cors');
 const session = require('express-session');
 const passport = require('./config/passport');
 const fs = require('fs');
-const path = require('path');
 const multer = require('multer');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 const db = require('./connection');
+const { validateSignUp, validateLogin } = require('./middleware/validateAuth');
+const { issueOtp } = require('./services/otpService');
+const { syncGoogleUser } = require('./config/googleAuth');
 
 const app = express();
 
@@ -68,6 +71,172 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || 'your_super_secret_key_here';
 
+const ensureDatabaseSchema = async () => {
+  try {
+    await db.query(`ALTER TABLE users
+      MODIFY COLUMN role ENUM('super_admin', 'admin', 'employer', 'job_seeker') NOT NULL DEFAULT 'job_seeker'`);
+    await db.query(`ALTER TABLE users MODIFY COLUMN password VARCHAR(255) NULL`);
+  } catch (error) {
+    console.warn('Role/password compatibility update skipped:', error.message);
+  }
+
+  try {
+    await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id VARCHAR(255) NULL`);
+    await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_picture_url VARCHAR(255) NULL`);
+    await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(255) NULL`);
+    await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider VARCHAR(50) DEFAULT 'email'`);
+    await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE`);
+    await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE`);
+  } catch (error) {
+    console.warn('User schema compatibility check skipped:', error.message);
+  }
+
+  try {
+    await db.query(`CREATE TABLE IF NOT EXISTS otps (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      email VARCHAR(100) NOT NULL,
+      otp_code VARCHAR(10) NOT NULL,
+      purpose ENUM('registration', 'password-reset', 'email-verification') DEFAULT 'registration',
+      is_used BOOLEAN DEFAULT FALSE,
+      expires_at TIMESTAMP NULL DEFAULT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_email_expires (email, expires_at)
+    )`);
+  } catch (error) {
+    console.warn('OTP table compatibility check skipped:', error.message);
+  }
+
+  try {
+    await db.query('ALTER TABLE otps ADD COLUMN IF NOT EXISTS otp_code VARCHAR(10) NULL');
+    await db.query("ALTER TABLE otps ADD COLUMN IF NOT EXISTS purpose ENUM('registration', 'password-reset', 'email-verification') DEFAULT 'registration'");
+    await db.query('ALTER TABLE otps ADD COLUMN IF NOT EXISTS is_used BOOLEAN DEFAULT FALSE');
+    await db.query('ALTER TABLE otps ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP NULL DEFAULT NULL');
+    await db.query('ALTER TABLE otps ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
+  } catch (error) {
+    console.warn('OTP column migration skipped:', error.message);
+  }
+
+  try {
+    await db.query(`CREATE TABLE IF NOT EXISTS employers (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      userId INT NOT NULL UNIQUE,
+      companyName VARCHAR(150) NOT NULL,
+      legalBusinessName VARCHAR(150),
+      tinNumber VARCHAR(50),
+      licenseDocumentUrl VARCHAR(255),
+      logoUrl VARCHAR(255),
+      website VARCHAR(255),
+      industry VARCHAR(100),
+      companySize VARCHAR(50) DEFAULT '11-50',
+      location VARCHAR(150),
+      verificationStatus ENUM('pending', 'verified', 'rejected') DEFAULT 'pending',
+      createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
+      INDEX idx_userId (userId),
+      INDEX idx_verificationStatus (verificationStatus)
+    )`);
+
+    await db.query(`CREATE TABLE IF NOT EXISTS talent_pool (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      employerId INT NOT NULL,
+      candidateId INT NOT NULL,
+      candidateName VARCHAR(150) NOT NULL,
+      primaryRole VARCHAR(150),
+      skills JSON,
+      aiMatchScore DECIMAL(5,2) DEFAULT 0,
+      notes TEXT,
+      savedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (employerId) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (candidateId) REFERENCES users(id) ON DELETE CASCADE,
+      UNIQUE KEY unique_saved_candidate (employerId, candidateId),
+      INDEX idx_employerId (employerId)
+    )`);
+
+    await db.query(`CREATE TABLE IF NOT EXISTS employer_settings (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      userId INT NOT NULL UNIQUE,
+      emailAlerts BOOLEAN DEFAULT TRUE,
+      matchingAlerts BOOLEAN DEFAULT TRUE,
+      weeklyDigest BOOLEAN DEFAULT FALSE,
+      notificationEmail VARCHAR(150),
+      teamPermissions JSON,
+      createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+    )`);
+
+    await db.query(`CREATE TABLE IF NOT EXISTS employer_notifications (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      employerId INT NOT NULL,
+      title VARCHAR(200) NOT NULL,
+      body TEXT NOT NULL,
+      isRead BOOLEAN DEFAULT FALSE,
+      related_job_id INT NULL,
+      related_application_id INT NULL,
+      createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (employerId) REFERENCES users(id) ON DELETE CASCADE,
+      INDEX idx_employer_read (employerId, isRead)
+    )`);
+
+    await db.query(`CREATE TABLE IF NOT EXISTS employer_messages (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      employerId INT NOT NULL,
+      candidateId INT NOT NULL,
+      subject VARCHAR(200),
+      body TEXT NOT NULL,
+      isRead BOOLEAN DEFAULT FALSE,
+      createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (employerId) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (candidateId) REFERENCES users(id) ON DELETE CASCADE,
+      INDEX idx_employer_messages (employerId, candidateId, isRead)
+    )`);
+
+    await db.query(`CREATE TABLE IF NOT EXISTS offers (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      applicationId INT NOT NULL UNIQUE,
+      employerId INT NOT NULL,
+      candidateId INT NOT NULL,
+      offeredSalary DECIMAL(12,2),
+      startDate DATE,
+      offerLetterUrl VARCHAR(255),
+      status ENUM('draft', 'sent', 'accepted', 'declined') DEFAULT 'draft',
+      sentAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (applicationId) REFERENCES applications(id) ON DELETE CASCADE,
+      FOREIGN KEY (employerId) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (candidateId) REFERENCES users(id) ON DELETE CASCADE,
+      INDEX idx_offers_employer (employerId)
+    )`);
+
+    await db.query(`CREATE TABLE IF NOT EXISTS onboarding_tasks (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      candidateId INT NOT NULL,
+      employerId INT NOT NULL,
+      taskTitle VARCHAR(200) NOT NULL,
+      isCompleted BOOLEAN DEFAULT FALSE,
+      documentUrl VARCHAR(255),
+      updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (candidateId) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (employerId) REFERENCES users(id) ON DELETE CASCADE,
+      UNIQUE KEY unique_candidate_task (candidateId, taskTitle),
+      INDEX idx_onboarding_employer (employerId, isCompleted)
+    )`);
+  } catch (error) {
+    console.warn('Employer compatibility tables check skipped:', error.message);
+  }
+
+  try {
+    await db.query("ALTER TABLE user_activity_log MODIFY COLUMN activity_type ENUM('login', 'profile-update', 'job-view', 'job-apply', 'profile-view', 'message-sent', 'cv-upload', 'role_selected') NOT NULL");
+  } catch (error) {
+    console.warn('Activity log migration skipped:', error.message);
+  }
+
+  try {
+    await db.query("ALTER TABLE jobs MODIFY COLUMN status ENUM('draft', 'published', 'closed', 'filled', 'archived', 'suspended') DEFAULT 'draft'");
+  } catch (error) {
+    console.warn('Job status migration skipped:', error.message);
+  }
+};
+
 // ==========================================
 // 🔑 AUTHENTICATION ROUTES
 // ==========================================
@@ -89,7 +258,35 @@ const transporter = nodemailer.createTransport({
   }
 });
 
-const otpStore = new Map();
+const ADMIN_EMAILS = new Set(['tekebaaweke32@gmail.com']);
+
+const resolveEffectiveRole = (role, email) => {
+  const targetEmail = String(email || '').trim().toLowerCase();
+  if (ADMIN_EMAILS.has(targetEmail)) return 'admin';
+  const value = String(role || 'job_seeker').trim().toLowerCase();
+  const safeRoles = ['super_admin', 'admin', 'employer', 'job_seeker'];
+  return safeRoles.includes(value) ? value : 'job_seeker';
+};
+
+const sanitizeUser = (user) => ({
+  id: user.id,
+  full_name: user.full_name,
+  email: user.email,
+  phone: user.phone || null,
+  role: resolveEffectiveRole(user.role, user.email),
+  is_verified: Boolean(user.is_verified),
+  is_active: user.is_active !== false,
+  google_id: user.google_id || null,
+  auth_provider: user.auth_provider || 'email',
+  avatar_url: user.avatar_url || user.profile_picture_url || null,
+  profile_picture_url: user.avatar_url || user.profile_picture_url || null,
+});
+
+const normalizeRole = (role) => {
+  const value = String(role || 'job_seeker').trim().toLowerCase();
+  const safeRoles = ['super_admin', 'admin', 'employer', 'job_seeker'];
+  return safeRoles.includes(value) ? value : 'job_seeker';
+};
 
 // ==========================================
 // ⚙️ MULTER FILE UPLOAD SETUP
@@ -107,7 +304,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage: storage,
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowedTypes = /pdf|doc|docx/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
@@ -145,6 +342,90 @@ const authenticateUser = (req, res, next) => {
     });
   }
 };
+
+const requireAdmin = (req, res, next) => {
+  const role = String(req.user?.role || '').trim().toLowerCase();
+  const email = String(req.user?.email || '').trim().toLowerCase();
+  if (role === 'admin' || role === 'super_admin' || ADMIN_EMAILS.has(email)) {
+    return next();
+  }
+
+  return res.status(403).json({ success: false, message: 'Admin access required.' });
+};
+
+const adminController = require('./controllers/adminController');
+
+app.get('/api/admin/overview', authenticateUser, requireAdmin, adminController.getAdminDashboardData);
+app.patch('/api/admin/companies/:companyId/verify', authenticateUser, requireAdmin, adminController.verifyCompany);
+app.patch('/api/admin/company/:id/verify', authenticateUser, requireAdmin, adminController.updateVerificationStatus);
+app.get('/api/admin/companies', authenticateUser, requireAdmin, adminController.getPendingCompanies);
+app.get('/api/admin/jobs', authenticateUser, requireAdmin, adminController.getAllJobsForModeration);
+app.get('/api/admin/jobs/:id/preview', authenticateUser, requireAdmin, adminController.getJobPreview);
+app.patch('/api/admin/users/:userId/status', authenticateUser, requireAdmin, adminController.toggleUserStatus);
+app.patch('/api/admin/jobs/:jobId/status', authenticateUser, requireAdmin, adminController.toggleJobStatus);
+app.patch('/api/admin/jobs/:id/moderate', authenticateUser, requireAdmin, adminController.toggleJobStatus);
+app.delete('/api/admin/jobs/:id', authenticateUser, requireAdmin, adminController.deleteJob);
+
+app.put('/api/seeker/profile', authenticateUser, async (req, res) => {
+  const userId = req.user.id;
+  const profile = req.body || {};
+  const completion = Math.max(0, Math.min(100, Number(profile.completionPercentage) || 0));
+  try {
+    await db.query(
+      `INSERT INTO job_seeker_profiles (user_id, headline, bio, location, country, city, preferred_work_mode, salary_expectation_min, profile_completion_percentage)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE headline = VALUES(headline), bio = VALUES(bio), location = VALUES(location), country = VALUES(country), city = VALUES(city), preferred_work_mode = VALUES(preferred_work_mode), salary_expectation_min = VALUES(salary_expectation_min), profile_completion_percentage = VALUES(profile_completion_percentage)`,
+      [
+        userId,
+        profile.preferredJob || null,
+        profile.bio || null,
+        profile.city || profile.preferredCity || null,
+        profile.country || null,
+        profile.city || null,
+        profile.preferredWorkSetup ? String(profile.preferredWorkSetup).toLower() : 'hybrid',
+        Number.parseInt(String(profile.salaryExpectation || '').replace(/[^0-9]/g, ''), 10) || null,
+        completion,
+      ]
+    );
+    return res.json({ success: true, profileCompletionPercentage: completion });
+  } catch (error) {
+    console.error('Save Seeker Profile Error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to save personal information.' });
+  }
+});
+
+// Schema-backed employer workspace API. It is mounted before legacy job handlers.
+try {
+  app.use('/api', require('./routes/employerRoutes'));
+} catch (error) {
+  console.warn('Employer routes could not be loaded:', error.message);
+}
+
+// ==========================================
+//  CV UPLOAD API
+// ==========================================
+app.post(['/api/cvs', '/api/seeker/upload-cv'], authenticateUser, upload.single('cv'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ message: 'Please upload a CV file.' });
+  }
+
+  try {
+    await db.query('UPDATE cvs SET is_primary = FALSE WHERE user_id = ?', [req.user.id]);
+    const fileUrl = `/uploads/cvs/${req.file.filename}`;
+    const [result] = await db.query(
+      'INSERT INTO cvs (user_id, file_name, file_url, file_size, mime_type, is_primary, is_active) VALUES (?, ?, ?, ?, ?, TRUE, TRUE)',
+      [req.user.id, req.file.originalname, fileUrl, req.file.size, req.file.mimetype]
+    );
+
+    return res.status(201).json({
+      success: true,
+      cv: { id: result.insertId, fileName: req.file.originalname, fileUrl }
+    });
+  } catch (error) {
+    console.error('CV Upload Error:', error);
+    return res.status(500).json({ message: 'Unable to save your CV.' });
+  }
+});
 
 // ==========================================
 // 💡 HELPER: Smart Skill Matching Engine
@@ -184,36 +465,11 @@ app.post('/api/send-otp', async (req, res) => {
   }
 
   try {
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    otpStore.set(email, { otp, expiresAt: Date.now() + 5 * 60 * 1000 });
-
-    try {
-      await db.query(
-        `INSERT INTO otps (email, otp, expires_at) 
-         VALUES (?, ?, NOW() + INTERVAL 10 MINUTE) 
-         ON DUPLICATE KEY UPDATE otp = VALUES(otp), expires_at = VALUES(expires_at)`,
-        [email, otp]
-      );
-    } catch (dbErr) {
-      console.warn('DB OTP Insert warning (proceeding with memory):', dbErr.message);
-    }
-
-    const mailOptions = {
-      from: `"SmartRecruit AI" <${process.env.EMAIL_USER}>`,
-      to: email,
-      subject: 'SmartRecruit AI - Your Verification Code',
-      html: `
-        <div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #e2e8f0; border-radius: 10px;">
-          <h2 style="color: #1e293b;">SmartRecruit AI Verification</h2>
-          <p style="color: #475569;">Your email verification code (OTP) is:</p>
-          <h1 style="color: #2563eb; letter-spacing: 5px; background: #f1f5f9; padding: 10px; display: inline-block; border-radius: 5px;">${otp}</h1>
-          <p style="color: #64748b; font-size: 12px;">This code will expire in 5 minutes.</p>
-        </div>
-      `
-    };
-
-    await transporter.sendMail(mailOptions);
-    res.status(200).json({ success: true, message: 'OTP sent to email successfully / OTP በኢሜይልዎ ተልኳል' });
+    const normalizedEmail = email.trim().toLowerCase();
+    const [users] = await db.query('SELECT phone FROM users WHERE email = ? LIMIT 1', [normalizedEmail]);
+    if (users.length === 0) return res.status(404).json({ success: false, message: 'Account not found.' });
+    const { delivery } = await issueOtp({ dbClient: db, email: normalizedEmail, phone: users[0].phone, purpose: 'registration' });
+    res.status(200).json({ success: true, delivery: { emailSent: delivery.email, smsSent: delivery.sms }, message: 'OTP sent to email successfully / OTP በኢሜይልዎ ተልኳል' });
 
   } catch (error) {
     console.error('Email error:', error);
@@ -225,34 +481,41 @@ app.post('/api/send-otp', async (req, res) => {
 // 🔑 2. VERIFY OTP API
 // ==========================================
 app.post('/api/verify-otp', async (req, res) => {
-  const { email, otp } = req.body;
+  const { email, otp, role } = req.body;
+  const selectedRole = role === 'employer' || role === 'job_seeker' ? role : null;
 
   if (!email || !otp) {
     return res.status(400).json({ success: false, message: 'Missing email or OTP / ኢሜይል ወይም OTP አልተገኘም' });
   }
 
-  const record = otpStore.get(email);
-  if (record) {
-    if (Date.now() > record.expiresAt) {
-      otpStore.delete(email);
-      return res.status(400).json({ success: false, message: 'OTP has expired / የOTP ጊዜው አልፏል' });
-    }
-
-    if (record.otp === otp) {
-      otpStore.delete(email);
-      return res.status(200).json({ success: true, message: 'Email verified successfully / ኢሜይልዎ በስኬት ተረጋገጠ!' });
-    }
-  }
-
   try {
     const [rows] = await db.query(
-      'SELECT * FROM otps WHERE email = ? AND otp = ? AND expires_at > NOW()',
-      [email, otp]
+      'SELECT id, otp_code, expires_at FROM otps WHERE email = ? AND is_used = FALSE ORDER BY created_at DESC LIMIT 1',
+      [String(email).trim().toLowerCase()]
     );
 
     if (rows.length > 0) {
-      await db.query('DELETE FROM otps WHERE email = ?', [email]);
-      return res.status(200).json({ success: true, message: 'Email verified successfully / ኢሜይልዎ በስኬት ተረጋገጠ!' });
+      const cleanEmail = String(email).trim().toLowerCase();
+      const otpRecord = rows[0];
+      const expiresAt = new Date(otpRecord.expires_at);
+
+      if (new Date() > expiresAt || otpRecord.otp_code !== String(otp).trim()) {
+        await db.query('UPDATE otps SET is_used = TRUE WHERE id = ?', [otpRecord.id]);
+        return res.status(400).json({ success: false, message: 'Invalid or expired OTP code / የተሳሳተ ወይም ጊዜው ያለፈበት OTP' });
+      }
+
+      await db.query('UPDATE otps SET is_used = TRUE WHERE id = ?', [otpRecord.id]);
+      await db.query(
+        'UPDATE users SET is_verified = TRUE' + (selectedRole ? ', role = ?' : '') + ' WHERE email = ?',
+        selectedRole ? [selectedRole, cleanEmail] : [cleanEmail]
+      );
+      const [verifiedUsers] = await db.query(
+        'SELECT id, full_name, email, phone, role, is_verified, is_active, profile_picture_url FROM users WHERE email = ? LIMIT 1',
+        [cleanEmail]
+      );
+      const verifiedUser = verifiedUsers[0];
+      const token = jwt.sign({ id: verifiedUser.id, email: verifiedUser.email, role: verifiedUser.role }, JWT_SECRET, { expiresIn: '7d' });
+      return res.status(200).json({ success: true, message: 'Email verified successfully / ኢሜይልዎ በስኬት ተረጋገጠ!', token, user: sanitizeUser(verifiedUser) });
     }
   } catch (dbErr) {
     console.error('DB Verification Error:', dbErr);
@@ -264,18 +527,19 @@ app.post('/api/verify-otp', async (req, res) => {
 // ==========================================
 // 3. USER REGISTRATION API (Unified & Safe)
 // ==========================================
-app.post('/api/register', async (req, res) => {
-  console.log("➡️ Registration Payload Received:", req.body);
+app.post('/api/register', validateSignUp, async (req, res) => {
+  console.log('➡️ Registration Payload Received:', req.body);
 
-  const { full_name, fullName, email, password, phone, phoneNumber, role = 'job_seeker', skills = '' } = req.body;
-
-  const userFullName = full_name || fullName;
-  const userPhone = phone || phoneNumber;
+  const { full_name, fullName, email, password, phone, phoneNumber, role } = req.body;
+  const userFullName = (full_name || fullName || '').trim();
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  const userPhone = phone || phoneNumber || null;
+  const selectedRole = role === 'employer' || role === 'job_seeker' ? role : 'job_seeker';
 
   if (!userFullName) {
     return res.status(400).json({ message: 'Full Name is missing / ሙሉ ስም አልተገኘም' });
   }
-  if (!email) {
+  if (!normalizedEmail) {
     return res.status(400).json({ message: 'Email is missing / ኢሜይል አልተገኘም' });
   }
   if (!password) {
@@ -283,28 +547,67 @@ app.post('/api/register', async (req, res) => {
   }
 
   try {
-    const [existingUser] = await db.query('SELECT * FROM users WHERE email = ?', [email]);
-    if (existingUser.length > 0) {
-      return res.status(400).json({ message: 'Email already exists / ክንተን ኢሜይል ከዚህ ቀደም ተመዝግቧል' });
-    }
-
+    const [existingUsers] = await db.query('SELECT id, is_verified FROM users WHERE email = ? LIMIT 1', [normalizedEmail]);
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    const query = 'INSERT INTO users (full_name, email, phone, password, role, skills) VALUES (?, ?, ?, ?, ?, ?)';
-    await db.query(query, [userFullName, email, userPhone || '', hashedPassword, role, skills]);
+    if (existingUsers.length > 0) {
+      const existingUser = existingUsers[0];
+      if (existingUser.is_verified === 1 || existingUser.is_verified === true) {
+        return res.status(409).json({
+          success: false,
+          isAlreadyVerified: true,
+          message: 'ይህ ኢሜይል አስቀድሞ ተመዝግቧል። እባክዎ በቀጥታ ይግቡ (Email is already registered. Please login).'
+        });
+      }
 
-    res.status(201).json({ 
+      await db.query(
+        'UPDATE users SET full_name = ?, phone = ?, password = ?, role = ?, is_verified = FALSE, is_active = TRUE WHERE id = ?',
+        [userFullName, userPhone || null, hashedPassword, selectedRole, existingUser.id]
+      );
+      await db.query('UPDATE otps SET is_used = TRUE WHERE email = ? AND is_used = FALSE', [normalizedEmail]);
+
+      await issueOtp({ dbClient: db, email: normalizedEmail, phone: userPhone, purpose: 'registration' });
+
+      return res.status(201).json({
+        success: true,
+        requiresVerification: true,
+        email: normalizedEmail,
+        role: selectedRole,
+        userId: existingUser.id,
+        message: 'ያልተጠናቀቀ ምዝገባ ተገኝቷል። አዲስ የማረጋገጫ ኮድ ተልኳል።'
+      });
+    }
+
+    const [result] = await db.query(
+      'INSERT INTO users (full_name, email, phone, password, role, is_verified, is_active) VALUES (?, ?, ?, ?, ?, FALSE, TRUE)',
+      [userFullName, normalizedEmail, userPhone || null, hashedPassword, selectedRole]
+    );
+
+    if (selectedRole === 'employer') {
+      await db.query(
+        'INSERT INTO company_profiles (employer_id, company_name) VALUES (?, ?)',
+        [result.insertId, req.body.companyName || userFullName]
+      );
+    } else {
+      await db.query('INSERT INTO job_seeker_profiles (user_id) VALUES (?)', [result.insertId]);
+    }
+
+    await issueOtp({ dbClient: db, email: normalizedEmail, phone: userPhone, purpose: 'registration' });
+
+    res.status(201).json({
       success: true,
-      message: 'User registered successfully / ተጠቃሚው በተሳካ ሁኔታ ተመዝግቧል!' 
+      requiresVerification: true,
+      email: normalizedEmail,
+      role: selectedRole,
+      userId: result.insertId,
+      message: 'User registered successfully / ተጠቃሚው በተሳካ ሁኔታ ተመዝግቧል!'
     });
-
   } catch (error) {
     console.error('Register Error Detailed:', error);
-
     if (error.code === 'ER_BAD_FIELD_ERROR') {
-      return res.status(500).json({ 
-        message: `Database Column Error: ${error.sqlMessage}. እባክዎ በ Database users table ላይ SQL ALTER query ያካሂዱ።` 
+      return res.status(500).json({
+        message: `Database Column Error: ${error.sqlMessage}. እባክዎ በ Database users table ላይ SQL ALTER query ያካሂዱ።`
       });
     }
 
@@ -312,55 +615,226 @@ app.post('/api/register', async (req, res) => {
   }
 });
 
+app.post('/api/complete-registration', async (req, res) => {
+  const { email, role } = req.body;
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  const normalizedRole = normalizeRole(role);
+
+  if (!normalizedEmail) {
+    return res.status(400).json({ success: false, message: 'Email is required' });
+  }
+
+  try {
+    const [userRows] = await db.query('SELECT * FROM users WHERE email = ?', [normalizedEmail]);
+    if (userRows.length === 0) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const user = userRows[0];
+    await db.query('UPDATE users SET role = ?, is_verified = TRUE WHERE id = ?', [normalizedRole, user.id]);
+
+    if (normalizedRole === 'employer') {
+      await db.query(
+        `INSERT INTO company_profiles (employer_id, company_name)
+         VALUES (?, ?)
+         ON DUPLICATE KEY UPDATE company_name = VALUES(company_name)`,
+        [user.id, user.full_name]
+      );
+    } else if (normalizedRole === 'job_seeker') {
+      await db.query(
+        'INSERT INTO job_seeker_profiles (user_id) VALUES (?) ON DUPLICATE KEY UPDATE user_id = VALUES(user_id)',
+        [user.id]
+      );
+    }
+
+    const token = jwt.sign({ id: user.id, email: user.email, role: normalizedRole }, JWT_SECRET, { expiresIn: '7d' });
+
+    const updatedUser = { ...user, role: normalizedRole, is_verified: true };
+
+    return res.status(200).json({
+      success: true,
+      message: 'Registration completed successfully.',
+      token,
+      user: sanitizeUser(updatedUser),
+    });
+  } catch (error) {
+    console.error('Complete Registration Error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to complete registration.' });
+  }
+});
+
 // ==========================================
 // 4. USER LOGIN API
 // ==========================================
-app.post('/api/login', async (req, res) => {
+app.post('/api/login', validateLogin, async (req, res) => {
   const { email, password } = req.body;
+  const normalizedEmail = String(email || '').trim().toLowerCase();
 
-  if (!email || !password) {
+  if (!normalizedEmail || !password) {
     return res.status(400).json({ message: 'Please provide email and password / እባክዎ ኢሜይል እና ፓስወርድ ያስገቡ' });
   }
 
   try {
-    const [users] = await db.query('SELECT * FROM users WHERE email = ?', [email]);
-    
+    const [users] = await db.query(
+      'SELECT id, full_name, email, password, phone, role, is_verified, is_active, profile_picture_url FROM users WHERE email = ? LIMIT 1',
+      [normalizedEmail]
+    );
+
     if (users.length === 0) {
-      return res.status(400).json({ message: 'Invalid email or password / የተሳሳተ ኢሜይል ወይም ፓስወርድ' });
+      return res.status(404).json({
+        success: false,
+        message: 'ይህ ኢሜይል አልተመዝገበም። እባክዎ መጀመሪያ ይመዝገቡ (Account not found. Please sign up first)'
+      });
     }
 
     const user = users[0];
-
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(400).json({ message: 'Invalid email or password / የተሳሳተ ኢሜይል ወይም ፓስወርድ' });
+      return res.status(401).json({ success: false, message: 'Incorrect password.' });
+    }
+
+    if (!user.is_active) {
+      return res.status(403).json({ success: false, message: 'Account is deactivated.' });
+    }
+
+    if (!user.is_verified) {
+      await db.query('UPDATE users SET is_verified = TRUE WHERE id = ?', [user.id]);
+      user.is_verified = true;
+    }
+
+    const resolvedRole = resolveEffectiveRole(user.role, user.email);
+    if (resolvedRole !== user.role) {
+      await db.query('UPDATE users SET role = ? WHERE id = ?', [resolvedRole, user.id]);
+      user.role = resolvedRole;
     }
 
     const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role }, 
-      JWT_SECRET, 
+      { id: user.id, email: user.email, role: resolvedRole },
+      JWT_SECRET,
       { expiresIn: '24h' }
     );
 
-    res.status(200).json({
+    return res.status(200).json({
       message: 'Login successful / በተሳካ ሁኔታ ገብተዋል',
       token,
       is_verified: Boolean(user.is_verified),
-      needsVerification: !user.is_verified,
-      user: {
-        id: user.id,
-        full_name: user.full_name,
-        email: user.email,
-        role: user.role,
-        skills: user.skills,
-        is_verified: Boolean(user.is_verified),
-      },
+      user: sanitizeUser(user),
     });
-
-
   } catch (error) {
     console.error('Login Error:', error);
-    res.status(500).json({ message: 'Server error / የሰርቨር ስህተት አጋጥሟል' });
+    return res.status(500).json({ message: 'Server error / የሰርቨር ስህተት አጋጥሟል' });
+  }
+});
+
+app.post('/api/send-login-otp', async (req, res) => {
+  const { email } = req.body;
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+
+  if (!normalizedEmail) {
+    return res.status(400).json({ success: false, message: 'Email is required / እባክዎ ኢሜይል ያስገቡ' });
+  }
+
+  try {
+    const [userRows] = await db.query('SELECT id, email, phone FROM users WHERE email = ?', [normalizedEmail]);
+    if (userRows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Account not found / መለያ አልተገኘም' });
+    }
+
+    const { delivery } = await issueOtp({ dbClient: db, email: normalizedEmail, phone: userRows[0].phone, purpose: 'email-verification' });
+
+    return res.status(200).json({ success: true, delivery: { emailSent: delivery.email, smsSent: delivery.sms }, message: 'OTP sent to your email / OTP ወደ ኢሜይልዎ ተልኳል' });
+  } catch (error) {
+    console.error('Send Login OTP Error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to send OTP / OTP መላክ አልተቻለም' });
+  }
+});
+
+app.post('/api/verify-login-otp', async (req, res) => {
+  const { email, otp } = req.body;
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  const otpCode = String(otp || '').trim();
+
+  if (!normalizedEmail || !otpCode) {
+    return res.status(400).json({ success: false, message: 'Email and OTP are required / ኢሜይል እና OTP ያስፈልጋሉ' });
+  }
+
+  try {
+    const [otpRows] = await db.query(
+      'SELECT id, otp_code, expires_at FROM otps WHERE email = ? AND is_used = FALSE ORDER BY created_at DESC LIMIT 1',
+      [normalizedEmail]
+    );
+
+    if (otpRows.length === 0) {
+      return res.status(400).json({ success: false, message: 'Invalid or expired OTP / የተሳሳተ ወይም ጊዜው ያለፈበት OTP' });
+    }
+
+    const otpRecord = otpRows[0];
+    if (new Date() > new Date(otpRecord.expires_at) || otpRecord.otp_code !== otpCode) {
+      await db.query('UPDATE otps SET is_used = TRUE WHERE id = ?', [otpRecord.id]);
+      return res.status(400).json({ success: false, message: 'Invalid or expired OTP / የተሳሳተ ወይም ጊዜው ያለፈበት OTP' });
+    }
+
+    await db.query('UPDATE otps SET is_used = TRUE WHERE id = ?', [otpRecord.id]);
+
+    const [userRows] = await db.query('SELECT * FROM users WHERE email = ?', [normalizedEmail]);
+    if (userRows.length === 0) {
+      return res.status(404).json({ success: false, message: 'User not found / ተጠቃሚው አልተገኘም' });
+    }
+
+    const user = userRows[0];
+    await db.query('UPDATE users SET is_verified = TRUE WHERE id = ?', [user.id]);
+    const effectiveRole = resolveEffectiveRole(user.role, user.email);
+    if (effectiveRole !== user.role) {
+      await db.query('UPDATE users SET role = ? WHERE id = ?', [effectiveRole, user.id]);
+      user.role = effectiveRole;
+    }
+
+    const token = jwt.sign({ id: user.id, email: user.email, role: effectiveRole }, JWT_SECRET, { expiresIn: '7d' });
+
+    return res.status(200).json({
+      success: true,
+      message: 'OTP verified successfully / OTP በትክክል ተረጋገጠ',
+      token,
+      user: sanitizeUser({ ...user, is_verified: true, role: effectiveRole }),
+    });
+  } catch (error) {
+    console.error('Verify Login OTP Error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to verify login OTP / OTP ማረጋገጥ አልተቻለም' });
+  }
+});
+
+app.post('/api/google-login', async (req, res) => {
+  const { token } = req.body;
+
+  if (!token) {
+    return res.status(400).json({ success: false, message: 'Google access token is required.' });
+  }
+
+  try {
+    const googleResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!googleResponse.ok) {
+      throw new Error('Google token invalid');
+    }
+
+    const profile = await googleResponse.json();
+    const syncResult = await syncGoogleUser({ profile, authProvider: 'google' });
+    const user = syncResult.user;
+
+    const authToken = jwt.sign({ id: user.id, email: user.email, role: user.role || 'job_seeker' }, JWT_SECRET, { expiresIn: '7d' });
+
+    return res.status(200).json({
+      success: true,
+      token: authToken,
+      user,
+      isNewUser: syncResult.isNewUser,
+      message: 'Google login successful',
+    });
+  } catch (error) {
+    console.error('Google Login Error:', error);
+    return res.status(500).json({ success: false, message: 'Google login failed / Google መግባት አልተሳካም' });
   }
 });
 
@@ -491,18 +965,29 @@ app.use((err, req, res, next) => {
 // ==========================================
 // 🚀 SERVER START
 // ==========================================
-const server = app.listen(PORT, () => {
-  console.log(`🚀 Server is running perfectly on http://localhost:${PORT}`);
-  console.log(`📝 Database: ${process.env.DB_NAME || 'job_matching'}`);
-});
-
-server.on('error', (error) => {
-  if (error.code === 'EADDRINUSE') {
-    console.error(`❌ Port ${PORT} is already in use.`);
-  } else {
-    console.error('❌ Server error:', error.message);
+const startServer = async () => {
+  try {
+    await ensureDatabaseSchema();
+    console.log('✅ Database compatibility checks complete.');
+  } catch (error) {
+    console.warn('⚠️ Compatibility check failed:', error.message);
   }
-});
+
+  const server = app.listen(PORT, () => {
+    console.log(`🚀 Server is running perfectly on http://localhost:${PORT}`);
+    console.log(`📝 Database: ${process.env.DB_NAME || 'job_matching'}`);
+  });
+
+  server.on('error', (error) => {
+    if (error.code === 'EADDRINUSE') {
+      console.error(`❌ Port ${PORT} is already in use.`);
+    } else {
+      console.error('❌ Server error:', error.message);
+    }
+  });
+};
+
+startServer();
 
 console.log("Email Pass Length:", process.env.EMAIL_PASS ? process.env.EMAIL_PASS.length : "ባዶ ነው");
 

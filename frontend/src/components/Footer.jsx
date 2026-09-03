@@ -3,7 +3,7 @@ import { Sparkles, Mail, Phone, MapPin, Globe, Share2, MessageSquare } from 'luc
 
 function Footer() {
   return (
-    <footer className="border-t border-[var(--brand-border)] bg-[var(--brand-soft)] text-slate-600 text-sm">
+    <footer className="relative z-[60] border-t border-[var(--brand-border)] bg-[var(--brand-soft)] text-slate-600 text-sm">
       <div className="max-w-7xl mx-auto px-6 py-12 md:py-16">
         
         {/* Top Grid Section */}
@@ -46,7 +46,7 @@ function Footer() {
                 <Link to="/" className="hover:text-[var(--brand-deep)] transition">Home</Link>
               </li>
               <li>
-                <Link to="/jobs" className="hover:text-[var(--brand-deep)] transition">Explore Jobs</Link>
+                <Link to="/jobs" className="hover:text-[var(--brand-deep)] transition">Find Jobs</Link>
               </li>
               <li>
                 <Link to="/about" className="hover:text-[var(--brand-deep)] transition">About Us</Link>

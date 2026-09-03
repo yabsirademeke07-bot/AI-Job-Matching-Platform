@@ -18,7 +18,7 @@ const sendOtpEmail = async (email, otp) => {
         <h2>Welcome to SmartRecruit AI</h2>
         <p>Your OTP verification code is:</p>
         <h1 style="color: #56a2d8; letter-spacing: 4px;">${otp}</h1>
-        <p>This code will expire in 10 minutes.</p>
+        <p>⏱️ Valid for 3 minutes (ይህ ኮድ ለ 3 ደቂቃዎች ብቻ ያገለግላል)</p>
       </div>
     `,
   };
