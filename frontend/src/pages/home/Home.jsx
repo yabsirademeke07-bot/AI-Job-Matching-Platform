@@ -114,22 +114,6 @@ export default function Home() {
         handleSearch={handleSearch}
       />
       <TrustedBy />
-      <nav aria-label="Home page sections" className="sticky top-20 z-30 border-b border-slate-200 bg-white/95 px-4 shadow-sm backdrop-blur sm:top-24">
-        <div className="mx-auto flex max-w-7xl gap-1 overflow-x-auto py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {[
-            ['How It Works', '#how-it-works'],
-            ['AI Matching', '#ai-matching'],
-            ['Find Jobs', '#explore-jobs'],
-            ['For Job Seekers', '#for-job-seekers'],
-            ['For Employers', '#for-employers'],
-            ['Why Choose Us', '#why-choose-us'],
-          ].map(([label, href]) => (
-            <a key={href} href={href} className="whitespace-nowrap rounded-lg px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-[var(--brand-soft)] hover:text-[var(--brand-deep)] sm:px-4 sm:text-sm">
-              {label}
-            </a>
-          ))}
-        </div>
-      </nav>
       <section id="how-it-works" className="scroll-mt-20 w-full bg-slate-100 py-16 sm:py-24">
         <div className="mx-auto w-full max-w-[1550px] px-4 sm:px-6 lg:px-12 xl:px-16">
           <div className="mx-auto max-w-3xl text-center">

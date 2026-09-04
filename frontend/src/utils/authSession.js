@@ -63,7 +63,7 @@ export const getUserDestination = (user) => {
     );
 
     if (user?.onboardingRoleSelected !== true || !role) return '/select-role';
-    if (user?.onboardingCvUploaded === false || (!user?.onboardingCvUploaded && !hasResume)) return '/seeker/cv-upload';
+    if (user?.has_cv === false || user?.onboarding_step === 'cv_upload' || user?.onboardingCvUploaded === false || (!user?.onboardingCvUploaded && !hasResume)) return '/seeker/cv-upload';
     if (user?.onboardingProfileCompleted === false || (!user?.onboardingProfileCompleted && !hasProfile)) return '/seeker/personal-info';
 
     return '/dashboard';

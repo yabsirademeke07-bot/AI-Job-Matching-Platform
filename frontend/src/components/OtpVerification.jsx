@@ -78,11 +78,17 @@ const OtpVerification = () => {
     try {
       const { data } = await api.post('/verify-otp', { email, otp: otpCode, role: providedRole });
       if (!data.token || !data.user) throw new Error('Authentication response was incomplete.');
-      const verifiedUser = { ...data.user, onboardingRoleSelected: false, onboardingCvUploaded: false, onboardingProfileCompleted: false };
+      const verifiedUser = {
+        ...data.user,
+        onboardingRoleSelected: data.user.onboardingRoleSelected ?? false,
+        onboardingCvUploaded: data.user.has_cv ?? false,
+        onboardingProfileCompleted: data.user.onboardingProfileCompleted ?? false,
+      };
       setSession({ token: data.token, user: verifiedUser });
 
       const role = data.user.role || providedRole;
-      if (data.requiresRoleSelection || verifiedUser.onboardingRoleSelected === false || !role || role === 'pending') {
+      const requiresRoleSelection = data.requiresRoleSelection || !role || role === 'pending';
+      if (requiresRoleSelection) {
         const params = new URLSearchParams();
         if (userIdFromUrl) params.set('userId', userIdFromUrl);
         if (pendingJobId) params.set('jobId', pendingJobId);
@@ -91,6 +97,8 @@ const OtpVerification = () => {
         navigate('/employer/dashboard');
       } else if (['admin', 'super_admin'].includes(role)) {
         navigate('/admin/dashboard');
+      } else if (verifiedUser.has_cv === false || verifiedUser.onboarding_step === 'cv_upload') {
+        navigate('/seeker/cv-upload');
       } else if (pendingJobId) {
         continueApplicationFlow(navigate, { jobId: pendingJobId });
       } else {

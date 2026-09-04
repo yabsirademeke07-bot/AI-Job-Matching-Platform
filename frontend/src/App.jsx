@@ -32,6 +32,7 @@ import HowItWorks from './pages/HowItWorks';
 // Seeker Components & Pages
 import CvUploader from './components/CvUploader';
 import CvUploadScreen from './components/CvUploadScreen';
+import CvAnalysis from './components/seeker/CvAnalysis';
 import UpdateCV from './pages/UpdateCV';
 import MatchResults from './pages/MatchResults';
 import JobSeekerDashboard from './pages/JobSeekerDashboard';
@@ -238,8 +239,8 @@ function AppLayout() {
               </ProtectedRoute>
             }
           />
-          <Route path="/CvAnalysis" element={<Navigate to="/resume" replace />} />
-          <Route path="/cv-analysis" element={<Navigate to="/resume" replace />} />
+          <Route path="/CvAnalysis" element={<ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}><CvAnalysis /></ProtectedRoute>} />
+          <Route path="/cv-analysis" element={<ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}><CvAnalysis /></ProtectedRoute>} />
           <Route
             path="/seeker-docs"
             element={

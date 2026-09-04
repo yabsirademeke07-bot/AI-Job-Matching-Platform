@@ -174,7 +174,7 @@ const Register = () => {
   // Helper: Send OTP
   const sendOtpRequest = async (email) => {
     try {
-      const res = await fetch(`${API_URL.replace(/\/$/, '')}/send-otp`, {
+      const res = await fetch(`${API_URL.replace(/\/$/, '')}/auth/resend-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
@@ -205,7 +205,7 @@ const Register = () => {
     setApiSuccess('');
 
     try {
-      const response = await fetch(`${API_URL.replace(/\/$/, '')}/verify-otp`, {
+      const response = await fetch(`${API_URL.replace(/\/$/, '')}/auth/verify-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -255,7 +255,7 @@ const Register = () => {
 
     try {
       const normalizedRole = selectedRole === 'jobseeker' ? 'job_seeker' : selectedRole;
-      const roleResponse = await fetch(`${API_URL.replace(/\/$/, '')}/register`, {
+      const roleResponse = await fetch(`${API_URL.replace(/\/$/, '')}/auth/select-role`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

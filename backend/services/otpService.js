@@ -29,16 +29,17 @@ const sendOtpSms = async (phone, otpCode) => {
   return true;
 };
 
-const issueOtp = async ({ dbClient, email, phone, purpose = 'registration' }) => {
+const issueOtp = async ({ dbClient, email, phone, purpose = 'registration', expiresInMinutes = 3 }) => {
   const cleanEmail = email.trim().toLowerCase();
   const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
   const client = dbClient;
+  const safeExpiry = Number.isInteger(expiresInMinutes) && expiresInMinutes > 0 ? expiresInMinutes : 3;
 
   await client.execute('UPDATE otps SET is_used = TRUE WHERE email = ? AND is_used = FALSE', [cleanEmail]);
   await client.execute(
     `INSERT INTO otps (email, otp_code, purpose, expires_at, is_used)
-     VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL 3 MINUTE), FALSE)`,
-    [cleanEmail, otpCode, purpose]
+    VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL ${safeExpiry} MINUTE), FALSE)`,
+      [cleanEmail, otpCode, purpose]
   );
 
   console.log('[OTP CODE]:', otpCode);
