@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import GoogleAuthButton from '../components/GoogleAuthButton';
 import {
@@ -10,6 +10,7 @@ import EmailInputWithDomains from '../components/EmailInputWithDomains';
 
 const Register = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { setSession } = useAuth();
 
   // Multi-step Registration State: 1 = Form, 2 = OTP, 3 = Role
@@ -18,7 +19,7 @@ const Register = () => {
   // Form State (Phone Number Removed)
   const [formData, setFormData] = useState({
     fullName: '',
-    email: '',
+    email: location.state?.email || '',
     password: '',
     confirmPassword: '',
     role: '' // 'jobseeker' or 'employer'
@@ -26,7 +27,7 @@ const Register = () => {
 
   // OTP State
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
-  const [otpTimer, setOtpTimer] = useState(180);
+  const [otpTimer, setOtpTimer] = useState(60);
   const canResendOtp = otpTimer === 0;
 
   // UI States
@@ -35,7 +36,7 @@ const Register = () => {
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState('');
-  const [apiSuccess, setApiSuccess] = useState('');
+  const [apiSuccess, setApiSuccess] = useState(location.state?.message || '');
   const [emailSuggestion, setEmailSuggestion] = useState('');
 
   const API_URL = import.meta.env.VITE_BACKEND_URL || '/api';
@@ -161,7 +162,7 @@ const Register = () => {
       }
 
       setStep(2);
-      setOtpTimer(180);
+      setOtpTimer(60);
       setApiSuccess('OTP code sent to your email.');
     } catch (error) {
       console.error('Registration Error:', error);
@@ -242,7 +243,7 @@ const Register = () => {
     setApiError('');
     setApiSuccess('');
     await sendOtpRequest(formData.email.trim());
-    setOtpTimer(180);
+    setOtpTimer(60);
     setOtp(['', '', '', '', '', '']);
     setIsLoading(false);
   };
@@ -270,7 +271,7 @@ const Register = () => {
 
       setFormData((prev) => ({ ...prev, role: normalizedRole }));
       setStep(2);
-      setOtpTimer(180);
+      setOtpTimer(60);
     } catch (err) {
       console.error('Registration error:', err);
       setApiError(err.message || 'Unable to create your account. Please try again.');

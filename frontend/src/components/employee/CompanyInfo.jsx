@@ -1,24 +1,29 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowRight, Building2, Sparkles, User } from 'lucide-react';
+import { ArrowRight, Building2, CheckCircle2, Loader2, User } from 'lucide-react';
 import officeImage from '../../pages/images/images3.jpg';
+
+const ambientZoomStyles = `
+  @keyframes ambientSlowZoom {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+  }
+  .animate-ambient-zoom { animation: ambientSlowZoom 24s ease-in-out infinite; }
+`;
 
 const hiringVolumeOptions = ['1-5 Hires', '6-20 Hires', '20+ Scaled Hiring', 'Continuous Talent Pool'];
 const companySizeOptions = ['1-10', '11-50', '51-200', '201-500', '1000+'];
 const industryOptions = ['Technology & Cloud Infrastructure', 'Fintech & Banking', 'AI & Machine Learning', 'E-Commerce & Retail', 'Healthcare & BioTech', 'Telecom & Networks'];
 const phoneOperatorOptions = [
-  { value: 'ethio-telecom', label: 'Ethio Telecom' },
-  { value: 'safaricom', label: 'Safaricom Ethiopia' },
+  { value: 'Ethio Telecom', label: 'Ethio Telecom (+251)' },
+  { value: 'Safaricom', label: 'Safaricom (+251)' },
 ];
 const inputClass = 'h-12 w-full rounded-xl border border-slate-200 bg-slate-50/80 px-4 text-xs sm:text-sm font-semibold text-slate-900 placeholder:text-slate-400 outline-none transition-all hover:bg-slate-50 focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-500/10';
 const labelClass = 'mb-1.5 block text-xs sm:text-sm font-bold text-slate-800';
 
-const normalizePhoneNumber = (number = '', operator = 'ethio-telecom') => {
+const normalizePhoneNumber = (number = '') => {
   const digits = String(number || '').replace(/\D/g, '').slice(0, 9);
-  if (!digits) return '';
-  const allowedStarts = operator === 'safaricom' ? ['7'] : ['9'];
-  const normalized = allowedStarts.includes(digits[0]) ? digits : digits;
-  return normalized ? `+251${normalized}` : '';
+  return digits ? `+251${digits}` : '';
 };
 
 export default function CompanyInfo({ user, onComplete }) {
@@ -36,13 +41,13 @@ export default function CompanyInfo({ user, onComplete }) {
     },
   ];
   const initialPhoneDigits = String(currentUser.phone || '').replace(/\D/g, '').replace(/^251/, '').replace(/^0/, '').slice(0, 9);
-  const [phoneOperator, setPhoneOperator] = useState(() => (String(currentUser.phone || '').replace(/\D/g, '').startsWith('7') ? 'safaricom' : 'ethio-telecom'));
+  const [phoneOperator, setPhoneOperator] = useState('Ethio Telecom');
   const [phoneNumber, setPhoneNumber] = useState(initialPhoneDigits);
   const [form, setForm] = useState({
     representative_name: currentUser.full_name || currentUser.name || '',
     representative_title: '',
     work_email: currentUser.email || '',
-    phone: normalizePhoneNumber(initialPhoneDigits, phoneOperator),
+    phone: normalizePhoneNumber(initialPhoneDigits),
     company_name: '',
     industry: industryOptions[0],
     company_size: '11-50',
@@ -54,11 +59,8 @@ export default function CompanyInfo({ user, onComplete }) {
   });
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
-
-  useEffect(() => {
-    setForm((current) => ({ ...current, phone: normalizePhoneNumber(phoneNumber, phoneOperator) }));
-  }, [phoneNumber, phoneOperator]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -68,12 +70,67 @@ export default function CompanyInfo({ user, onComplete }) {
     return () => clearInterval(timer);
   }, [slides.length]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const loadProfile = async () => {
+      try {
+        const response = await fetch('/api/employer/profile', {
+          headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.profile || cancelled) return;
+        const profile = data.profile;
+        setForm((current) => ({
+          ...current,
+          representative_name: profile.representative_name || current.representative_name,
+          representative_title: profile.representative_title || current.representative_title,
+          work_email: profile.work_email || current.work_email,
+          phone: profile.phone || profile.phoneNumber || current.phone,
+          company_name: profile.company_name || current.company_name,
+          industry: profile.industry || current.industry,
+          company_size: profile.company_size || current.company_size,
+          location: profile.location || current.location,
+          website: profile.website || current.website,
+          linkedin: profile.linkedin || current.linkedin,
+          description: profile.description || profile.company_summary || current.description,
+          hiring_volume: profile.hiring_volume || current.hiring_volume,
+        }));
+        const storedPhone = String(profile.phone || '').replace(/\D/g, '').replace(/^251/, '').replace(/^0/, '').slice(0, 9);
+        if (storedPhone) setPhoneNumber(storedPhone);
+        if (profile.phoneOperator || profile.phone_operator) setPhoneOperator(profile.phoneOperator || profile.phone_operator);
+      } catch (loadError) {
+        console.warn('Unable to hydrate company profile:', loadError);
+      }
+    };
+    loadProfile();
+    return () => { cancelled = true; };
+  }, []);
+
   const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
 
   const handleSave = async (event) => {
     event.preventDefault();
+    const requiredFields = {
+      representative_name: 'Representative name',
+      representative_title: 'Job title',
+      work_email: 'Work email',
+      phone: 'Phone number',
+      company_name: 'Company name',
+      industry: 'Industry',
+      location: 'HQ location',
+    };
+    const missingField = Object.entries(requiredFields).find(([field]) => !String(form[field] || '').trim());
+    if (missingField) {
+      setError(`${missingField[1]} is required.`);
+      return;
+    }
+    if (!/^[97]\d{8}$/.test(phoneNumber)) {
+      setError('Phone number must be 9 digits and start with 9 or 7.');
+      return;
+    }
     setIsSaving(true);
     setError('');
+    setSuccess('');
     try {
       const response = await fetch('/api/employer/profile', {
         method: 'POST',
@@ -81,12 +138,14 @@ export default function CompanyInfo({ user, onComplete }) {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
         },
-        body: JSON.stringify({ ...form, social_media_urls: { linkedin: form.linkedin } }),
+        body: JSON.stringify({ ...form, phoneOperator, phoneNumber, social_media_urls: { linkedin: form.linkedin } }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.message || 'Unable to save company profile.');
       const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
       localStorage.setItem('user', JSON.stringify({ ...storedUser, companyInfo: form, isOnboardingComplete: true }));
+      setSuccess('Company profile saved successfully!');
+      await new Promise((resolve) => setTimeout(resolve, 700));
       if (onComplete) onComplete(form);
       else window.location.assign('/employer/dashboard');
     } catch (saveError) {
@@ -97,15 +156,16 @@ export default function CompanyInfo({ user, onComplete }) {
   };
 
   return (
-    <div className="min-h-screen w-full bg-slate-50">
-      <div className="lg:grid lg:min-h-screen lg:grid-cols-2">
-        <aside className="relative hidden overflow-hidden bg-slate-100 lg:block">
+    <div className="w-full max-w-full overflow-x-hidden bg-slate-50/50 pt-2">
+      <style>{ambientZoomStyles}</style>
+      <div className="grid min-h-[calc(100vh-88px)] w-full min-w-0 grid-cols-1 lg:grid-cols-12 sm:min-h-[calc(100vh-104px)]">
+        <aside className="relative hidden h-[calc(100vh-104px)] min-w-0 overflow-hidden bg-slate-100 lg:sticky lg:top-24 lg:col-span-5 lg:block">
           <img
             src={officeImage}
             alt="Collaborative Office Team"
-            className="absolute inset-0 h-full w-full object-cover object-[30%_top] select-none pointer-events-none transition-all duration-700 lg:object-[center_top]"
+            className="animate-ambient-zoom absolute inset-0 h-full w-full object-cover object-[30%_top] select-none pointer-events-none lg:object-[center_top]"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/95 via-slate-950/40 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-slate-900/10 to-slate-900/40 lg:to-transparent" />
           <div className="absolute inset-0 flex items-end p-8 lg:p-12">
             <div className="w-full max-w-xl">
               <AnimatePresence mode="wait">
@@ -150,14 +210,15 @@ export default function CompanyInfo({ user, onComplete }) {
           </div>
         </aside>
 
-        <main className="bg-white p-6 text-left h-full lg:overflow-y-auto sm:p-10 lg:p-12">
-          <div className="mx-auto max-w-xl">
+        <main className="h-[calc(100vh-88px)] min-w-0 max-w-full overflow-y-auto overflow-x-hidden bg-white p-6 text-left [scrollbar-color:#cbd5e1_transparent] [scrollbar-width:thin] sm:h-[calc(100vh-104px)] sm:p-10 lg:col-span-7 lg:p-12">
+          <div className="w-full max-w-2xl pb-10 sm:pb-14">
             <header className="mb-8">
               <h1 className="mb-1.5 text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">Company Profile Setup</h1>
-              <p className="mb-8 text-xs font-medium text-slate-500 sm:text-sm">Add the essential information candidates need to understand your organization.</p>
+              <p className="mb-8 text-xs font-bold text-slate-500 sm:text-sm">Add the essential information candidates need to understand your organization.</p>
             </header>
 
             {error && <p className="mb-5 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700" role="alert">{error}</p>}
+            {success && <p className="mb-5 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-700" role="status"><CheckCircle2 className="h-4 w-4" />{success}</p>}
 
             <form onSubmit={handleSave} className="space-y-6">
               <section>
@@ -171,25 +232,36 @@ export default function CompanyInfo({ user, onComplete }) {
                   <Field label="Work Email" type="email" value={form.work_email} onChange={(value) => update('work_email', value)} required />
                   <div className="sm:col-span-2">
                     <label className={labelClass}>Phone Number</label>
-                    <div className="mt-2 flex gap-2">
+                    <div className="mt-2 flex w-full items-center gap-3">
                       <select
                         value={phoneOperator}
-                        onChange={(event) => setPhoneOperator(event.target.value)}
-                        className={`${inputClass} w-[180px] shrink-0`}
+                        onChange={(event) => {
+                          const operator = event.target.value;
+                          setPhoneOperator(operator);
+                        }}
+                        className="h-12 w-40 shrink-0 rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-800 outline-none transition-all focus:border-blue-600 focus:ring-2 focus:ring-blue-500 sm:w-44"
                       >
                         {phoneOperatorOptions.map((option) => (
                           <option key={option.value} value={option.value}>{option.label}</option>
                         ))}
                       </select>
-                      <input
-                        required
-                        type="tel"
-                        inputMode="numeric"
-                        value={phoneNumber}
-                        onChange={(event) => setPhoneNumber(event.target.value.replace(/\D/g, '').slice(0, 9))}
-                        placeholder="912345678"
-                        className={`${inputClass} flex-1`}
-                      />
+                      <div className="relative flex min-w-0 flex-1 items-center">
+                        <span className="pointer-events-none absolute left-3.5 select-none text-sm font-medium text-slate-400">+251</span>
+                        <input
+                          required
+                          type="tel"
+                          inputMode="numeric"
+                          value={phoneNumber}
+                          onChange={(event) => {
+                            const digits = event.target.value.replace(/\D/g, '').slice(0, 9);
+                            setPhoneNumber(digits);
+                            update('phone', normalizePhoneNumber(digits));
+                          }}
+                          maxLength={9}
+                          placeholder="912345678"
+                          className="h-12 w-full min-w-0 rounded-xl border border-slate-200 bg-white pl-14 pr-4 text-sm font-semibold text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -206,10 +278,10 @@ export default function CompanyInfo({ user, onComplete }) {
                   <Field label="Company Size" select options={companySizeOptions} value={form.company_size} onChange={(value) => update('company_size', value)} required />
                   <Field label="Headquarters Location" value={form.location} onChange={(value) => update('location', value)} required />
                   <Field label="Target Candidates / Hiring Volume" select options={hiringVolumeOptions} value={form.hiring_volume} onChange={(value) => update('hiring_volume', value)} required />
-                  <Field label="Website" type="url" value={form.website} onChange={(value) => update('website', value)} placeholder="https://example.com" />
-                  <Field label="Social Media Link" type="url" value={form.linkedin} onChange={(value) => update('linkedin', value)} placeholder="https://linkedin.com/company/..." />
+                  <Field label="Website (Optional)" type="url" value={form.website} onChange={(value) => update('website', value)} placeholder="https://example.com" />
+                  <Field label="Social Media Link (Optional)" type="url" value={form.linkedin} onChange={(value) => update('linkedin', value)} placeholder="https://linkedin.com/company/..." />
                   <div className="sm:col-span-2">
-                    <label className={labelClass}>About Company
+                    <label className={labelClass}>About Company <span className="font-medium text-slate-400">(Optional)</span>
                       <textarea
                         rows={3}
                         value={form.description}
@@ -223,7 +295,7 @@ export default function CompanyInfo({ user, onComplete }) {
               </section>
 
               <button type="submit" disabled={isSaving} className="mt-6 flex h-13 w-full cursor-pointer items-center justify-center gap-2 rounded-2xl bg-blue-600 px-6 text-xs font-black text-white shadow-lg shadow-blue-500/25 transition-all hover:bg-blue-700 active:scale-[0.99] sm:text-sm">
-                {isSaving ? 'Saving...' : 'Save & Continue to Dashboard →'}
+                {isSaving ? <><Loader2 className="h-4 w-4 animate-spin" />Saving profile...</> : <><ArrowRight className="h-4 w-4" />Save & Continue</>}
               </button>
             </form>
           </div>

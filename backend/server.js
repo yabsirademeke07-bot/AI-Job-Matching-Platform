@@ -87,6 +87,7 @@ const ensureDatabaseSchema = async () => {
     await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider VARCHAR(50) DEFAULT 'email'`);
     await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE`);
     await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE`);
+    await db.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_status ENUM('pending_verification', 'active') NOT NULL DEFAULT 'pending_verification'");
   } catch (error) {
     console.warn('User schema compatibility check skipped:', error.message);
   }
@@ -98,6 +99,7 @@ const ensureDatabaseSchema = async () => {
       otp_code VARCHAR(10) NOT NULL,
       purpose ENUM('registration', 'password-reset', 'email-verification') DEFAULT 'registration',
       is_used BOOLEAN DEFAULT FALSE,
+      attempts TINYINT UNSIGNED NOT NULL DEFAULT 0,
       expires_at TIMESTAMP NULL DEFAULT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       INDEX idx_email_expires (email, expires_at)
@@ -110,8 +112,14 @@ const ensureDatabaseSchema = async () => {
     await db.query('ALTER TABLE otps ADD COLUMN IF NOT EXISTS otp_code VARCHAR(10) NULL');
     await db.query("ALTER TABLE otps ADD COLUMN IF NOT EXISTS purpose ENUM('registration', 'password-reset', 'email-verification') DEFAULT 'registration'");
     await db.query('ALTER TABLE otps ADD COLUMN IF NOT EXISTS is_used BOOLEAN DEFAULT FALSE');
+    await db.query('ALTER TABLE otps ADD COLUMN IF NOT EXISTS attempts TINYINT UNSIGNED NOT NULL DEFAULT 0');
     await db.query('ALTER TABLE otps ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP NULL DEFAULT NULL');
     await db.query('ALTER TABLE otps ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
+    const [otpEmailIndexes] = await db.query(`SELECT COUNT(*) AS count
+      FROM information_schema.statistics
+      WHERE table_schema = DATABASE() AND table_name = 'otps'
+        AND index_name = 'email' AND non_unique = 0`);
+    if (otpEmailIndexes[0]?.count > 0) await db.query('ALTER TABLE otps DROP INDEX email');
   } catch (error) {
     console.warn('OTP column migration skipped:', error.message);
   }
@@ -129,8 +137,11 @@ const ensureDatabaseSchema = async () => {
       industry VARCHAR(100),
       companySize VARCHAR(50) DEFAULT '11-50',
       location VARCHAR(150),
+      phoneNumber VARCHAR(20),
+      phoneOperator VARCHAR(30),
       verificationStatus ENUM('pending', 'verified', 'rejected') DEFAULT 'pending',
       createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
       INDEX idx_userId (userId),
       INDEX idx_verificationStatus (verificationStatus)
@@ -225,13 +236,24 @@ const ensureDatabaseSchema = async () => {
   }
 
   try {
+    await db.query('ALTER TABLE employers ADD COLUMN IF NOT EXISTS phoneNumber VARCHAR(20) NULL');
+    await db.query('ALTER TABLE employers ADD COLUMN IF NOT EXISTS phoneOperator VARCHAR(30) NULL');
+    await db.query('ALTER TABLE employers ADD COLUMN IF NOT EXISTS updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP');
+  } catch (error) {
+    console.warn('Employer phone compatibility check skipped:', error.message);
+  }
+
+  try {
     await db.query("ALTER TABLE user_activity_log MODIFY COLUMN activity_type ENUM('login', 'profile-update', 'job-view', 'job-apply', 'profile-view', 'message-sent', 'cv-upload', 'role_selected') NOT NULL");
   } catch (error) {
     console.warn('Activity log migration skipped:', error.message);
   }
 
   try {
-    await db.query("ALTER TABLE jobs MODIFY COLUMN status ENUM('draft', 'published', 'closed', 'filled', 'archived', 'suspended') DEFAULT 'draft'");
+    await db.query("ALTER TABLE jobs MODIFY COLUMN status ENUM('draft', 'pending_approval', 'published', 'rejected', 'closed', 'filled', 'archived', 'suspended') DEFAULT 'draft'");
+    await db.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS rejection_reason TEXT NULL');
+    await db.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS approved_by INT NULL');
+    await db.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP NULL DEFAULT NULL');
   } catch (error) {
     console.warn('Job status migration skipped:', error.message);
   }
@@ -275,6 +297,8 @@ const sanitizeUser = (user) => ({
   phone: user.phone || null,
   role: resolveEffectiveRole(user.role, user.email),
   is_verified: Boolean(user.is_verified),
+  isEmailVerified: Boolean(user.is_verified),
+  authStatus: user.auth_status || (user.is_verified ? 'active' : 'pending_verification'),
   is_active: user.is_active !== false,
   google_id: user.google_id || null,
   auth_provider: user.auth_provider || 'email',
@@ -346,7 +370,7 @@ const authenticateUser = (req, res, next) => {
 const requireAdmin = (req, res, next) => {
   const role = String(req.user?.role || '').trim().toLowerCase();
   const email = String(req.user?.email || '').trim().toLowerCase();
-  if (role === 'admin' || role === 'super_admin' || ADMIN_EMAILS.has(email)) {
+  if (role === 'admin' || ADMIN_EMAILS.has(email)) {
     return next();
   }
 
@@ -356,6 +380,7 @@ const requireAdmin = (req, res, next) => {
 const adminController = require('./controllers/adminController');
 
 app.get('/api/admin/overview', authenticateUser, requireAdmin, adminController.getAdminDashboardData);
+app.get('/api/admin/dashboard-stats', authenticateUser, requireAdmin, adminController.getAdminDashboardStats);
 app.patch('/api/admin/companies/:companyId/verify', authenticateUser, requireAdmin, adminController.verifyCompany);
 app.patch('/api/admin/company/:id/verify', authenticateUser, requireAdmin, adminController.updateVerificationStatus);
 app.get('/api/admin/companies', authenticateUser, requireAdmin, adminController.getPendingCompanies);
@@ -364,6 +389,8 @@ app.get('/api/admin/jobs/:id/preview', authenticateUser, requireAdmin, adminCont
 app.patch('/api/admin/users/:userId/status', authenticateUser, requireAdmin, adminController.toggleUserStatus);
 app.patch('/api/admin/jobs/:jobId/status', authenticateUser, requireAdmin, adminController.toggleJobStatus);
 app.patch('/api/admin/jobs/:id/moderate', authenticateUser, requireAdmin, adminController.toggleJobStatus);
+app.post('/api/admin/jobs/:id/moderate', authenticateUser, requireAdmin, adminController.moderateJob);
+app.patch('/api/admin/reports/:id/status', authenticateUser, requireAdmin, adminController.updateReportStatus);
 app.delete('/api/admin/jobs/:id', authenticateUser, requireAdmin, adminController.deleteJob);
 
 app.put('/api/seeker/profile', authenticateUser, async (req, res) => {
@@ -473,6 +500,9 @@ app.post('/api/send-otp', async (req, res) => {
 
   } catch (error) {
     console.error('Email error:', error);
+    if (error.code === 'OTP_RATE_LIMITED') {
+      return res.status(429).json({ success: false, message: error.message });
+    }
     res.status(500).json({ success: false, message: 'Failed to send OTP email / ኢሜይል መላክ አልተቻለም' });
   }
 });
@@ -506,7 +536,7 @@ app.post('/api/verify-otp', async (req, res) => {
 
       await db.query('UPDATE otps SET is_used = TRUE WHERE id = ?', [otpRecord.id]);
       await db.query(
-        'UPDATE users SET is_verified = TRUE' + (selectedRole ? ', role = ?' : '') + ' WHERE email = ?',
+        "UPDATE users SET is_verified = TRUE, auth_status = 'active'" + (selectedRole ? ', role = ?' : '') + ' WHERE email = ?',
         selectedRole ? [selectedRole, cleanEmail] : [cleanEmail]
       );
       const [verifiedUsers] = await db.query(
@@ -534,7 +564,9 @@ app.post('/api/register', validateSignUp, async (req, res) => {
   const userFullName = (full_name || fullName || '').trim();
   const normalizedEmail = String(email || '').trim().toLowerCase();
   const userPhone = phone || phoneNumber || null;
-  const selectedRole = role === 'employer' || role === 'job_seeker' ? role : 'job_seeker';
+  const selectedRole = ADMIN_EMAILS.has(normalizedEmail)
+    ? 'admin'
+    : (role === 'employer' || role === 'job_seeker' ? role : 'job_seeker');
 
   if (!userFullName) {
     return res.status(400).json({ message: 'Full Name is missing / ሙሉ ስም አልተገኘም' });
@@ -562,7 +594,7 @@ app.post('/api/register', validateSignUp, async (req, res) => {
       }
 
       await db.query(
-        'UPDATE users SET full_name = ?, phone = ?, password = ?, role = ?, is_verified = FALSE, is_active = TRUE WHERE id = ?',
+        "UPDATE users SET full_name = ?, phone = ?, password = ?, role = ?, is_verified = FALSE, auth_status = 'pending_verification', is_active = TRUE WHERE id = ?",
         [userFullName, userPhone || null, hashedPassword, selectedRole, existingUser.id]
       );
       await db.query('UPDATE otps SET is_used = TRUE WHERE email = ? AND is_used = FALSE', [normalizedEmail]);
@@ -580,7 +612,7 @@ app.post('/api/register', validateSignUp, async (req, res) => {
     }
 
     const [result] = await db.query(
-      'INSERT INTO users (full_name, email, phone, password, role, is_verified, is_active) VALUES (?, ?, ?, ?, ?, FALSE, TRUE)',
+      "INSERT INTO users (full_name, email, phone, password, role, is_verified, auth_status, is_active) VALUES (?, ?, ?, ?, ?, FALSE, 'pending_verification', TRUE)",
       [userFullName, normalizedEmail, userPhone || null, hashedPassword, selectedRole]
     );
 
@@ -615,7 +647,7 @@ app.post('/api/register', validateSignUp, async (req, res) => {
   }
 });
 
-app.post('/api/complete-registration', async (req, res) => {
+app.post('/api/complete-registration', authenticateUser, async (req, res) => {
   const { email, role } = req.body;
   const normalizedEmail = String(email || '').trim().toLowerCase();
   const normalizedRole = normalizeRole(role);
@@ -631,7 +663,10 @@ app.post('/api/complete-registration', async (req, res) => {
     }
 
     const user = userRows[0];
-    await db.query('UPDATE users SET role = ?, is_verified = TRUE WHERE id = ?', [normalizedRole, user.id]);
+    if (String(req.user.id) !== String(user.id) || !user.is_verified) {
+      return res.status(403).json({ success: false, message: 'Email verification is required before completing registration.' });
+    }
+    await db.query("UPDATE users SET role = ?, is_verified = TRUE, auth_status = 'active' WHERE id = ?", [normalizedRole, user.id]);
 
     if (normalizedRole === 'employer') {
       await db.query(
@@ -676,7 +711,7 @@ app.post('/api/login', validateLogin, async (req, res) => {
 
   try {
     const [users] = await db.query(
-      'SELECT id, full_name, email, password, phone, role, is_verified, is_active, profile_picture_url FROM users WHERE email = ? LIMIT 1',
+      'SELECT id, full_name, email, password, phone, role, is_verified, auth_status, is_active, profile_picture_url FROM users WHERE email = ? LIMIT 1',
       [normalizedEmail]
     );
 
@@ -698,8 +733,12 @@ app.post('/api/login', validateLogin, async (req, res) => {
     }
 
     if (!user.is_verified) {
-      await db.query('UPDATE users SET is_verified = TRUE WHERE id = ?', [user.id]);
-      user.is_verified = true;
+      return res.status(403).json({
+        success: false,
+        requiresVerification: true,
+        email: user.email,
+        message: 'Please verify your email with the OTP before logging in.'
+      });
     }
 
     const resolvedRole = resolveEffectiveRole(user.role, user.email);
@@ -745,6 +784,9 @@ app.post('/api/send-login-otp', async (req, res) => {
     return res.status(200).json({ success: true, delivery: { emailSent: delivery.email, smsSent: delivery.sms }, message: 'OTP sent to your email / OTP ወደ ኢሜይልዎ ተልኳል' });
   } catch (error) {
     console.error('Send Login OTP Error:', error);
+    if (error.code === 'OTP_RATE_LIMITED') {
+      return res.status(429).json({ success: false, message: error.message });
+    }
     return res.status(500).json({ success: false, message: 'Unable to send OTP / OTP መላክ አልተቻለም' });
   }
 });
@@ -769,8 +811,14 @@ app.post('/api/verify-login-otp', async (req, res) => {
     }
 
     const otpRecord = otpRows[0];
-    if (new Date() > new Date(otpRecord.expires_at) || otpRecord.otp_code !== otpCode) {
+    if (new Date() > new Date(otpRecord.expires_at)) {
       await db.query('UPDATE otps SET is_used = TRUE WHERE id = ?', [otpRecord.id]);
+      return res.status(400).json({ success: false, message: 'Invalid or expired OTP / የተሳሳተ ወይም ጊዜው ያለፈበት OTP' });
+    }
+
+    if (otpRecord.otp_code !== otpCode) {
+      const nextAttempts = Number(otpRecord.attempts || 0) + 1;
+      await db.query('UPDATE otps SET attempts = ?, is_used = ? WHERE id = ?', [nextAttempts, nextAttempts >= 5, otpRecord.id]);
       return res.status(400).json({ success: false, message: 'Invalid or expired OTP / የተሳሳተ ወይም ጊዜው ያለፈበት OTP' });
     }
 
@@ -782,7 +830,7 @@ app.post('/api/verify-login-otp', async (req, res) => {
     }
 
     const user = userRows[0];
-    await db.query('UPDATE users SET is_verified = TRUE WHERE id = ?', [user.id]);
+    await db.query("UPDATE users SET is_verified = TRUE, auth_status = 'active' WHERE id = ?", [user.id]);
     const effectiveRole = resolveEffectiveRole(user.role, user.email);
     if (effectiveRole !== user.role) {
       await db.query('UPDATE users SET role = ? WHERE id = ?', [effectiveRole, user.id]);

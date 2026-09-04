@@ -109,8 +109,8 @@ function AppLayout() {
           <Route path="/register" element={<Register />} />
           <Route path="/verify-otp" element={<OtpVerification />} />
 
-          <Route path="/role-selection" element={<RoleSelection />} />
-          <Route path="/select-role" element={<RoleSelection />} />
+          <Route path="/role-selection" element={<ProtectedRoute allowUnassigned><RoleSelection /></ProtectedRoute>} />
+          <Route path="/select-role" element={<ProtectedRoute allowUnassigned><RoleSelection /></ProtectedRoute>} />
 
           <Route path="/auth/google/callback" element={<GoogleCallback />} />
           <Route path="/auth/callback" element={<GoogleCallback />} />
@@ -329,16 +329,18 @@ function AppLayout() {
           {/* ========================================== */}
           {/* 5. ADMIN PROTECTED ROUTES                  */}
           {/* ========================================== */}
-          <Route
-            path="/admin-dashboard"
-            element={
-              <ProtectedRoute allowedRoles={["admin"]}>
-                <AdminDashboard />
-              </ProtectedRoute>
-            }
-          />
           <Route path="/admin/dashboard" element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminDashboard /></ProtectedRoute>} />
-          <Route path="/admin/desk" element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminDashboard /></ProtectedRoute>} />
+          <Route path="/admin/users" element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminDashboard /></ProtectedRoute>} />
+          <Route path="/admin/employers" element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminDashboard /></ProtectedRoute>} />
+          <Route path="/admin/jobs" element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminDashboard /></ProtectedRoute>} />
+          <Route path="/admin/applications" element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminDashboard /></ProtectedRoute>} />
+          <Route path="/admin/ai-matching" element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminDashboard /></ProtectedRoute>} />
+          <Route path="/admin/analytics" element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminDashboard /></ProtectedRoute>} />
+          <Route path="/admin/reports" element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminDashboard /></ProtectedRoute>} />
+          <Route path="/admin/notifications" element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminDashboard /></ProtectedRoute>} />
+          <Route path="/admin/settings" element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminDashboard /></ProtectedRoute>} />
+          <Route path="/admin-dashboard" element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><Navigate to="/admin/dashboard" replace /></ProtectedRoute>} />
+          <Route path="/admin/desk" element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><Navigate to="/admin/dashboard" replace /></ProtectedRoute>} />
           <Route
             path="/admin-approval"
             element={

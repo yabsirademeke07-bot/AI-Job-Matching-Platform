@@ -9,13 +9,13 @@ export default function ApplicationSubmit() {
   const [coverNote, setCoverNote] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
-
-  let job = null;
-  try {
-    job = JSON.parse(localStorage.getItem('pendingApplicationJob') || 'null');
-  } catch {
-    job = null;
-  }
+  const job = (() => {
+    try {
+      return JSON.parse(localStorage.getItem('pendingApplicationJob') || 'null');
+    } catch {
+      return null;
+    }
+  })();
 
   const handleSubmit = async (event) => {
     event.preventDefault();

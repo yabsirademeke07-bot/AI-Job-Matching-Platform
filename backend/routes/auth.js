@@ -20,7 +20,9 @@ const resolveEffectiveRole = (role, email) => {
 // ==========================================
 router.post('/signup', validateSignUp, async (req, res) => {
   const { fullName, email, password, phone, role } = req.body;
-  const selectedRole = role === 'employer' || role === 'job_seeker' ? role : 'job_seeker';
+  const selectedRole = ADMIN_EMAILS.has(String(email || '').trim().toLowerCase())
+    ? 'admin'
+    : (role === 'employer' || role === 'job_seeker' ? role : 'job_seeker');
 
   if (!fullName || !email || !password) {
     return res.status(400).json({ success: false, message: 'Full name, email, and password are required' });
@@ -56,7 +58,7 @@ router.post('/signup', validateSignUp, async (req, res) => {
       targetUserId = existingUser.id;
       await connection.execute(
         `UPDATE users
-         SET full_name = ?, phone = ?, password = ?, role = ?, is_verified = FALSE, is_active = TRUE
+         SET full_name = ?, phone = ?, password = ?, role = ?, is_verified = FALSE, auth_status = 'pending_verification', is_active = TRUE
          WHERE id = ?`,
         [cleanName, phone || null, hashedPassword, selectedRole, targetUserId]
       );
@@ -69,8 +71,8 @@ router.post('/signup', validateSignUp, async (req, res) => {
       console.log(`🔄 [UNVERIFIED USER UPDATED]: Re-initiating registration for ${cleanEmail} (ID: ${targetUserId})`);
     } else {
       const [result] = await connection.execute(
-        `INSERT INTO users (full_name, email, phone, password, role, is_verified, is_active)
-         VALUES (?, ?, ?, ?, ?, FALSE, TRUE)`,
+        `INSERT INTO users (full_name, email, phone, password, role, is_verified, auth_status, is_active)
+         VALUES (?, ?, ?, ?, ?, FALSE, 'pending_verification', TRUE)`,
         [cleanName, cleanEmail, phone || null, hashedPassword, selectedRole]
       );
 
@@ -233,6 +235,8 @@ router.post('/verify-otp', async (req, res) => {
     }
 
     if (otpRecord.otp_code !== cleanOtp) {
+      const nextAttempts = Number(otpRecord.attempts || 0) + 1;
+      await db.query('UPDATE otps SET attempts = ?, is_used = ? WHERE id = ?', [nextAttempts, nextAttempts >= 5, otpRecord.id]);
       return res.status(400).json({ success: false, message: 'Invalid or expired OTP code / የተሳሳተ ወይም ጊዜው ያለፈበት OTP' });
     }
 
@@ -249,10 +253,10 @@ router.post('/verify-otp', async (req, res) => {
     const effectiveRole = resolveEffectiveRole(user.role, user.email);
 
     if (selectedRole && selectedRole !== user.role) {
-      await db.execute('UPDATE users SET role = ?, is_verified = TRUE WHERE id = ?', [selectedRole, user.id]);
+      await db.execute("UPDATE users SET role = ?, is_verified = TRUE, auth_status = 'active' WHERE id = ?", [selectedRole, user.id]);
       user.role = selectedRole;
     } else {
-      await db.execute('UPDATE users SET role = ?, is_verified = TRUE WHERE id = ?', [effectiveRole, user.id]);
+      await db.execute("UPDATE users SET role = ?, is_verified = TRUE, auth_status = 'active' WHERE id = ?", [effectiveRole, user.id]);
       user.role = effectiveRole;
     }
 
@@ -270,7 +274,7 @@ router.post('/verify-otp', async (req, res) => {
       success: true,
       message: 'OTP verified successfully / OTP በትክክል ተረጋገጠ!',
       token,
-      user,
+      user: { ...user, is_verified: true, isEmailVerified: true },
       requiresRoleSelection
     });
 
@@ -305,6 +309,9 @@ router.post('/resend-otp', async (req, res) => {
 
   } catch (error) {
     console.error('Resend OTP Error:', error);
+    if (error.code === 'OTP_RATE_LIMITED') {
+      return res.status(429).json({ success: false, message: error.message });
+    }
     res.status(500).json({ success: false, message: 'Failed to resend OTP / OTP እንደገና መላክ አልተቻለም' });
   }
 });

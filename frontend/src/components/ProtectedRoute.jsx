@@ -1,4 +1,3 @@
-import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { getNextOnboardingStep } from '../utils/applicationFlow';
 import { normalizeRole } from '../utils/authSession';
@@ -7,7 +6,8 @@ const ProtectedRoute = ({
   children, 
   allowedRoles = [], 
   fallbackPath = '/login', 
-  unauthorizedPath = '/' 
+  unauthorizedPath = '/',
+  allowUnassigned = false,
 }) => {
   const location = useLocation();
 
@@ -27,20 +27,33 @@ const ProtectedRoute = ({
   const { token, user } = getAuthData();
   const rawUserRole = user?.role || user?.userType || '';
   const userRole = normalizeRole(rawUserRole);
-  const adminOverride = String(user?.email || '').trim().toLowerCase() === 'tekebaaweke32@gmail.com';
+  const isEmailVerified = user?.isEmailVerified === true || user?.is_verified === true || user?.isVerified === true;
+  const isAdminRoute = location.pathname.startsWith('/admin') || location.pathname === '/admin-dashboard';
 
   // 2. ተጠቃሚው ካልገባ ወይም Token/User ከሌለ ወደ Login ይመለስ
   if (!token || !user) {
     return <Navigate to={fallbackPath} state={{ from: location }} replace />;
   }
 
-  // 3. ተጠቃሚው ገብቷል ነገር ግን Role ገና ካልመረጠ ወደ /select-role ይሂድ
-  if (!adminOverride && !user.role && !user.userType) {
-    return <Navigate to="/select-role" state={{ from: location }} replace />;
+  // Admins always enter the restricted workspace; other roles cannot enter it.
+  if (userRole === 'admin' || userRole === 'super_admin') {
+    if (!isAdminRoute) return <Navigate to="/admin/dashboard" replace />;
+  } else if (isAdminRoute) {
+    const destination = ['employer', 'company', 'recruiter'].includes(userRole)
+      ? '/employer/dashboard'
+      : ['job_seeker', 'seeker', 'jobseeker', 'user', 'employee'].includes(userRole)
+        ? '/seeker/dashboard'
+        : '/login';
+    return <Navigate to={destination} replace />;
   }
 
-  if (adminOverride) {
-    return <>{children}</>;
+  if (!isEmailVerified) {
+    return <Navigate to="/verify-otp" state={{ email: user.email, from: location }} replace />;
+  }
+
+  // 3. ተጠቃሚው ገብቷል ነገር ግን Role ገና ካልመረጠ ወደ /select-role ይሂድ
+  if (!allowUnassigned && !user.role && !user.userType) {
+    return <Navigate to="/select-role" state={{ from: location }} replace />;
   }
 
   if (['job_seeker', 'seeker', 'jobseeker', 'user', 'employee'].includes(userRole) && ['/select-role', '/cv-upload', '/seeker/cv-upload', '/upload-cv', '/profile', '/seeker/personal-info', '/dashboard', '/seeker/dashboard'].includes(location.pathname)) {

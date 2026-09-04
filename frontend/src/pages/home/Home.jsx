@@ -67,6 +67,7 @@ export default function Home() {
   const allJobs = publishedJobs.length ? publishedJobs : fallbackJobs;
   const [visibleJobs, setVisibleJobs] = useState(allJobs);
   const [activeQuery, setActiveQuery] = useState('');
+  const [activeSection, setActiveSection] = useState('how-it-works');
 
   useEffect(() => {
     const sections = sectionNavItems

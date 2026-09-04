@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
-import { continueApplicationFlow, getNextOnboardingStep, getPendingApplication } from '../utils/applicationFlow';
+import { continueApplicationFlow, getPendingApplication } from '../utils/applicationFlow';
 import { useAuth } from '../context/AuthContext';
 import { ArrowLeft, Cpu, RefreshCw, ShieldCheck, Sparkles, Target } from 'lucide-react';
 
@@ -21,7 +21,7 @@ const OtpVerification = () => {
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const [loading, setLoading] = useState(false);
-  const [otpTimer, setOtpTimer] = useState(180);
+  const [otpTimer, setOtpTimer] = useState(60);
   const otpInputRefs = useRef([]);
 
   const formatOtpTime = (seconds) => {
@@ -114,7 +114,7 @@ const OtpVerification = () => {
         response = await api.post('/auth/resend-otp', { email });
       }
       if (!response.data?.success) throw new Error(response.data?.message || 'Unable to resend OTP.');
-      setOtpTimer(180);
+      setOtpTimer(60);
       setOtp(['', '', '', '', '', '']);
       setInfo('A new verification code was sent to your email.');
       setError('');
