@@ -6,7 +6,7 @@ import { continueApplicationFlow, getNextOnboardingStep, getPendingApplication }
 import { useAuth } from '../context/AuthContext';
 import { getUserDestination } from '../utils/authSession';
 import {
-  Sparkles, ShieldCheck, Cpu, Lock,
+  Sparkles, ShieldCheck, Cpu, Lock, Mail,
   ArrowRight, Eye, EyeOff, Target, ArrowLeft
 } from 'lucide-react';
 import EmailInputWithDomains from '../components/EmailInputWithDomains';
@@ -130,6 +130,10 @@ const Login = () => {
       navigateByRole(data.user?.role || data.user?.userType, data.user);
     } catch (error) {
       const response = error.response;
+      if (response?.status === 403 && response.data?.requiresVerification) {
+        navigate('/verify-otp', { state: { email: response.data.email || formData.emailOrPhone.trim().toLowerCase() } });
+        return;
+      }
       setApiError(response?.data?.message || 'Unable to sign in. Please try again.');
     } finally {
       setIsLoading(false);

@@ -7,13 +7,13 @@ const smtpPassword = process.env.EMAIL_APP_PASSWORD
   : '';
 
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  host: 'smtp.gmail.com',
-  port: 465,
-  secure: true,
+  service: process.env.EMAIL_SERVICE || undefined,
+  host: process.env.SMTP_HOST || process.env.EMAIL_HOST || 'smtp.gmail.com',
+  port: Number(process.env.SMTP_PORT || process.env.EMAIL_PORT || 465),
+  secure: String(process.env.SMTP_SECURE || process.env.EMAIL_SECURE || 'true') === 'true',
   auth: {
-    user: process.env.EMAIL_USER,
-    pass: smtpPassword,
+    user: process.env.SMTP_USER || process.env.EMAIL_USER,
+    pass: process.env.SMTP_PASS || smtpPassword,
   },
   tls: {
     rejectUnauthorized: false,
@@ -62,9 +62,14 @@ const sendEmailOtp = async (toEmail, otpCode, recipientName = 'User') => {
   };
 
   console.log(`📡 [DISPATCHING GMAIL] Sending OTP ${otpCode} to ${cleanTo}...`);
-  const info = await transporter.sendMail(mailOptions);
-  console.log(`✅ [GMAIL SENT SUCCESS] Message ID: ${info.messageId} to ${cleanTo}`);
-  return info;
+  try {
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`✅ [EMAIL SENT SUCCESS] Message ID: ${info.messageId} to ${cleanTo}`);
+    return info;
+  } catch (error) {
+    console.error(`❌ [EMAIL OTP DELIVERY FAILED] ${cleanTo}:`, error.message);
+    throw new Error('OTP email delivery failed. Please check the mail server configuration.');
+  }
 };
 
 module.exports = { sendEmailOtp };

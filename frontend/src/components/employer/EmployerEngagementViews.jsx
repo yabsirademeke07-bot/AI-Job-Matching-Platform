@@ -55,7 +55,9 @@ export function EmployerNotifications() {
     setNotifications((current) => current.map((notification) => notification.id === item.id ? { ...notification, isRead: true, read: true } : notification));
     try {
       await api.patch(`/employer/notifications/${item.id}/read`);
-    } catch {}
+    } catch (requestError) {
+      console.warn('Unable to mark notification as read:', requestError);
+    }
   };
 
   return <ViewFrame icon={Bell} title="Notifications" subtitle="Stay current with candidates, jobs, and team activity.">{notifications.map((item) => <article key={item.id} className={`flex items-start gap-4 rounded-2xl border p-5 ${item.isRead || item.read ? 'border-slate-200 bg-white' : 'border-blue-200 bg-blue-50/50'}`}><Bell className="mt-1 h-5 w-5 shrink-0 text-blue-600" /><div className="min-w-0 flex-1"><h3 className="font-black text-slate-900">{item.title}</h3><p className="mt-1 text-sm text-slate-600">{item.body || item.message}</p></div>{!(item.isRead || item.read) && <button onClick={() => markRead(item)} className="inline-flex items-center gap-1 text-xs font-bold text-blue-700"><Check className="h-4 w-4" /> Mark read</button>}</article>)}</ViewFrame>;
@@ -82,7 +84,9 @@ export function EmployerSettings() {
     localStorage.setItem('employerSettings', JSON.stringify(settings));
     try {
       await api.put('/employer/settings', settings);
-    } catch {}
+    } catch (requestError) {
+      console.warn('Unable to save employer settings:', requestError);
+    }
   };
 
   return <ViewFrame icon={Settings} title="Settings" subtitle="Control workspace alerts and matching preferences."><div className="divide-y divide-slate-100 rounded-2xl border border-slate-200 bg-white">{[['emailAlerts', 'Email alerts', 'Receive important recruitment updates by email.'], ['matchingAlerts', 'AI matching alerts', 'Get notified when new registered talent matches an open role.'], ['weeklyDigest', 'Weekly digest', 'Receive a weekly summary of workspace activity.']].map(([key, label, description]) => <label key={key} className="flex items-center justify-between gap-4 p-5"><span><span className="block font-black text-slate-900">{label}</span><span className="mt-1 block text-sm text-slate-500">{description}</span></span><input type="checkbox" checked={Boolean(settings[key])} onChange={(event) => setSettings((current) => ({ ...current, [key]: event.target.checked }))} className="h-5 w-5 accent-blue-600" /></label>)}</div><button onClick={save} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white"><Save className="h-4 w-4" /> Save Settings</button></ViewFrame>;

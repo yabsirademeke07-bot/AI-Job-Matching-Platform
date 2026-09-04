@@ -50,10 +50,76 @@ body {
   color: var(--body);
   background: #ffffff;
   text-rendering: optimizeLegibility;
+  overflow-x: hidden;
 }
 
 * {
   box-sizing: border-box;
+}
+
+.admin-shell {
+  width: 100%;
+  overflow-x: hidden;
+}
+
+.admin-main {
+  overflow-x: hidden;
+}
+
+@media (max-width: 639px) {
+  .admin-sidebar > div {
+    padding: 1rem;
+  }
+
+  .admin-nav {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1rem;
+    overflow-x: auto;
+    padding-bottom: 0.5rem;
+    scrollbar-width: thin;
+  }
+
+  .admin-nav button {
+    flex: 0 0 auto;
+    min-width: max-content;
+    border-left-width: 0;
+    border-bottom: 3px solid transparent;
+    border-radius: 0.75rem;
+    padding: 0.625rem 0.75rem;
+    white-space: nowrap;
+  }
+
+  .admin-nav button[class*="border-blue-600"] {
+    border-bottom-color: #2563eb;
+  }
+
+  .admin-sidebar button[aria-label="Logout"] {
+    margin-top: 0.75rem;
+  }
+
+  .admin-main {
+    padding: 1.5rem 1rem;
+  }
+
+  .admin-main h1 {
+    font-size: 1.75rem;
+    line-height: 1.2;
+  }
+}
+
+@media (min-width: 640px) and (max-width: 1023px) {
+  .admin-sidebar > div {
+    padding: 1.25rem 1.5rem;
+  }
+
+  .admin-nav {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .admin-nav button {
+    min-height: 2.75rem;
+  }
 }
 
 /* Employer pipeline tables keep their column labels and empty states easy to scan. */
