@@ -1,4 +1,3 @@
-import { useState } from "react";
 import OverviewView from "./OverviewView";
 import ExperienceView from "./ExperienceView";
 import SkillsView from "./SkillsView";
@@ -18,6 +17,8 @@ export default function AboutView({ activeTab = "overview", onNavigate }) {
       case "createProfile":
         return <CreateProfileView />;
       case "overview":
+        return <OverviewView onNavigate={onNavigate} />;
+      case "about":
         return <OverviewView onNavigate={onNavigate} />;
       case "experience":
         return <ExperienceView />;
@@ -39,7 +40,7 @@ export default function AboutView({ activeTab = "overview", onNavigate }) {
   };
 
   return (
-    <div className="space-y-6 bg-slate-50">
+    <div className="space-y-6 bg-white">
       {renderSection()}
     </div>
   );

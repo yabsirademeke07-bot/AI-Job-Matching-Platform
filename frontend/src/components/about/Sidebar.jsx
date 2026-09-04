@@ -7,6 +7,7 @@ import {
   FolderKanban,
   Layers3,
   MessageSquareText,
+  Info,
   Sparkles,
 } from "lucide-react";
 
@@ -18,7 +19,7 @@ const defaultNavItems = [
   { id: "services", label: "Services" },
   { id: "jobs", label: "Jobs" },
   { id: "prompts", label: "Prompt Studio" },
-  { id: "contact", label: "Contact" },
+  { id: "about", label: "About" },
 ];
 
 export default function Sidebar({
@@ -44,6 +45,7 @@ export default function Sidebar({
     jobs: Briefcase,
     prompts: MessageSquareText,
     contact: ContactRound,
+    about: Info,
   };
 
   return (
