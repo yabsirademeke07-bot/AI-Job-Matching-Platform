@@ -213,7 +213,7 @@ function Illustration({ type }) {
 
 export default function HowItWorks() {
   const [audience, setAudience] = useState('seekers');
-  const steps = audience === 'seekers' ? seekerSteps : audience === 'employers' ? employerSteps : adminSteps;
+  const steps = audience === 'seekers' ? seekerSteps : employerSteps;
 
   return (
     <div className="brand-how-it-works min-h-screen overflow-hidden bg-white text-slate-900">
@@ -226,7 +226,6 @@ export default function HowItWorks() {
           <div className="mx-auto mt-9 inline-flex rounded-2xl border border-slate-200 bg-white p-1.5 shadow-lg shadow-indigo-100/60">
             <button type="button" onClick={() => setAudience('seekers')} className={`rounded-xl px-5 py-3 text-sm font-bold transition sm:px-7 ${audience === 'seekers' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/25' : 'text-slate-600 hover:bg-slate-50'}`}>For Job Seekers</button>
             <button type="button" onClick={() => setAudience('employers')} className={`rounded-xl px-5 py-3 text-sm font-bold transition sm:px-7 ${audience === 'employers' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/25' : 'text-slate-600 hover:bg-slate-50'}`}>For Employers</button>
-            <button type="button" onClick={() => setAudience('admin')} className={`rounded-xl px-5 py-3 text-sm font-bold transition sm:px-7 ${audience === 'admin' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/25' : 'text-slate-600 hover:bg-slate-50'}`}>For Admins</button>
           </div>
         </div>
       </section>
@@ -241,105 +240,48 @@ export default function HowItWorks() {
         <div className="mx-auto max-w-7xl">
           {/* For Job Seekers - Card Layout */}
           {audience === 'seekers' && (
-            <div className="relative">
-              {/* Background profile image with overlay */}
-              <div className="relative mb-8 h-[500px] rounded-3xl overflow-hidden bg-gradient-to-br from-slate-200 to-slate-300">
-                {/* Simulated background image with overlay */}
-                <div className="absolute inset-0 bg-gradient-to-r from-slate-900/40 via-slate-900/20 to-transparent" />
-                <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjUwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjUwMCIgZmlsbD0iIzZCNzI4MCIvPjwvc3ZnPg==')]" />
+            <div>
+              <div className="mx-auto mb-8 max-w-3xl text-center">
+                <h2 className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">How JobMatch AI Works for Job Seekers</h2>
+                <p className="mt-3 text-sm leading-7 text-slate-600 sm:text-base">Our AI-powered platform makes job searching and hiring simple, smart, and efficient for everyone.</p>
               </div>
-
-              {/* Card overlay with step information */}
-              <div className="absolute inset-0 flex items-center pointer-events-none">
-                <div className="w-full px-4 sm:px-8 py-12">
-                  <div className="grid gap-6 md:grid-cols-2 lg:gap-8">
-                    {/* Step 01 - Profile */}
-                    <div className="pointer-events-auto">
-                      <div className="rounded-2xl bg-white p-6 shadow-xl border border-blue-100/50 backdrop-blur-sm">
-                        <div className="flex items-start gap-3 mb-4">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-100">
-                            <span className="text-xs font-bold text-indigo-600">📄</span>
-                          </div>
-                          <span className="text-xs font-bold text-indigo-500 tracking-wider">STEP 01</span>
-                        </div>
-                        <h3 className="text-xl font-black text-slate-900 mb-3">CV / Profile</h3>
-                        <div className="flex flex-wrap gap-2">
-                          <span className="inline-flex px-3 py-1 rounded-full text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200">React</span>
-                          <span className="inline-flex px-3 py-1 rounded-full text-xs font-bold text-green-700 bg-green-50 border border-green-200">Node.js</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Step 02 - AI Analysis */}
-                    <div className="pointer-events-auto">
-                      <div className="rounded-2xl bg-white p-6 shadow-xl border border-purple-100/50 backdrop-blur-sm">
-                        <div className="flex items-start gap-3 mb-4">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-100">
-                            <span className="text-xs font-bold text-purple-600">⚡</span>
-                          </div>
-                          <span className="text-xs font-bold text-purple-500 tracking-wider">STEP 02</span>
-                        </div>
-                        <h3 className="text-xl font-black text-slate-900 mb-3">AI Analysis</h3>
-                        <div className="h-1.5 w-24 rounded-full bg-gradient-to-r from-purple-400 to-purple-600" />
-                      </div>
-                    </div>
-
-                    {/* Central Profile Circle */}
-                    <div className="pointer-events-auto col-span-1 md:col-span-2 flex justify-center -my-20">
-                      <div className="relative">
-                        <div className="absolute inset-0 rounded-full bg-gradient-to-br from-indigo-400 to-blue-500 blur-lg opacity-40" />
-                        <div className="relative w-40 h-40 rounded-full border-4 border-white bg-gradient-to-br from-slate-300 to-slate-400 flex items-center justify-center shadow-2xl">
-                          <div className="text-6xl">👤</div>
-                        </div>
-                        <div className="absolute bottom-2 right-2 bg-white rounded-full p-3 shadow-lg border-2 border-blue-500">
-                          <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center">
-                            <span className="text-white text-xs font-bold">🏢</span>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 text-center pointer-events-none">
-                        <h2 className="text-2xl font-black text-slate-900">JOB SEEKER</h2>
-                      </div>
-                    </div>
-
-                    {/* Step 03 - Job Matching */}
-                    <div className="pointer-events-auto">
-                      <div className="rounded-2xl bg-white p-6 shadow-xl border border-teal-100/50 backdrop-blur-sm">
-                        <div className="flex items-start gap-3 mb-4">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-teal-100">
-                            <span className="text-xs font-bold text-teal-600">📍</span>
-                          </div>
-                          <span className="text-xs font-bold text-teal-500 tracking-wider">STEP 03</span>
-                        </div>
-                        <h3 className="text-xl font-black text-slate-900 mb-2">Job Matching</h3>
-                        <p className="text-sm text-slate-600 flex items-center gap-1">📍 Best fit found</p>
-                      </div>
-                    </div>
-
-                    {/* Step 04 - Recommended Jobs */}
-                    <div className="pointer-events-auto">
-                      <div className="rounded-2xl bg-white p-6 shadow-xl border border-orange-100/50 backdrop-blur-sm">
-                        <div className="flex items-start gap-3 mb-4">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-100">
-                            <span className="text-xs font-bold text-orange-600">⭐</span>
-                          </div>
-                          <span className="text-xs font-bold text-orange-500 tracking-wider">STEP 04</span>
-                        </div>
-                        <h3 className="text-xl font-black text-slate-900 mb-2">Recommended Jobs</h3>
-                        <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-700">
-                          <span className="w-2 h-2 rounded-full bg-orange-400" />
-                          View opportunities
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+              <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+                <article className="rounded-2xl border border-blue-100 bg-white p-6 shadow-lg shadow-slate-200/50">
+                  <div className="flex items-center gap-3"><UserRound className="h-6 w-6 brand-text" /><span className="text-xs font-bold tracking-wider brand-text">STEP 01</span></div>
+                  <h3 className="mt-5 text-xl font-black text-slate-900">Create Your Smart Profile</h3>
+                  <p className="mt-3 text-sm leading-6 text-slate-600">Upload your resume or build a profile with skills, experience, and job preferences.</p>
+                  <div className="mt-5 rounded-xl border border-slate-100 bg-slate-50 p-4"><div className="flex items-center gap-2"><UserRound className="h-5 w-5 text-blue-600" /><div><p className="text-sm font-bold text-slate-900">Alex Morgan <BadgeCheck className="inline h-4 w-4 text-emerald-500" /></p><p className="text-xs text-slate-500">Product Engineer</p></div></div><div className="mt-3 flex flex-wrap gap-1.5">{['React', 'TypeScript', 'Next.js', 'Tailwind'].map((tag) => <span key={tag} className="rounded-full bg-blue-50 px-2 py-1 text-[10px] font-semibold text-blue-700">{tag}</span>)}</div></div>
+                </article>
+                <article className="rounded-2xl border border-indigo-100 bg-white p-6 shadow-lg shadow-slate-200/50">
+                  <div className="flex items-center gap-3"><BriefcaseBusiness className="h-6 w-6 text-indigo-600" /><span className="text-xs font-bold tracking-wider text-indigo-600">STEP 02</span></div>
+                  <h3 className="mt-5 text-xl font-black text-slate-900">Set Job Preferences</h3>
+                  <p className="mt-3 text-sm leading-6 text-slate-600">Tell our AI what you&apos;re looking for: role, salary, location, remote options, and company culture.</p>
+                  <div className="mt-5 rounded-xl border border-slate-100 bg-slate-50 p-4"><div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2"><Search className="h-4 w-4 text-indigo-500" /><span className="truncate text-xs font-semibold text-slate-700">Senior Frontend...</span></div><div className="mt-3 flex flex-wrap gap-2"><span className="rounded-full bg-indigo-50 px-2 py-1 text-[10px] font-semibold text-indigo-700">Remote</span><span className="rounded-full bg-indigo-50 px-2 py-1 text-[10px] font-semibold text-indigo-700">Addis Ababa</span><span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-600">Salary range</span></div></div>
+                </article>
+                <article className="rounded-2xl border border-violet-100 bg-white p-6 shadow-lg shadow-slate-200/50">
+                  <div className="flex items-center gap-3"><BrainCircuit className="h-6 w-6 text-violet-600" /><span className="text-xs font-bold tracking-wider text-violet-600">STEP 03</span></div>
+                  <h3 className="mt-5 text-xl font-black text-slate-900">AI Matching Engine</h3>
+                  <p className="mt-3 text-sm leading-6 text-slate-600">Our neural algorithm analyzes thousands of jobs and candidates to find the highest-compatibility matches.</p>
+                  <div className="mt-5 rounded-xl border border-violet-100 bg-violet-50/50 p-4"><div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl brand-gradient text-white"><BrainCircuit className="h-7 w-7" /></div><div className="mt-4 space-y-2 text-xs font-semibold text-slate-700"><p className="flex justify-between"><span>FinTech App</span><span className="text-emerald-600">97%</span></p><p className="flex justify-between"><span>SaaS Platform</span><span className="text-emerald-600">95%</span></p><p className="flex justify-between"><span>HealthTech</span><span className="text-emerald-600">91%</span></p></div></div>
+                </article>
+                <article className="rounded-2xl border border-amber-100 bg-white p-6 shadow-lg shadow-slate-200/50">
+                  <div className="flex items-center gap-3"><Target className="h-6 w-6 text-amber-600" /><span className="text-xs font-bold tracking-wider text-amber-600">STEP 04</span></div>
+                  <h3 className="mt-5 text-xl font-black text-slate-900">Review Match Score</h3>
+                  <p className="mt-3 text-sm leading-6 text-slate-600">See tailored job matches with clear compatibility ratings, skill overlap, and salary insights.</p>
+                  <div className="mt-5 flex items-center gap-4 rounded-xl border border-slate-100 bg-slate-50 p-4"><div className="flex h-20 w-20 shrink-0 flex-col items-center justify-center rounded-full border-[6px] border-blue-100 border-t-blue-600"><span className="text-lg font-black brand-text">94%</span><span className="text-[9px] font-bold text-slate-400">MATCH</span></div><div><p className="text-sm font-bold text-slate-900">Frontend Engineer</p><p className="text-xs text-slate-500">EthioTech</p><p className="mt-2 text-xs font-semibold text-emerald-600">✓ React requirements</p><p className="text-xs font-semibold text-emerald-600">✓ Experience verified</p></div></div>
+                </article>
+                <article className="rounded-2xl border border-emerald-100 bg-white p-6 shadow-lg shadow-slate-200/50 md:col-span-2 xl:col-span-1">
+                  <div className="flex items-center gap-3"><Handshake className="h-6 w-6 text-emerald-600" /><span className="text-xs font-bold tracking-wider text-emerald-600">STEP 05</span></div>
+                  <h3 className="mt-5 text-xl font-black text-slate-900">Connect &amp; Apply</h3>
+                  <p className="mt-3 text-sm leading-6 text-slate-600">Direct connection with hiring managers, fast-track interview scheduling, and application tracking.</p>
+                  <div className="mt-5 rounded-xl border border-emerald-100 bg-emerald-50/50 p-4"><div className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-600" /><p className="text-xs font-bold text-emerald-700">Connection accepted</p></div><p className="mt-2 text-xs text-slate-600">You are ready to connect</p><button type="button" className="mt-4 inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white"><MessageCircle className="h-3.5 w-3.5" /> Send a message</button></div>
+                </article>
               </div>
             </div>
           )}
 
           {/* For Employers & Admins - Traditional Grid Layout */}
-          {(audience === 'employers' || audience === 'admin') && (
+          {audience === 'employers' && (
             <div className="grid gap-8 md:grid-cols-2 xl:grid-cols-5 xl:gap-0">
               {steps.map((step, index) => {
                 const Icon = step.icon;
