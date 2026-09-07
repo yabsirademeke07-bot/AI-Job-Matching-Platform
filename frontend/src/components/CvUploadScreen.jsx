@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
-const ALLOWED_EXTENSIONS = ['.pdf', '.docx'];
+const ALLOWED_EXTENSIONS = ['.pdf', '.docx', '.png', '.jpg', '.jpeg', '.webp'];
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
@@ -154,6 +154,9 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
     const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
     const updatedUser = { ...currentUser, onboardingCvUploaded: true, cvSkipped: true };
     localStorage.setItem('user', JSON.stringify(updatedUser));
+    localStorage.removeItem('pending_cv_data');
+    localStorage.removeItem('candidateProfile');
+    localStorage.removeItem('cvUploaded');
 
     if (onSkip) {
       onSkip();
@@ -186,7 +189,7 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
         <input
           ref={fileInputRef}
           type="file"
-          accept=".pdf,.docx"
+          accept=".pdf,.docx,.png,.jpg,.jpeg,.webp"
           className="hidden"
           onChange={(event) => handleFileSelect(event.target.files?.[0])}
         />
@@ -197,7 +200,7 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
             onClick={() => fileInputRef.current?.click()}
-            className={`mt-8 flex min-h-[220px] cursor-pointer flex-col items-center justify-center rounded-[28px] border-2 border-dashed p-8 text-center transition-all duration-300 sm:p-12 ${
+            className={`mt-8 flex min-h-55 cursor-pointer flex-col items-center justify-center rounded-[28px] border-2 border-dashed p-8 text-center transition-all duration-300 sm:p-12 ${
               isDragging
                 ? 'scale-[0.99] border-blue-600 bg-blue-50 ring-4 ring-blue-500/15'
                 : 'border-slate-300 bg-slate-50/70 hover:border-blue-500 hover:bg-blue-50/30'
@@ -211,7 +214,7 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
               Drag and drop your CV here or click to browse
             </h3>
             <p className="mt-2 text-xs font-semibold text-slate-400 sm:text-sm">
-              Supported formats: <span className="font-black text-slate-500">PDF, DOCX</span> (up to 10MB)
+              Supported formats: <span className="font-black text-slate-500">PDF, DOCX, JPG, PNG, WEBP</span> (up to 10MB)
             </p>
 
             <div className="mt-5 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-black text-blue-600 shadow-sm">

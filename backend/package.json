@@ -30,6 +30,7 @@
     "passport-google-oauth20": "^2.0.0",
     "pdf-parse": "^2.4.5",
     "react-router-dom": "^7.18.2",
+    "tesseract.js": "^7.0.0",
     "twilio": "^6.0.2"
   },
   "devDependencies": {

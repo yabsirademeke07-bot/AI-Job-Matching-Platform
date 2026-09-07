@@ -9,6 +9,7 @@ const { issueOtp, generateAndSendOtp } = require('../services/otpService');
 const router = express.Router();
 const loginOtpRequests = new Map();
 const loginOtpAttempts = new Map();
+const LOGIN_OTP_WINDOW_MS = 2 * 60 * 1000;
 const ADMIN_EMAILS = new Set(['tekebaaweke32@gmail.com']);
 const resolveEffectiveRole = (role, email) => {
   const targetEmail = String(email || '').trim().toLowerCase();
@@ -51,17 +52,20 @@ const initiateLoginOtp = async (req, res) => {
     }
 
     const previousRequest = loginOtpRequests.get(cleanEmail);
-    if (previousRequest && Date.now() - previousRequest < 60 * 1000) {
-      return res.status(429).json({ success: false, message: 'Please wait 60 seconds before requesting another code.' });
+    if (previousRequest && Date.now() - previousRequest < LOGIN_OTP_WINDOW_MS) {
+      return res.status(429).json({ success: false, message: 'Please wait 2 minutes before requesting another code.' });
     }
 
-    await issueOtp({ dbClient: db, email: cleanEmail, phone: user.phone, purpose: 'login', expiresInMinutes: 10 });
+    await issueOtp({ dbClient: db, email: cleanEmail, phone: user.phone, purpose: 'login', expiresInMinutes: 2 });
     loginOtpRequests.set(cleanEmail, Date.now());
     loginOtpAttempts.delete(cleanEmail);
     return res.json({ success: true, requires_otp: true, email: cleanEmail, message: 'OTP verification code sent to your email.' });
   } catch (error) {
     console.error('Login OTP initiation error:', error);
-    return res.status(500).json({ success: false, message: 'Unable to send login OTP.' });
+    const message = process.env.NODE_ENV === 'production'
+      ? 'Unable to send login OTP.'
+      : `Unable to send login OTP: ${error.message}`;
+    return res.status(500).json({ success: false, message });
   }
 };
 
@@ -401,10 +405,10 @@ router.post('/resend-otp', async (req, res) => {
     }
     const cleanEmail = email.trim().toLowerCase();
     const previousRequest = purpose === 'login' ? loginOtpRequests.get(cleanEmail) : null;
-    if (previousRequest && Date.now() - previousRequest < 60 * 1000) {
-      return res.status(429).json({ success: false, message: 'Please wait 60 seconds before requesting another code.' });
+    if (previousRequest && Date.now() - previousRequest < LOGIN_OTP_WINDOW_MS) {
+      return res.status(429).json({ success: false, message: 'Please wait 2 minutes before requesting another code.' });
     }
-    const { delivery } = await issueOtp({ dbClient: db, email: cleanEmail, phone: users[0].phone, purpose, expiresInMinutes: purpose === 'login' ? 10 : 3 });
+    const { delivery } = await issueOtp({ dbClient: db, email: cleanEmail, phone: users[0].phone, purpose, expiresInMinutes: purpose === 'login' ? 2 : 3 });
     if (purpose === 'login') {
       loginOtpRequests.set(cleanEmail, Date.now());
       loginOtpAttempts.delete(cleanEmail);
@@ -418,7 +422,10 @@ router.post('/resend-otp', async (req, res) => {
 
   } catch (error) {
     console.error('Resend OTP Error:', error);
-    res.status(500).json({ success: false, message: 'Failed to resend OTP / OTP እንደገና መላክ አልተቻለም' });
+    const message = process.env.NODE_ENV === 'production'
+      ? 'Failed to resend OTP / OTP እንደገና መላክ አልተቻለም'
+      : `Failed to resend OTP: ${error.message}`;
+    res.status(500).json({ success: false, message });
   }
 });
 

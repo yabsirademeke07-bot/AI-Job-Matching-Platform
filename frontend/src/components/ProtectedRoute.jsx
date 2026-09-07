@@ -43,7 +43,9 @@ const ProtectedRoute = ({
     return <>{children}</>;
   }
 
-  if (['job_seeker', 'seeker', 'jobseeker', 'user', 'employee'].includes(userRole) && ['/select-role', '/cv-upload', '/seeker/cv-upload', '/upload-cv', '/profile', '/seeker/personal-info', '/dashboard', '/seeker/dashboard'].includes(location.pathname)) {
+  const isCvProfileHandoff = location.state?.fromCvUpload === true;
+  const isProfileContinue = location.state?.fromProfileContinue === true;
+  if (!isCvProfileHandoff && !isProfileContinue && ['job_seeker', 'seeker', 'jobseeker', 'user', 'employee'].includes(userRole) && ['/select-role', '/cv-upload', '/seeker/cv-upload', '/upload-cv', '/profile', '/seeker/personal-info', '/dashboard', '/seeker/dashboard'].includes(location.pathname)) {
     const expectedPath = getNextOnboardingStep();
     const expectedPaths = expectedPath === '/seeker/cv-upload' ? ['/seeker/cv-upload', '/cv-upload', '/upload-cv'] : [expectedPath];
     if (!expectedPaths.includes(location.pathname)) {

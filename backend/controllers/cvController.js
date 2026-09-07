@@ -11,7 +11,7 @@ async function removeFile(file) {
 }
 
 async function uploadAndAnalyze(req, res) {
-  if (!req.file) return res.status(400).json({ success: false, message: 'Please select a PDF or DOCX CV file.' });
+  if (!req.file) return res.status(400).json({ success: false, message: 'Please select a PDF, DOCX, or image CV file.' });
   try {
     const parsedText = await extractText(req.file);
     if (!parsedText || !parsedText.trim()) {
@@ -52,8 +52,8 @@ async function uploadAndAnalyze(req, res) {
       );
       cvId = cvResult.insertId;
       await connection.execute(
-        `INSERT INTO cv_analysis (cv_id, extracted_skills, extracted_experience, extracted_education, extracted_languages, extracted_certifications, cv_score, readability_score, keyword_match_score, recommendations, analysis_status, analyzed_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed', NOW())`,
+          `INSERT INTO cv_analysis (cv_id, extracted_skills, extracted_experience, extracted_education, extracted_languages, extracted_certifications, cv_score, readability_score, keyword_match_score, recommendations, analysis_status, analyzed_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_review', NOW())`,
         [cvId, JSON.stringify(extracted.skills), JSON.stringify(extracted.experience), JSON.stringify(extracted.education), JSON.stringify(extracted.languages), JSON.stringify(extracted.certifications), scores.cvScore, scores.readability, scores.keywordMatch, JSON.stringify(extracted.recommendations)]
       );
       await connection.commit();
@@ -64,7 +64,7 @@ async function uploadAndAnalyze(req, res) {
       connection.release();
     }
 
-    return res.status(201).json({ success: true, is_cv: true, message: SUCCESS_MESSAGE, data: { id: cvId, file_name: req.file.originalname, file_url: fileUrl, ...extracted, ...scores } });
+    return res.status(201).json({ success: true, is_cv: true, reviewRequired: true, message: SUCCESS_MESSAGE, data: { id: cvId, file_name: req.file.originalname, file_url: fileUrl, ...extracted, ...scores } });
   } catch (error) {
     await removeFile(req.file);
     const status = error.statusCode || 500;
@@ -102,8 +102,8 @@ async function syncProfile(req, res) {
       [req.params.id, req.user.id]
     );
     if (!rows[0]) return res.status(404).json({ success: false, message: 'CV analysis not found.' });
-    const data = req.body && (req.body.skills || req.body.experience || req.body.education || req.body.languages)
-      ? req.body
+    const data = req.body && (req.body.skills || req.body.experience || req.body.education || req.body.languages || req.body.fullName)
+      ? { ...req.body, professional_title: req.body.headline || req.body.professional_title, full_name: req.body.fullName || req.body.full_name }
       : {
         ...parseJson(rows[0].ai_extracted_data, {}),
         skills: parseJson(rows[0].extracted_skills),
@@ -112,6 +112,14 @@ async function syncProfile(req, res) {
         languages: parseJson(rows[0].extracted_languages),
       };
     await connection.beginTransaction();
+      await connection.execute(
+        `UPDATE cvs SET ai_extracted_data = ?, ai_analysis_score = ? WHERE id = ? AND user_id = ?`,
+        [JSON.stringify(data), data.cvScore || 0, req.params.id, req.user.id]
+      );
+      await connection.execute(
+        `UPDATE cv_analysis SET extracted_skills = ?, extracted_experience = ?, extracted_education = ?, extracted_languages = ?, extracted_certifications = ?, cv_score = ?, readability_score = ?, keyword_match_score = ?, recommendations = ?, analysis_status = 'completed', analyzed_at = NOW() WHERE cv_id = ?`,
+        [JSON.stringify(data.skills || []), JSON.stringify(data.experience || []), JSON.stringify(data.education || []), JSON.stringify(data.languages || []), JSON.stringify(data.certifications || []), data.cvScore || 0, data.readability || 0, data.matchScore || data.keywordMatch || 0, JSON.stringify(data.recommendations || []), req.params.id]
+      );
     await connection.execute(
       'INSERT INTO job_seeker_profiles (user_id, headline, profile_completion_percentage) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE headline = VALUES(headline), profile_completion_percentage = VALUES(profile_completion_percentage)',
       [req.user.id, data.professional_title || null, data.profileCompletion || 0]
@@ -134,9 +142,9 @@ async function syncProfile(req, res) {
       await connection.execute(`INSERT INTO seeker_experience (user_id, company_name, job_title, employment_type, location, start_date, end_date, is_current, description, years_of_experience) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [req.user.id, item.company_name, item.job_title, item.employment_type || 'contract', item.location || null, item.start_date || null, item.end_date || null, Boolean(item.is_current), item.description || null, item.years_of_experience || null]);
     }
     for (const item of data.education || []) {
-      const schoolName = item.school_name || 'Not specified';
-      const degree = item.degree || 'Not specified';
-      const fieldOfStudy = item.field_of_study || 'Not specified';
+      const schoolName = item.school_name || item.institution || null;
+      const degree = item.degree || null;
+      const fieldOfStudy = item.field_of_study || null;
       await connection.execute(`INSERT INTO seeker_education (user_id, school_name, degree, field_of_study, start_date, end_date, is_current, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, [req.user.id, schoolName, degree, fieldOfStudy, item.start_date || null, item.end_date || null, Boolean(item.is_current), item.description || null]);
     }
     for (const language of data.languages || []) {

@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 
 // Layout Components
@@ -64,7 +64,9 @@ const withSeekerSidebar = (page) => <SeekerPageLayout>{page}</SeekerPageLayout>;
 
 function AppLayout() {
   const location = useLocation();
+  const navigate = useNavigate();
   const isAdminRoute = location.pathname.startsWith('/admin') || location.pathname === '/admin-dashboard';
+  const continueFromProfile = () => navigate('/seeker/dashboard', { replace: true, state: { fromProfileContinue: true } });
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans">
@@ -143,7 +145,7 @@ function AppLayout() {
           {/* Legacy Personal Information URLs now continue through the CV step. */}
           <Route path="/personal-info" element={<Navigate to="/seeker/personal-info" replace />} />
           <Route path="/personalInfo" element={<Navigate to="/seeker/personal-info" replace />} />
-          <Route path="/seeker/personal-info" element={<ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}><Profile /></ProtectedRoute>} />
+          <Route path="/seeker/personal-info" element={<ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}><Profile onContinue={continueFromProfile} /></ProtectedRoute>} />
           <Route
             path="/upload-cv"
             element={
@@ -314,7 +316,7 @@ function AppLayout() {
             path="/employer-profile"
             element={
               <ProtectedRoute allowedRoles={["employer", "company", "recruiter"]}>
-                <Profile />
+                <Profile onContinue={continueFromProfile} />
               </ProtectedRoute>
             }
           />

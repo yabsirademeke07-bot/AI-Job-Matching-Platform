@@ -11,6 +11,8 @@ import {
 } from 'lucide-react';
 import EmailInputWithDomains from '../components/EmailInputWithDomains';
 
+const LOGIN_OTP_WINDOW_SECONDS = 2 * 60;
+
 const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -142,7 +144,7 @@ const Login = () => {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.message || 'Unable to send login OTP.');
       setOtpStep(2);
-      setOtpTimer(60);
+      setOtpTimer(LOGIN_OTP_WINDOW_SECONDS);
       setFormData((previous) => ({ ...previous, otp: ['', '', '', '', '', ''] }));
       setApiSuccess(`We sent a verification code to ${formData.emailOrPhone.trim().toLowerCase()}.`);
     } catch (error) {
@@ -164,7 +166,7 @@ const Login = () => {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.message || 'Unable to resend login OTP.');
-      setOtpTimer(60);
+      setOtpTimer(LOGIN_OTP_WINDOW_SECONDS);
       setApiSuccess('A new verification code was sent to your email.');
     } catch (error) {
       setApiError(error.message || 'Unable to resend login OTP.');

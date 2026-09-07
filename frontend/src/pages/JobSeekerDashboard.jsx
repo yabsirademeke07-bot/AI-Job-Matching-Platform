@@ -206,6 +206,10 @@ export default function JobSeekerDashboard() {
       </aside>
       <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-6xl space-y-7">
+          <div className="w-full mb-6 pb-4 border-b border-slate-200">
+            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">Seeker Dashboard</h1>
+            <p className="text-sm text-slate-500 mt-1">Manage your job search, matched roles, and applications.</p>
+          </div>
           <header className="flex flex-col gap-4 border-b border-slate-200 pb-6 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h1 className="text-3xl font-black text-slate-900">Dashboard</h1>

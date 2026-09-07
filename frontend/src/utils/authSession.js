@@ -62,7 +62,7 @@ export const getUserDestination = (user) => {
       localStorage.getItem('userProfile')
     );
 
-    if (user?.onboardingRoleSelected !== true || !role) return '/select-role';
+    if (!role || role === 'pending') return '/select-role';
     if (user?.has_cv === false || user?.onboarding_step === 'cv_upload' || user?.onboardingCvUploaded === false || (!user?.onboardingCvUploaded && !hasResume)) return '/seeker/cv-upload';
     if (user?.onboardingProfileCompleted === false || (!user?.onboardingProfileCompleted && !hasProfile)) return '/seeker/personal-info';
 

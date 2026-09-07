@@ -3,7 +3,7 @@ const multer = require('multer');
 const path = require('path');
 const authMiddleware = require('../middleware/authMiddleware');
 const {
-  getProfile, updateProfile, listCollection, addCollectionItem,
+  getProfile, updateProfile, saveProfile, listCollection, addCollectionItem,
   deleteCollectionItem, getApplications, uploadCv
 } = require('../controllers/jobSeekerController');
 
@@ -20,6 +20,7 @@ const upload = multer({
 router.use(authMiddleware);
 router.get('/profile', getProfile);
 router.put('/profile', updateProfile);
+router.post('/profile/save', saveProfile);
 router.get('/applications', getApplications);
 router.post('/upload-cv', upload.single('cv'), uploadCv);
 router.get('/:collection', listCollection);

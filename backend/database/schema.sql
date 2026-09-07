@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS users (
     role ENUM('super_admin', 'admin', 'employer', 'job_seeker') NOT NULL DEFAULT 'job_seeker',
     is_verified BOOLEAN DEFAULT FALSE,
     is_active BOOLEAN DEFAULT TRUE,
+    onboarding_completed BOOLEAN DEFAULT FALSE,
     profile_picture_url VARCHAR(255),
     avatar_url VARCHAR(255) NULL,
     google_id VARCHAR(255) NULL,
