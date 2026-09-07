@@ -12,6 +12,7 @@ import {
   X,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import cvImage from '../pages/images/cv.jpg';
 
 const ALLOWED_EXTENSIONS = ['.pdf', '.docx', '.png', '.jpg', '.jpeg', '.webp'];
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -31,7 +32,7 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
     if (!toastError) return undefined;
     const timer = window.setTimeout(() => setToastError(''), 4000);
     return () => window.clearTimeout(timer);
-  }, [toastError]);
+  }, [toastError, isInvalidFile]);
 
   const resetUploadState = () => {
     setFile(null);
@@ -119,7 +120,7 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
 
   const showInvalidFileToast = (message) => {
     setIsInvalidFile(true);
-    setToastError(message || 'The uploaded file does not contain CV content. Please upload a valid resume.');
+    setToastError(message || 'Invalid Document - Not a Candidate CV. A valid CV must contain all 4 sections: Contact Details, Work Experience, Education, and Skills.');
   };
 
   const handleDragOver = (event) => {
@@ -161,13 +162,27 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
     if (onSkip) {
       onSkip();
     } else {
-      navigate('/profile', { replace: true });
+      navigate('/seeker/personal-info', {
+        replace: true,
+        state: { onboarding: true, skippedCv: true, fromCvUpload: true },
+      });
     }
   };
 
   return (
     <main className="min-h-[85vh] bg-slate-50/70 px-4 py-8 sm:px-6 lg:py-16">
-      <section className="mx-auto w-full max-w-2xl rounded-[28px] border border-slate-200 bg-white p-8 text-center shadow-2xl shadow-slate-900/5 sm:p-12">
+      <div className="mx-auto grid w-full max-w-6xl items-stretch gap-6 lg:grid-cols-[0.82fr_1.18fr] lg:gap-8">
+        <aside className="relative min-h-[360px] overflow-hidden rounded-[28px] border border-slate-200 bg-slate-950 shadow-2xl shadow-slate-900/10 sm:min-h-[460px] lg:min-h-full">
+          <img src={cvImage} alt="Professional CV preview" className="absolute inset-0 h-full w-full object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/20 to-transparent" />
+          <div className="absolute inset-x-0 bottom-0 p-7 text-left sm:p-9">
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-200">Your career, clearly presented</p>
+            <h2 className="mt-3 max-w-sm text-2xl font-black leading-tight text-white sm:text-3xl">Turn your experience into your next opportunity.</h2>
+            <p className="mt-3 max-w-sm text-sm leading-6 text-slate-200">Upload a clear CV and let our AI highlight your strengths, skills, and best-fit roles.</p>
+          </div>
+        </aside>
+
+        <section className="w-full rounded-[28px] border border-slate-200 bg-white p-8 text-center shadow-2xl shadow-slate-900/5 sm:p-12">
         <h1 className="mt-5 text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">
           Upload Your Resume
         </h1>
@@ -253,7 +268,7 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
               type="button"
               disabled={isUploading}
               onClick={resetUploadState}
-              className={`mt-5 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border px-5 py-3 text-sm font-black transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${isInvalidFile ? 'border-rose-400 bg-rose-50 text-rose-700 shadow-lg shadow-rose-500/15 hover:bg-rose-100' : 'border-blue-300 bg-white text-blue-700 hover:bg-blue-100'}`}
+              className="mt-5 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-black text-white shadow-lg shadow-blue-500/20 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <RotateCcw className="h-4 w-4" />
               <span>Replace CV</span>
@@ -297,7 +312,8 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
             </button>
           </div>
         </div>
-      </section>
+        </section>
+      </div>
 
       {toastError && (
         <div className="fixed right-5 top-5 z-50 w-[calc(100%-2.5rem)] max-w-md animate-[slideIn_.25s_ease-out]" role="alert">

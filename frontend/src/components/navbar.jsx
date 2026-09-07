@@ -8,12 +8,14 @@ import {
   UserPlus,
   X,
   ChevronDown,
+  ArrowRight,
 } from 'lucide-react';
 
 // የፎቶ Path — use local asset fallback in project
 import siteLogo from '../pages/images/logo1.png';
 import { useAuth } from '../context/AuthContext';
 import LogoutFlowModals from './LogoutFlowModals';
+import { getNextOnboardingStep } from '../utils/applicationFlow';
 
 export default function Navbar() {
   const location = useLocation();
@@ -28,12 +30,19 @@ export default function Navbar() {
   const isActive = (path) => location.pathname === path;
   // የ Role ዓይነቶች ማረጋገጫ
   const role = (user?.role || user?.userType || '').toString().trim().toLowerCase().replace(/[\s-]+/g, '_');
-  const isSeeker = ['job_seeker', 'seeker', 'jobseeker', 'user', 'employee'].includes(role);
   const isEmployer = ['employer', 'company', 'recruiter'].includes(role);
   const isAdmin = role === 'admin';
   const isSeekerDashboardPage = ['/dashboard', '/seeker-dashboard', '/seekerDashboard'].includes(location.pathname);
   const displayName = user?.name || user?.full_name || user?.email || 'User';
   const avatarUrl = user?.avatarUrl || user?.avatar_url;
+  const resumeOnboarding = () => {
+    setProfileMenuOpen(false);
+    navigate(getNextOnboardingStep(), { replace: true });
+  };
+  const goToDashboard = () => {
+    setProfileMenuOpen(false);
+    navigate(isEmployer ? '/employer/dashboard' : isAdmin ? '/admin-dashboard' : '/dashboard');
+  };
   const handleLogout = () => {
     setProfileMenuOpen(false);
     setLogoutSession({ token, user });
@@ -134,7 +143,7 @@ export default function Navbar() {
         </nav>
 
         <div className="hidden lg:flex items-center gap-3 shrink-0 ml-auto">
-          {isAuthenticated && !isSeekerDashboardPage && (
+          {isAuthenticated && (
             <div ref={profileMenuRef} className="relative">
               <button type="button" onClick={() => setProfileMenuOpen((open) => !open)} className="flex min-h-11 items-center gap-2 rounded-xl px-2 py-1.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100" aria-expanded={profileMenuOpen} aria-haspopup="menu" aria-label="Open account menu">
                 {avatarUrl ? <img src={avatarUrl} alt="" className="h-9 w-9 rounded-full object-cover" /> : <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 font-bold text-blue-700">{displayName.charAt(0).toUpperCase()}</div>}
@@ -143,6 +152,8 @@ export default function Navbar() {
               </button>
               {profileMenuOpen && <div className="absolute right-0 top-full z-50 mt-2 w-48 rounded-xl border border-slate-200 bg-white p-2 shadow-xl" role="menu">
                 <div className="border-b border-slate-100 px-3 py-2 text-xs font-semibold text-slate-500">{displayName}</div>
+                <button type="button" onClick={resumeOnboarding} className="mt-1 flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-bold text-slate-700 transition hover:bg-blue-50 hover:text-blue-700" role="menuitem"><ArrowRight className="h-4 w-4" /><span>Resume Onboarding</span></button>
+                <button type="button" onClick={goToDashboard} className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-bold text-slate-700 transition hover:bg-slate-100" role="menuitem"><LayoutDashboard className="h-4 w-4" /><span>Go to Dashboard</span></button>
                 <button type="button" onClick={handleLogout} className="mt-1 flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-bold text-red-600 transition hover:bg-red-50" role="menuitem"><LogOut className="h-4 w-4" /><span>Log Out</span></button>
               </div>}
             </div>
@@ -246,13 +257,13 @@ export default function Navbar() {
               </Link>
             )}
 
-            {isAuthenticated && !isSeekerDashboardPage && (
+            {isAuthenticated && (
               <div ref={profileMenuRef} className="relative pt-3 mt-2 border-t border-slate-100">
                 <button type="button" onClick={() => setProfileMenuOpen((open) => !open)} className="flex min-h-11 w-full items-center gap-3 rounded-xl px-4 py-2 text-left text-sm font-bold text-slate-700 hover:bg-slate-50" aria-expanded={profileMenuOpen} aria-haspopup="menu" aria-label="Open account menu">
                   {avatarUrl ? <img src={avatarUrl} alt="" className="w-9 h-9 rounded-full object-cover" /> : <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center">{displayName.charAt(0).toUpperCase()}</div>}
                   <span className="flex-1 truncate">{displayName}</span><ChevronDown className={`h-4 w-4 transition-transform ${profileMenuOpen ? 'rotate-180' : ''}`} />
                 </button>
-                {profileMenuOpen && <button type="button" onClick={() => { handleLogout(); setIsMobileMenuOpen(false); }} className="mt-1 flex min-h-11 w-full items-center gap-2 rounded-xl px-4 py-2 text-left text-sm font-bold text-red-600 hover:bg-red-50"><LogOut className="w-5 h-5" /><span>Log Out</span></button>}
+                {profileMenuOpen && <div className="mt-1 space-y-1 px-1"><button type="button" onClick={() => { resumeOnboarding(); setIsMobileMenuOpen(false); }} className="flex min-h-11 w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700"><ArrowRight className="w-5 h-5" /><span>Resume Onboarding</span></button><button type="button" onClick={() => { goToDashboard(); setIsMobileMenuOpen(false); }} className="flex min-h-11 w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-bold text-slate-700 hover:bg-slate-50"><LayoutDashboard className="w-5 h-5" /><span>Go to Dashboard</span></button><button type="button" onClick={() => { handleLogout(); setIsMobileMenuOpen(false); }} className="flex min-h-11 w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-bold text-red-600 hover:bg-red-50"><LogOut className="w-5 h-5" /><span>Log Out</span></button></div>}
               </div>
             )}
             {!isAuthenticated && !isSeekerDashboardPage && (

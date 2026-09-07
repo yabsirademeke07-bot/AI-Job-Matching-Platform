@@ -19,7 +19,7 @@ const OtpVerification = () => {
 
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [error, setError] = useState('');
-  const [info, setInfo] = useState('');
+  const [info, setInfo] = useState(location.state?.message || '');
   const [loading, setLoading] = useState(false);
   const [otpTimer, setOtpTimer] = useState(180);
   const otpInputRefs = useRef([]);

@@ -15,6 +15,7 @@ import GoogleCallback from './pages/GoogleCallback';
 // Profile & route guard
 import Profile from './components/Profile';
 import ProtectedRoute from './components/ProtectedRoute';
+import GuestOnlyRoute from './components/GuestOnlyRoute';
 import EmployerProfile from './components/employee/EmployerProfile';
 import CompanyInfo from './components/employee/CompanyInfo';
 
@@ -46,6 +47,7 @@ import ApplicationDetails from './pages/ApplicationDetails';
 import InterviewDetails from './pages/InterviewDetails';
 import SeekerModulePage from './pages/SeekerModulePage';
 import SeekerDocumentation from './pages/Seekerdocumentation';
+import AICareerMatches from './pages/aICareerMatches';
 
 // Employer Pages
 import EmployerWorkspace from './pages/EmployerWorkspace';
@@ -66,7 +68,7 @@ function AppLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const isAdminRoute = location.pathname.startsWith('/admin') || location.pathname === '/admin-dashboard';
-  const continueFromProfile = () => navigate('/seeker/dashboard', { replace: true, state: { fromProfileContinue: true } });
+  const continueFromProfile = (profile) => navigate('/ai-career-matches', { replace: true, state: { profile } });
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans">
@@ -102,14 +104,14 @@ function AppLayout() {
           <Route path="/find-jobs" element={<ExploreJobs />} />
           <Route path="/company" element={<Companies />} />
 
-          <Route path="/signup" element={<Register />} />
-          <Route path="/sign-up" element={<Register />} />
+          <Route path="/signup" element={<GuestOnlyRoute><Register /></GuestOnlyRoute>} />
+          <Route path="/sign-up" element={<GuestOnlyRoute><Register /></GuestOnlyRoute>} />
 
           {/* ========================================== */}
           {/* 2. AUTHENTICATION & ONBOARDING ROUTES      */}
           {/* ========================================== */}
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
+          <Route path="/login" element={<GuestOnlyRoute><Login /></GuestOnlyRoute>} />
+          <Route path="/register" element={<GuestOnlyRoute><Register /></GuestOnlyRoute>} />
           <Route path="/verify-otp" element={<OtpVerification />} />
 
           <Route path="/role-selection" element={<RoleSelection />} />
@@ -146,6 +148,7 @@ function AppLayout() {
           <Route path="/personal-info" element={<Navigate to="/seeker/personal-info" replace />} />
           <Route path="/personalInfo" element={<Navigate to="/seeker/personal-info" replace />} />
           <Route path="/seeker/personal-info" element={<ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}><Profile onContinue={continueFromProfile} /></ProtectedRoute>} />
+          <Route path="/ai-career-matches" element={<ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}><AICareerMatches /></ProtectedRoute>} />
           <Route
             path="/upload-cv"
             element={
@@ -162,6 +165,7 @@ function AppLayout() {
               </ProtectedRoute>
             }
           />
+          <Route path="/seeker/upload-cv" element={<Navigate to="/seeker/cv-upload" replace />} />
           <Route path="/seeker/cv-upload" element={<ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}><CvUploadScreen /></ProtectedRoute>} />
           <Route
             path="/cv-builder"

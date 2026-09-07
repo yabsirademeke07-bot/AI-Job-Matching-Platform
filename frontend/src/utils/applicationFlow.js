@@ -132,9 +132,9 @@ export function getNextOnboardingStep() {
   if (!role || role === 'pending') return '/select-role';
   if (!seekerRoles.includes(role)) return '/';
   if (user.onboardingRoleSelected === false && (!user.role || user.role === 'pending')) return '/select-role';
-  if (user.has_cv === false || user.onboarding_step === 'cv_upload' || user.onboardingCvUploaded === false || (!user.onboardingCvUploaded && !hasCompletedCv())) return '/seeker/cv-upload';
-  if (user.onboardingProfileCompleted === false || (!user.onboardingProfileCompleted && !hasCompletedProfile())) return '/profile';
-  if (!hasCompletedProfile()) return '/profile';
+  if (user.has_cv === false || user.onboarding_step === 'cv_upload' || user.onboardingCvUploaded === false || (!user.onboardingCvUploaded && !hasCompletedCv())) return '/seeker/upload-cv';
+  if (user.onboardingProfileCompleted === false || (!user.onboardingProfileCompleted && !hasCompletedProfile())) return '/seeker/personal-info';
+  if (!hasCompletedProfile()) return '/seeker/personal-info';
   return '/dashboard';
 }
 

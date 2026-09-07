@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { clearUserWorkspace } from '../utils/authSession';
 import GoogleAuthButton from '../components/GoogleAuthButton';
 import {
   Sparkles, ShieldCheck, Cpu, Lock,
@@ -133,17 +134,35 @@ const Register = () => {
     setIsLoading(true);
 
     try {
-      const response = await fetch(`${API_URL.replace(/\/$/, '')}/auth/signup`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fullName: formData.fullName.trim(),
-          email: formData.email.trim().toLowerCase(),
-          password: formData.password,
-          role: formData.role || 'job_seeker',
-        }),
+      const signupPayload = JSON.stringify({
+        fullName: formData.fullName.trim(),
+        email: formData.email.trim().toLowerCase(),
+        password: formData.password,
+        role: formData.role || 'job_seeker',
       });
-      const data = await response.json().catch(() => ({}));
+      const configuredSignupUrl = `${API_URL.replace(/\/$/, '')}/auth/signup`;
+      let response;
+      try {
+        response = await fetch(configuredSignupUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: signupPayload,
+        });
+      } catch (requestError) {
+        if (configuredSignupUrl === '/api/auth/signup') throw requestError;
+        response = await fetch('/api/auth/signup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: signupPayload,
+        });
+      }
+      const responseText = await response.text();
+      let data = {};
+      try {
+        data = responseText ? JSON.parse(responseText) : {};
+      } catch {
+        data = { message: responseText };
+      }
 
       if (!response.ok) {
         const fieldErrors = data.errors || {};
@@ -157,7 +176,7 @@ const Register = () => {
           });
           return;
         }
-        throw new Error(Object.values(fieldErrors)[0] || data.message || 'Unable to create your account.');
+        throw new Error(Object.values(fieldErrors)[0] || data.message || `Unable to create your account (HTTP ${response.status}).`);
       }
 
       setStep(2);
@@ -165,7 +184,10 @@ const Register = () => {
       setApiSuccess('OTP code sent to your email.');
     } catch (error) {
       console.error('Registration Error:', error);
-      setApiError(error.message || 'Unable to create your account. Please try again.');
+      const isNetworkError = error instanceof TypeError && /fetch|network|failed/i.test(error.message || '');
+      setApiError(isNetworkError
+        ? 'Unable to reach the signup service. Please make sure the backend is running and try again.'
+        : (error.message || 'Unable to create your account. Please try again.'));
     } finally {
       setIsLoading(false);
     }
@@ -219,10 +241,19 @@ const Register = () => {
 
       if (response.ok) {
         if (!data.token || !data.user) throw new Error('Authentication response was incomplete.');
-        setSession({
-          token: data.token,
-          user: { ...data.user, onboardingRoleSelected: false, onboardingCvUploaded: false, onboardingProfileCompleted: false },
-        });
+        clearUserWorkspace();
+        const verifiedUser = {
+          ...data.user,
+          onboardingRoleSelected: false,
+          onboardingCvUploaded: false,
+          onboardingProfileCompleted: false,
+          is_verified: true,
+          otpVerified: true,
+        };
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('user', JSON.stringify(verifiedUser));
+        localStorage.setItem('currentUser', JSON.stringify(verifiedUser));
+        setSession({ token: data.token, user: verifiedUser });
         navigate('/select-role');
       } else {
         setApiError(data.message || 'Invalid or expired OTP code.');
@@ -266,11 +297,23 @@ const Register = () => {
         }),
       });
       const roleData = await roleResponse.json().catch(() => ({}));
-      if (!roleResponse.ok) throw new Error(roleData.message || 'Unable to save role');
+      if (!roleResponse.ok || !roleData.user || !roleData.token) throw new Error(roleData.message || 'Unable to save role');
 
       setFormData((prev) => ({ ...prev, role: normalizedRole }));
-      setStep(2);
-      setOtpTimer(180);
+      const updatedUser = {
+        ...JSON.parse(localStorage.getItem('user') || '{}'),
+        ...roleData.user,
+        role: normalizedRole,
+        onboardingRoleSelected: true,
+        onboardingCvUploaded: false,
+        onboardingProfileCompleted: false,
+        is_verified: true,
+      };
+      localStorage.setItem('token', roleData.token);
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+      localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+      setSession({ token: roleData.token, user: updatedUser });
+      navigate(normalizedRole === 'employer' ? '/employer/onboarding' : '/seeker/cv-upload', { replace: true });
     } catch (err) {
       console.error('Registration error:', err);
       setApiError(err.message || 'Unable to create your account. Please try again.');
@@ -284,7 +327,7 @@ const Register = () => {
   };
 
   return (
-    <div className="min-h-screen w-full bg-brand-soft bg-[radial-gradient(#d0e5f5_1px,transparent_1px)] [background-size:16px_16px] flex items-center justify-center p-3 sm:p-4 md:p-6 lg:p-8 font-sans overflow-x-hidden">
+    <div className="min-h-screen w-full bg-brand-soft bg-[radial-gradient(#d0e5f5_1px,transparent_1px)] bg-size-[16px_16px] flex items-center justify-center p-3 sm:p-4 md:p-6 lg:p-8 font-sans overflow-x-hidden">
       <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-12 rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xl bg-white border border-slate-300 my-auto">
 
         {/* LEFT SIDE: Info Section */}

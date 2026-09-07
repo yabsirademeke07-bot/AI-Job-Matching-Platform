@@ -8,6 +8,7 @@ const jobRoutes = require("./routes/jobRoutes");
 const matchRoutes = require("./routes/matchRoutes");
 const jobSeekerRoutes = require("./routes/jobSeekerRoutes");
 const cvRoutes = require("./routes/cvRoutes");
+const seekerMatchingRoutes = require("./routes/seekerMatchingRoutes");
 
 const app = express();
 
@@ -19,7 +20,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/jobs", jobRoutes);
 app.use("/api/matches", matchRoutes);
 app.use("/api/cv", cvRoutes);
-app.use("/api/v1/cv", cvRoutes);
+app.use("/api", seekerMatchingRoutes);
 app.use("/api/job-seekers", jobSeekerRoutes);
 app.use("/api/seeker", jobSeekerRoutes);
 app.use("/uploads", express.static("uploads"));
@@ -37,7 +38,7 @@ const ensureAuthColumns = async () => {
     `SELECT COLUMN_NAME, COLUMN_TYPE
      FROM INFORMATION_SCHEMA.COLUMNS
      WHERE TABLE_SCHEMA = DATABASE()
-      AND ((TABLE_NAME = 'users' AND COLUMN_NAME IN ('last_active_page', 'last_state_payload', 'onboarding_completed'))
+       AND ((TABLE_NAME = 'users' AND COLUMN_NAME IN ('last_active_page', 'last_state_payload'))
          OR (TABLE_NAME = 'otps' AND COLUMN_NAME = 'purpose'))`
   );
   const existingColumns = new Set(columns.map(({ COLUMN_NAME: name }) => name));
@@ -55,8 +56,25 @@ const ensureAuthColumns = async () => {
   if (!existingColumns.has('last_state_payload')) {
     await db.query('ALTER TABLE users ADD COLUMN last_state_payload JSON NULL');
   }
-  if (!existingColumns.has('onboarding_completed')) {
-    await db.query('ALTER TABLE users ADD COLUMN onboarding_completed BOOLEAN DEFAULT FALSE');
+
+  const [applicationColumns] = await db.query(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'applications'`
+  );
+  const applicationColumnNames = new Set(applicationColumns.map(({ COLUMN_NAME: name }) => name));
+  if (!applicationColumnNames.has('cv_id')) {
+    await db.query('ALTER TABLE applications ADD COLUMN cv_id INT NULL');
+  }
+  if (!applicationColumnNames.has('resume_snapshot')) {
+    await db.query('ALTER TABLE applications ADD COLUMN resume_snapshot JSON NULL');
+  }
+
+  const [jobStatusColumns] = await db.query(
+    `SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'jobs' AND COLUMN_NAME = 'status'`
+  );
+  if (jobStatusColumns[0] && !jobStatusColumns[0].COLUMN_TYPE.includes("'active'")) {
+    await db.query("ALTER TABLE jobs MODIFY COLUMN status ENUM('draft', 'active', 'published', 'closed', 'filled', 'archived') DEFAULT 'draft'");
   }
 };
 

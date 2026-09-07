@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { UploadCloud, Sparkles, Loader2, ArrowRight, FileText, ShieldCheck, CheckCircle2, X } from 'lucide-react';
 import { continueApplicationFlow, hasCompletedCv } from '../utils/applicationFlow';
+import { notifyProfileUpdated } from '../utils/profileUpdateEvent';
 
 const CvUploader = ({
   cvFile: externalCvFile,
@@ -56,6 +57,7 @@ const CvUploader = ({
     };
 
     localStorage.setItem('seekerResume', JSON.stringify(nextResume));
+    notifyProfileUpdated();
     try {
       const userData = JSON.parse(localStorage.getItem('user') || '{}');
       localStorage.setItem('user', JSON.stringify({ ...userData, cvFileName: file.name }));

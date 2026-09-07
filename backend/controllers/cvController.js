@@ -1,9 +1,9 @@
 const fs = require('fs/promises');
 const path = require('path');
 const db = require('../config/db');
-const { extractText, classifyAndExtract, calculateScores, calculateRealJobMatch } = require('../services/cvAnalysisService');
+const { extractText, classifyAndExtract, calculateScores, calculateRealJobMatch, calculateJobMatches, validateCvContent, CV_CONTENT_ERROR } = require('../services/cvAnalysisService');
 
-const INVALID_CV_MESSAGE = 'Invalid file: Does not contain Resume/CV content.';
+const INVALID_CV_MESSAGE = 'We could not identify enough CV content. Please upload a readable resume with contact details and experience, education, or skills.';
 const SUCCESS_MESSAGE = 'Your CV was analyzed successfully.';
 
 async function removeFile(file) {
@@ -16,13 +16,21 @@ async function uploadAndAnalyze(req, res) {
     const parsedText = await extractText(req.file);
     if (!parsedText || !parsedText.trim()) {
       await removeFile(req.file);
-      return res.status(422).json({ success: false, is_cv: false, message: INVALID_CV_MESSAGE });
+      return res.status(422).json({ success: false, is_cv: false, message: 'We could not read any text from this document. Please upload a text-based PDF or DOCX, not a blank or image-only file.' });
     }
 
-    const extracted = await classifyAndExtract(parsedText);
+    const contentValidation = validateCvContent(parsedText);
+    let extracted;
+    if (contentValidation.valid || contentValidation.needsAiReview) {
+      extracted = await classifyAndExtract(contentValidation.normalizedText);
+    }
+    if (!contentValidation.valid && !contentValidation.needsAiReview) {
+      await removeFile(req.file);
+      return res.status(422).json({ success: false, is_cv: false, message: contentValidation.message || CV_CONTENT_ERROR, validation: contentValidation.sections });
+    }
     if (!extracted.is_cv) {
       await removeFile(req.file);
-      return res.status(422).json({ success: false, is_cv: false, message: INVALID_CV_MESSAGE });
+      return res.status(422).json({ success: false, is_cv: false, message: contentValidation.message || INVALID_CV_MESSAGE, validation: contentValidation.sections });
     }
 
     const [activeJobs] = await db.execute(
@@ -53,7 +61,7 @@ async function uploadAndAnalyze(req, res) {
       cvId = cvResult.insertId;
       await connection.execute(
           `INSERT INTO cv_analysis (cv_id, extracted_skills, extracted_experience, extracted_education, extracted_languages, extracted_certifications, cv_score, readability_score, keyword_match_score, recommendations, analysis_status, analyzed_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_review', NOW())`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed', NOW())`,
         [cvId, JSON.stringify(extracted.skills), JSON.stringify(extracted.experience), JSON.stringify(extracted.education), JSON.stringify(extracted.languages), JSON.stringify(extracted.certifications), scores.cvScore, scores.readability, scores.keywordMatch, JSON.stringify(extracted.recommendations)]
       );
       await connection.commit();
@@ -69,6 +77,48 @@ async function uploadAndAnalyze(req, res) {
     await removeFile(req.file);
     const status = error.statusCode || 500;
     return res.status(status).json({ success: false, message: status === 500 ? 'Unable to analyze your CV.' : error.message });
+  }
+}
+
+async function validateAndParse(req, res) {
+  if (!req.file) return res.status(422).json({ isCv: false, error: 'The uploaded document is not a candidate CV or Resume. Please upload a genuine CV containing your education, work experience, and technical skills.' });
+  try {
+    let parsedText;
+    try {
+      parsedText = await extractText(req.file);
+    } catch (error) {
+      return res.status(422).json({ isCv: false, error: 'The uploaded document is not a candidate CV or Resume. Please upload a genuine CV containing your education, work experience, and technical skills.' });
+    }
+    const validation = validateCvContent(parsedText);
+    if (!validation.valid && !validation.needsAiReview) return res.status(422).json({ isCv: false, error: validation.message || CV_CONTENT_ERROR, validation: validation.sections });
+
+    const extracted = await classifyAndExtract(validation.normalizedText);
+    const education = extracted.education?.[0] || {};
+    const experience = extracted.experience?.[0] || {};
+    const fullName = extracted.fullName || extracted.full_name || '';
+    return res.status(200).json({
+      isCv: true,
+      firstName: extracted.firstName || fullName.split(/\s+/)[0] || '',
+      lastName: extracted.lastName || fullName.split(/\s+/).slice(1).join(' ') || '',
+      fullName,
+      email: extracted.email || '',
+      phone: extracted.phone || '',
+      location: extracted.location || '',
+      headline: extracted.headline || extracted.professional_title || '',
+      education: [education.degree, education.school_name || education.institution].filter(Boolean).join(' - '),
+      graduationYear: education.graduationYear || '',
+      experienceRole: experience.job_title || experience.role || '',
+      experienceDetail: experience.description || (experience.responsibilities || []).join('\n') || '',
+      skills: (extracted.skills || []).map((skill) => typeof skill === 'string' ? skill : skill.skill_name).filter(Boolean),
+      languages: (extracted.languages || []).map((language) => typeof language === 'string' ? language : language.language_name).filter(Boolean),
+      jobPreference: typeof (extracted.jobPreference || extracted.job_preferences) === 'string'
+        ? (extracted.jobPreference || extracted.job_preferences)
+        : extracted.jobPreferences?.workMode || extracted.jobPreferences?.employmentType || '',
+    });
+  } catch (error) {
+    return res.status(422).json({ isCv: false, error: CV_CONTENT_ERROR });
+  } finally {
+    await removeFile(req.file);
   }
 }
 
@@ -102,8 +152,8 @@ async function syncProfile(req, res) {
       [req.params.id, req.user.id]
     );
     if (!rows[0]) return res.status(404).json({ success: false, message: 'CV analysis not found.' });
-    const data = req.body && (req.body.skills || req.body.experience || req.body.education || req.body.languages || req.body.fullName)
-      ? { ...req.body, professional_title: req.body.headline || req.body.professional_title, full_name: req.body.fullName || req.body.full_name }
+    const data = req.body && (req.body.skills || req.body.experience || req.body.education || req.body.languages || req.body.fullName || req.body.firstName || req.body.lastName)
+      ? { ...req.body, fullName: req.body.fullName || [req.body.firstName, req.body.lastName].filter(Boolean).join(' '), firstName: req.body.firstName || '', lastName: req.body.lastName || '', professional_title: req.body.headline || req.body.professional_title, full_name: req.body.fullName || [req.body.firstName, req.body.lastName].filter(Boolean).join(' ') || req.body.full_name }
       : {
         ...parseJson(rows[0].ai_extracted_data, {}),
         skills: parseJson(rows[0].extracted_skills),
@@ -115,6 +165,11 @@ async function syncProfile(req, res) {
       await connection.execute(
         `UPDATE cvs SET ai_extracted_data = ?, ai_analysis_score = ? WHERE id = ? AND user_id = ?`,
         [JSON.stringify(data), data.cvScore || 0, req.params.id, req.user.id]
+      );
+      const fullName = data.fullName || data.full_name || [data.firstName, data.lastName].filter(Boolean).join(' ') || null;
+      await connection.execute(
+        'UPDATE users SET full_name = COALESCE(NULLIF(?, \'\'), full_name), email = COALESCE(NULLIF(?, \'\'), email), phone = COALESCE(NULLIF(?, \'\'), phone) WHERE id = ?',
+        [fullName, data.email || '', data.phone || '', req.user.id]
       );
       await connection.execute(
         `UPDATE cv_analysis SET extracted_skills = ?, extracted_experience = ?, extracted_education = ?, extracted_languages = ?, extracted_certifications = ?, cv_score = ?, readability_score = ?, keyword_match_score = ?, recommendations = ?, analysis_status = 'completed', analyzed_at = NOW() WHERE cv_id = ?`,
@@ -164,4 +219,4 @@ async function syncProfile(req, res) {
   } finally { connection.release(); }
 }
 
-module.exports = { uploadAndAnalyze, getAnalysis, syncProfile };
+module.exports = { uploadAndAnalyze, validateAndParse, getAnalysis, syncProfile };

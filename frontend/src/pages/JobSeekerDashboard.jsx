@@ -14,6 +14,7 @@ import {
   Settings,
   LogOut,
 } from "lucide-react";
+import MatchedJobsPanel from "../components/dashboard/MatchedJobsPanel";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import LogoutFlowModals from "../components/LogoutFlowModals";
@@ -22,9 +23,9 @@ import {
   getJobMatches,
   getRecentApplications,
   getRecommendedJobs,
+  getMatchedJobs,
   getUpcomingInterviews,
 } from "../services/dashboardApi";
-import AIJobMatches from "../components/dashboard/AIJobMatches";
 import RecentApplications from "../components/dashboard/RecentApplications";
 import UpcomingInterview from "../components/dashboard/UpcomingInterview";
 import RecommendedJobs from "../components/dashboard/RecommendedJobs";
@@ -67,11 +68,15 @@ export default function JobSeekerDashboard() {
     useCallback(() => getUpcomingInterviews(), []),
   );
   const recommended = useResource(useCallback(() => getRecommendedJobs(), []));
-  const [savedJobs, setSavedJobs] = useState(() =>
-    JSON.parse(localStorage.getItem("savedJobs") || "[]"),
-  );
+  const matchedJobs = useResource(useCallback(() => getMatchedJobs(), []));
+  useEffect(() => {
+    const refreshMatches = () => matchedJobs.retry();
+    window.addEventListener("profileUpdated", refreshMatches);
+    return () => window.removeEventListener("profileUpdated", refreshMatches);
+  }, [matchedJobs.retry]);
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [logoutSession, setLogoutSession] = useState(null);
+  const [activeTab, setActiveTab] = useState("matched");
   const profile = summary.data?.profile || {
     name: user?.name || user?.full_name || "User",
     profileCompletion: 0,
@@ -79,16 +84,8 @@ export default function JobSeekerDashboard() {
   };
   const displayName = user?.name || user?.full_name || user?.email || profile.name || "User";
   const avatarUrl = user?.avatarUrl || user?.avatar_url || profile.avatarUrl;
-  const toggleSave = (id) =>
-    setSavedJobs((current) => {
-      const next = current.includes(id)
-        ? current.filter((item) => item !== id)
-        : [...current, id];
-      localStorage.setItem("savedJobs", JSON.stringify(next));
-      return next;
-    });
   const refreshAll = () =>
-    [summary, matches, applications, interviews, recommended].forEach(
+    [summary, matches, applications, interviews, recommended, matchedJobs].forEach(
       (resource) => resource.retry(),
     );
   const joinInterview = (url) =>
@@ -114,7 +111,6 @@ export default function JobSeekerDashboard() {
   const upcomingInterview =
     interviews.data?.find((item) => item.status === "Scheduled") || null;
   const recentApplications = applicationItems.slice(0, 5);
-  const matchPreview = (matches.data || []).slice(0, 3);
   const recommendationPreview = (recommended.data || []).slice(0, 3);
   const nextAction =
     profile.profileCompletion < 80
@@ -206,10 +202,6 @@ export default function JobSeekerDashboard() {
       </aside>
       <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-6xl space-y-7">
-          <div className="w-full mb-6 pb-4 border-b border-slate-200">
-            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">Seeker Dashboard</h1>
-            <p className="text-sm text-slate-500 mt-1">Manage your job search, matched roles, and applications.</p>
-          </div>
           <header className="flex flex-col gap-4 border-b border-slate-200 pb-6 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h1 className="text-3xl font-black text-slate-900">Dashboard</h1>
@@ -259,8 +251,9 @@ export default function JobSeekerDashboard() {
             >
               Application Overview
             </h2>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
               {[
+                ["Active Applications", applicationSummary.pending, "pending"],
                 ["Total Applications", applicationSummary.total, ""],
                 ["Pending", applicationSummary.pending, "pending"],
                 ["Shortlisted", applicationSummary.shortlisted, "shortlisted"],
@@ -285,7 +278,19 @@ export default function JobSeekerDashboard() {
               ))}
             </div>
           </section>
-          <RecommendedJobsFeed onViewDetails={(id) => navigate(`/jobs/${id}`)} />
+          <nav className="flex flex-wrap gap-2 border-b border-slate-200 pb-2" aria-label="Seeker dashboard sections">
+            {[["matched", "Matched Jobs (AI)"], ["explore", "Explore Jobs"], ["applications", "My Applications"]].map(([tab, label]) => (
+              <button key={tab} type="button" onClick={() => setActiveTab(tab)} className={`rounded-xl px-4 py-2.5 text-sm font-black transition ${activeTab === tab ? "bg-[var(--brand-primary)] text-white shadow-sm" : "bg-white text-slate-600 hover:bg-[var(--brand-soft)]"}`}>
+                {label}{tab === "applications" && ` (${applicationSummary.total})`}
+              </button>
+            ))}
+          </nav>
+          {activeTab === "matched" && <MatchedJobsPanel jobs={matchedJobs.data || []} onApplicationSubmitted={() => { applications.retry(); matchedJobs.retry(); }} />}
+          {activeTab === "explore" && <>
+            <RecommendedJobsFeed onViewDetails={(id) => navigate(`/jobs/${id}`)} />
+            <RecommendedJobs jobs={recommendationPreview} onViewDetails={(id) => navigate(`/jobs/${id}`)} onViewAll={() => navigate("/explore-jobs?from=dashboard")} isLoading={recommended.isLoading} error={recommended.error} onRetry={recommended.retry} />
+          </>}
+          {activeTab === "applications" && <RecentApplications applications={recentApplications} onViewDetails={(id) => navigate(`/applications/${id}`)} onViewAll={() => navigate("/applications")} isLoading={applications.isLoading} error={applications.error} onRetry={applications.retry} />}
           {interviews.isLoading ? (
             <div className="h-28 animate-pulse rounded-xl bg-slate-200" />
           ) : upcomingInterview ? (
@@ -313,34 +318,6 @@ export default function JobSeekerDashboard() {
               </p>
             </section>
           )}
-          <RecentApplications
-            applications={recentApplications}
-            onViewDetails={(id) => navigate(`/applications/${id}`)}
-            onViewAll={() => navigate("/applications")}
-            isLoading={applications.isLoading}
-            error={applications.error}
-            onRetry={applications.retry}
-          />
-          {!matches.isLoading && (
-            <AIJobMatches
-              jobs={matchPreview}
-              savedJobs={savedJobs}
-              onSave={toggleSave}
-              onViewDetails={(id) => navigate(`/jobs/${id}`)}
-              onViewAll={() => navigate("/ai-matches")}
-              isLoading={false}
-              error={matches.error}
-              onRetry={matches.retry}
-            />
-          )}
-          <RecommendedJobs
-            jobs={recommendationPreview}
-            onViewDetails={(id) => navigate(`/jobs/${id}`)}
-            onViewAll={() => navigate("/explore-jobs?from=dashboard")}
-            isLoading={recommended.isLoading}
-            error={recommended.error}
-            onRetry={recommended.retry}
-          />
         </div>
       </main>
       {logoutOpen && <LogoutFlowModals

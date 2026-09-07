@@ -4,7 +4,7 @@ async function listJobs() {
   const [rows] = await db.execute(
     `SELECT id, employer_id, title, description, category, job_type, experience_level,
             location, work_mode, salary_min, salary_max, currency, status, application_deadline
-     FROM jobs WHERE status = 'published' ORDER BY created_at DESC`
+    FROM jobs WHERE LOWER(status) IN ('active', 'published') ORDER BY created_at DESC`
   );
   return rows;
 }

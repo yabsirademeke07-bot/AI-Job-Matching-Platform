@@ -1,4 +1,3 @@
-import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { getNextOnboardingStep } from '../utils/applicationFlow';
 import { normalizeRole } from '../utils/authSession';
@@ -47,7 +46,9 @@ const ProtectedRoute = ({
   const isProfileContinue = location.state?.fromProfileContinue === true;
   if (!isCvProfileHandoff && !isProfileContinue && ['job_seeker', 'seeker', 'jobseeker', 'user', 'employee'].includes(userRole) && ['/select-role', '/cv-upload', '/seeker/cv-upload', '/upload-cv', '/profile', '/seeker/personal-info', '/dashboard', '/seeker/dashboard'].includes(location.pathname)) {
     const expectedPath = getNextOnboardingStep();
-    const expectedPaths = expectedPath === '/seeker/cv-upload' ? ['/seeker/cv-upload', '/cv-upload', '/upload-cv'] : [expectedPath];
+    const expectedPaths = ['/seeker/cv-upload', '/seeker/upload-cv', '/cv-upload', '/upload-cv'].includes(expectedPath)
+      ? ['/seeker/cv-upload', '/seeker/upload-cv', '/cv-upload', '/upload-cv']
+      : [expectedPath];
     if (!expectedPaths.includes(location.pathname)) {
       return <Navigate to={expectedPath} replace />;
     }

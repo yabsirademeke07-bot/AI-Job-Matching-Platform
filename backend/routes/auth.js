@@ -50,10 +50,27 @@ const initiateLoginOtp = async (req, res) => {
     if (req.body.password && (!user.password || !(await bcrypt.compare(req.body.password, user.password)))) {
       return res.status(401).json({ success: false, message: 'Invalid email or password.' });
     }
+    if (!user.is_verified) {
+      await issueOtp({ dbClient: db, email: cleanEmail, phone: user.phone, purpose: 'registration', expiresInMinutes: 3 });
+      return res.status(403).json({
+        success: false,
+        requires_verification: true,
+        email: cleanEmail,
+        message: 'Your account is not verified. A new verification code has been sent to your email.'
+      });
+    }
 
     const previousRequest = loginOtpRequests.get(cleanEmail);
-    if (previousRequest && Date.now() - previousRequest < LOGIN_OTP_WINDOW_MS) {
-      return res.status(429).json({ success: false, message: 'Please wait 2 minutes before requesting another code.' });
+    const elapsed = previousRequest ? Date.now() - previousRequest : LOGIN_OTP_WINDOW_MS;
+    if (previousRequest && elapsed < LOGIN_OTP_WINDOW_MS) {
+      return res.status(200).json({
+        success: true,
+        requires_otp: true,
+        email: cleanEmail,
+        retry_after_seconds: Math.ceil((LOGIN_OTP_WINDOW_MS - elapsed) / 1000),
+        message: 'A login code was already sent. Enter that code or wait before requesting another.',
+        active_code: true,
+      });
     }
 
     await issueOtp({ dbClient: db, email: cleanEmail, phone: user.phone, purpose: 'login', expiresInMinutes: 2 });
@@ -405,8 +422,16 @@ router.post('/resend-otp', async (req, res) => {
     }
     const cleanEmail = email.trim().toLowerCase();
     const previousRequest = purpose === 'login' ? loginOtpRequests.get(cleanEmail) : null;
-    if (previousRequest && Date.now() - previousRequest < LOGIN_OTP_WINDOW_MS) {
-      return res.status(429).json({ success: false, message: 'Please wait 2 minutes before requesting another code.' });
+    const elapsed = previousRequest ? Date.now() - previousRequest : LOGIN_OTP_WINDOW_MS;
+    if (previousRequest && elapsed < LOGIN_OTP_WINDOW_MS) {
+      return res.status(200).json({
+        success: true,
+        requires_otp: true,
+        email: cleanEmail,
+        retry_after_seconds: Math.ceil((LOGIN_OTP_WINDOW_MS - elapsed) / 1000),
+        message: 'A login code was already sent. Enter that code or wait before requesting another.',
+        active_code: true,
+      });
     }
     const { delivery } = await issueOtp({ dbClient: db, email: cleanEmail, phone: users[0].phone, purpose, expiresInMinutes: purpose === 'login' ? 2 : 3 });
     if (purpose === 'login') {

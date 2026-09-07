@@ -44,6 +44,21 @@ export const removeStoredAccount = (email) => {
   localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
 };
 
+export const clearUserWorkspace = () => {
+  [
+    'userProfile',
+    'seekerResume',
+    'pending_cv_data',
+    'candidateProfile',
+    'cvUploaded',
+    'lastAnalyzedCvId',
+    'savedJobs',
+    'mockApplications',
+    'pendingApplication',
+    'pendingApplicationJob',
+  ].forEach((key) => localStorage.removeItem(key));
+};
+
 export const getUserDestination = (user) => {
   const role = resolveUserRole(user);
   if (['admin', 'super_admin'].includes(role)) return '/admin/dashboard';

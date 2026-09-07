@@ -381,7 +381,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     years_of_experience_max INT DEFAULT 20,
     application_deadline DATE,
     is_urgent BOOLEAN DEFAULT FALSE,
-    status ENUM('draft', 'published', 'closed', 'filled', 'archived') DEFAULT 'draft',
+    status ENUM('draft', 'active', 'published', 'closed', 'filled', 'archived') DEFAULT 'draft',
     is_featured BOOLEAN DEFAULT FALSE,
     featured_until DATETIME,
     view_count INT DEFAULT 0,
@@ -431,6 +431,7 @@ CREATE TABLE IF NOT EXISTS applications (
     job_id INT NOT NULL,
     job_seeker_id INT NOT NULL,
     cv_id INT,
+    resume_snapshot JSON NULL,
     status ENUM('applied', 'under-review', 'shortlisted', 'rejected', 'interview-scheduled', 'offered', 'hired', 'withdrawn') DEFAULT 'applied',
     application_status_flow JSON,
     ai_match_score DECIMAL(5, 2),
@@ -455,6 +456,7 @@ CREATE TABLE IF NOT EXISTS applications (
     INDEX idx_seeker_id (job_seeker_id),
     INDEX idx_status (status),
     INDEX idx_ai_score (ai_match_score)
+    ,UNIQUE KEY unique_application_candidate_job (job_id, job_seeker_id)
 );
 
 -- Skill Gaps

@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { getApplicationJobId } from '../utils/applicationFlow';
-import skyscraperImage from '../pages/images/image.png';
+import { notifyProfileUpdated } from '../utils/profileUpdateEvent';
+import personalImage from '../pages/images/personal.png';
 
 const countryOptions = ['Ethiopia', 'Kenya', 'Rwanda', 'Tanzania', 'Uganda', 'South Africa', 'United States', 'United Kingdom', 'Canada', 'Other'];
 const cityOptionsByCountry = {
@@ -39,7 +40,7 @@ const Profile = ({ userData = {}, cvFile = null, onContinue, onNavigateNext }) =
   };
 
   const { savedProfile, savedUser, pendingCv } = getInitialState();
-  const cvName = pendingCv?.fullName || pendingCv?.full_name || '';
+  const cvName = pendingCv?.fullName || pendingCv?.full_name || pendingCv?.name || [pendingCv?.firstName, pendingCv?.lastName].filter(Boolean).join(' ') || '';
   const cvNameParts = cvName.trim().split(/\s+/).filter(Boolean);
   const cvLocation = String(pendingCv?.location || '').split(',').map((part) => part.trim()).filter(Boolean);
   const cvSkills = Array.isArray(pendingCv?.skills) ? pendingCv.skills.map((skill) => typeof skill === 'string' ? skill : skill?.skill_name).filter(Boolean) : [];
@@ -65,8 +66,8 @@ const Profile = ({ userData = {}, cvFile = null, onContinue, onNavigateNext }) =
 
   // Personal Profile Data State
   const [profileData, setProfileData] = useState({
-    firstName: pendingCv ? cvNameParts[0] || '' : (savedProfile?.firstName || userData?.firstName || savedUser?.full_name?.split(' ')[0] || ''),
-    lastName: pendingCv ? cvNameParts.slice(1).join(' ') : (savedProfile?.lastName || userData?.lastName || savedUser?.full_name?.split(' ')[1] || ''),
+    firstName: pendingCv ? pendingCv.firstName || pendingCv.first_name || cvNameParts[0] || '' : (savedProfile?.firstName || userData?.firstName || savedUser?.full_name?.split(' ')[0] || ''),
+    lastName: pendingCv ? pendingCv.lastName || pendingCv.last_name || cvNameParts.slice(1).join(' ') : (savedProfile?.lastName || userData?.lastName || savedUser?.full_name?.split(' ').slice(1).join(' ') || ''),
     email: pendingCv?.email || savedProfile?.email || userData?.email || savedUser?.email || '',
     phone: pendingCv?.phone || savedProfile?.phone || savedUser?.phone || '',
     dob: savedProfile?.dob || '',
@@ -172,6 +173,7 @@ const Profile = ({ userData = {}, cvFile = null, onContinue, onNavigateNext }) =
     };
     
     localStorage.setItem('userProfile', JSON.stringify(fullProfile));
+    notifyProfileUpdated();
     const token = localStorage.getItem('token');
     if (token) {
       const response = await fetch('/api/seeker/profile', {
@@ -196,6 +198,10 @@ const Profile = ({ userData = {}, cvFile = null, onContinue, onNavigateNext }) =
       if (redirect) {
         window.scrollTo({ top: 0, behavior: 'smooth' });
         const continueHandler = onContinue || onNavigateNext;
+        if (location.state?.onboarding) {
+          navigate('/ai-career-matches', { replace: true, state: { profile: fullProfile } });
+          return;
+        }
         if (continueHandler) {
           continueHandler(fullProfile);
           return;
@@ -208,37 +214,12 @@ const Profile = ({ userData = {}, cvFile = null, onContinue, onNavigateNext }) =
   return (
     <div className="min-h-screen bg-[#eef5f9] text-slate-900 lg:flex lg:h-screen lg:overflow-hidden">
       <section className="relative flex min-h-90 w-full items-end overflow-hidden bg-slate-950 lg:h-screen lg:w-1/2 lg:items-end">
-        <img src={skyscraperImage} alt="Modern skyscrapers" className="absolute inset-0 h-full w-full object-cover object-center" />
-        <div className="absolute inset-0 bg-linear-to-t from-slate-950/95 via-blue-950/45 to-transparent" />
-        <div className="relative z-10 w-full p-7 sm:p-10 lg:p-12">
-          <div className="mb-10 text-white">
-            <div><p className="text-lg font-black tracking-tight">SmartRecruit AI</p><p className="text-xs font-medium text-blue-100/75">Build the profile your next opportunity can find.</p></div>
-          </div>
-          <div className="max-w-lg">
-            <p className="mb-3 text-xs font-black uppercase tracking-[0.28em] text-cyan-200">Your career, intelligently matched</p>
-            <h1 className="text-4xl font-black leading-[1.05] tracking-tight text-white sm:text-5xl">AI-driven career matching.</h1>
-            <p className="mt-5 max-w-md text-sm leading-7 text-slate-200 sm:text-base">A complete profile gives our matching engine the signal it needs to connect you with work that fits.</p>
-          </div>
-          <div className="mt-8 max-w-md rounded-3xl border border-white/20 bg-white/10 p-5 shadow-2xl backdrop-blur-xl">
-            <div><p className="text-sm font-black text-white">AI-Driven Career Matching</p><p className="mt-1 text-xs leading-5 text-blue-100/80">Skills, experience, education, and goals come together in one professional profile.</p></div>
-            <div className="mt-5 border-t border-white/15 pt-4 text-xs font-bold text-blue-100">Your profile powers better recommendations</div>
-          </div>
-        </div>
+        <img src={personalImage} alt="Personal profile setup" className="absolute inset-0 h-full w-full object-cover object-center" />
       </section>
 
       <section className="h-auto w-full overflow-y-auto bg-[#f8fbfd] lg:h-screen lg:w-1/2">
       <div className="information-page profile-readable mx-auto max-w-4xl space-y-10 px-6 py-12 pb-16 leading-relaxed sm:px-10 lg:px-12">
-      
-      <header className="flex flex-wrap items-start justify-between gap-8 border-b border-slate-200/80 pb-8">
-        <div>
-          <div className="mb-3 inline-flex rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-black text-blue-700">Step 4 of 4 • Smart Profile Builder</div>
-          <h1 className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">የግል መረጃዎን ያሟሉ <span className="text-blue-700">(Personal Profile Setup)</span></h1>
-          <p className="mt-3 text-sm leading-7 text-slate-600">Complete your information to activate AI-matched job recommendations.</p>
-        </div>
-        <button type="button" onClick={() => handleSaveProfile(false)} className={`flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-bold text-white shadow-md transition ${isSaved ? 'bg-emerald-600' : 'bg-blue-600 hover:bg-blue-700'}`}>
-          {isSaved ? 'Saved!' : 'Save Profile'}
-        </button>
-      </header>
+      <h1 className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">Personal Profile Setup</h1>
 
       <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
         <div className="mb-2 flex items-center justify-between text-sm font-bold text-slate-800"><span>Profile Completion</span><span className="text-blue-700">{completionPercentage}%</span></div>
@@ -660,7 +641,7 @@ const Profile = ({ userData = {}, cvFile = null, onContinue, onNavigateNext }) =
           }}
           className="primary-button flex items-center gap-2 rounded-xl px-7 py-4 text-base shadow-lg shadow-[#56a2d8]/25 hover:bg-[#f0f7fc] hover:text-[#2b73a4] hover:shadow-[#56a2d8]/30 active:scale-[0.98]"
         >
-          <span>Continue to Dashboard</span>
+          <span>Analyze &amp; Match My Career (AI) →</span>
         </button>
       </div>
 
