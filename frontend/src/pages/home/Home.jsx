@@ -1,8 +1,17 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
 import HeroSection from '../../components/home/HeroSection';
 import TrustedBy from '../../components/home/TrustedBy';
+
+const sectionNavItems = [
+  { label: 'How It Works', id: 'how-it-works' },
+  { label: 'AI Matching', id: 'ai-matching' },
+  { label: 'Find Jobs', id: 'find-jobs' },
+  { label: 'For Job Seekers', id: 'for-job-seekers' },
+  { label: 'For Employers', id: 'for-employers' },
+  { label: 'Why Choose Us', id: 'why-choose-us' },
+];
 
 const howItWorks = [
   { title: 'Create Account', text: 'Set up your talent or company profile in minutes.' },
@@ -58,6 +67,45 @@ export default function Home() {
   const allJobs = publishedJobs.length ? publishedJobs : fallbackJobs;
   const [visibleJobs, setVisibleJobs] = useState(allJobs);
   const [activeQuery, setActiveQuery] = useState('');
+
+  useEffect(() => {
+    const sections = sectionNavItems
+      .map(({ id }) => document.getElementById(id))
+      .filter(Boolean);
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visibleSection = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+
+        if (visibleSection) {
+          setActiveSection(visibleSection.target.id);
+        }
+      },
+      {
+        rootMargin: '-18% 0px -55% 0px',
+        threshold: [0.2, 0.4, 0.6],
+      }
+    );
+
+    sections.forEach((section) => observer.observe(section));
+
+    return () => observer.disconnect();
+  }, []);
+
+  const handleSectionClick = (event, id) => {
+    event.preventDefault();
+    const section = document.getElementById(id);
+
+    if (!section) {
+      return;
+    }
+
+    setActiveSection(id);
+    section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    window.history.pushState(null, '', `#${id}`);
+  };
 
   const handleSearch = (e) => {
     e.preventDefault();
