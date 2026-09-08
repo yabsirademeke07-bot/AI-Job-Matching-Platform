@@ -3,9 +3,11 @@ const router = express.Router();
 const db = require('../config/db');
 const authMiddleware = require('../middleware/authMiddleware');
 const { getJobs, getJob, createJob } = require('../controllers/jobController');
+const { getMatchedJobs } = require('../controllers/seekerMatchingController');
 
 router.get('/', getJobs);
 router.post('/', authMiddleware, createJob);
+router.get('/match', authMiddleware, getMatchedJobs);
 
 // Dynamic Skill Matching Algorithm
 function calculateRealMatch(seekerSkills = [], requiredSkills = []) {

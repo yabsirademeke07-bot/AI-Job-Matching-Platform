@@ -4,7 +4,7 @@ const path = require('path');
 const authMiddleware = require('../middleware/authMiddleware');
 const {
   getProfile, updateProfile, saveProfile, listCollection, addCollectionItem,
-  deleteCollectionItem, getApplications, uploadCv
+  deleteCollectionItem, getApplications, uploadCv, updatePersonalInfo, updateSkills
 } = require('../controllers/jobSeekerController');
 
 const router = express.Router();
@@ -20,7 +20,10 @@ const upload = multer({
 router.use(authMiddleware);
 router.get('/profile', getProfile);
 router.put('/profile', updateProfile);
+router.post('/profile', updateProfile);
 router.post('/profile/save', saveProfile);
+router.put('/profile/personal', updatePersonalInfo);
+router.put('/profile/skills', updateSkills);
 router.get('/applications', getApplications);
 router.post('/upload-cv', upload.single('cv'), uploadCv);
 router.get('/:collection', listCollection);

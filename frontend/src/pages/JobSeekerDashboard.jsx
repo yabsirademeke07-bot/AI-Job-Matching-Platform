@@ -30,6 +30,7 @@ import RecentApplications from "../components/dashboard/RecentApplications";
 import UpcomingInterview from "../components/dashboard/UpcomingInterview";
 import RecommendedJobs from "../components/dashboard/RecommendedJobs";
 import RecommendedJobsFeed from "../components/candidate/RecommendedJobsFeed";
+import seekerImage from "./images/seeker.jpg";
 
 function useResource(loader) {
   const [state, setState] = useState({
@@ -202,27 +203,33 @@ export default function JobSeekerDashboard() {
       </aside>
       <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-6xl space-y-7">
-          <header className="flex flex-col gap-4 border-b border-slate-200 pb-6 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h1 className="text-3xl font-black text-slate-900">Dashboard</h1>
-              <p className="mt-2 text-base font-semibold text-slate-700">
-                Welcome back,{" "}
-                {profile.name || user?.name || user?.full_name || "Job Seeker"}.
+          <section
+            className="relative isolate overflow-hidden rounded-2xl bg-slate-900 px-6 py-10 shadow-sm sm:px-10 sm:py-14"
+            style={{ backgroundImage: `url(${seekerImage})`, backgroundPosition: "center" }}
+            aria-labelledby="seeker-dashboard-title"
+          >
+            <div className="absolute inset-0 -z-10 bg-slate-950/65" aria-hidden="true" />
+            <div className="relative max-w-2xl text-white">
+              <p className="text-sm font-bold uppercase tracking-[0.2em] text-cyan-200">
+                Job seeker dashboard
               </p>
-              <p className="mt-1 text-sm text-slate-500">
-                Here is an overview of your job search activity.
+              <h1 id="seeker-dashboard-title" className="mt-3 text-3xl font-black sm:text-4xl">
+                Find the right opportunity for your next chapter
+              </h1>
+              <p className="mt-4 max-w-xl text-sm leading-6 text-slate-100 sm:text-base">
+                Welcome back, {profile.name || user?.name || user?.full_name || "Job Seeker"}. Track your applications, explore AI-matched jobs, and move your career forward.
               </p>
             </div>
-            <div className="flex flex-col gap-3 self-start sm:flex-row sm:items-center">
+            <div className="relative mt-7 flex flex-col gap-3 sm:absolute sm:right-8 sm:top-8 sm:mt-0 sm:flex-row sm:items-center">
               <button
                 type="button"
                 onClick={refreshAll}
-                className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-600 shadow-sm"
+                className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-white/30 bg-white/15 px-3 py-2 text-sm font-bold text-white backdrop-blur-sm transition hover:bg-white/25"
               >
                 <RefreshCw className="h-4 w-4" /> Refresh
               </button>
             </div>
-          </header>
+          </section>
           {summary.error && (
             <div className="flex items-center gap-2 rounded-xl bg-red-50 p-4 text-sm text-red-700">
               <AlertCircle className="h-4 w-4" /> {summary.error}

@@ -13,12 +13,24 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import cvImage from '../pages/images/cv.jpg';
+import { useToast } from '../hooks/useToast.js';
+import { scrollToFeedback } from '../utils/scrollHelper.js';
 
 const ALLOWED_EXTENSIONS = ['.pdf', '.docx', '.png', '.jpg', '.jpeg', '.webp'];
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
   const navigate = useNavigate();
+  const { showSuccess, showError } = useToast();
+  const scrollCvFeedback = (type) => {
+    window.setTimeout(() => {
+      if (type === 'success') {
+        document.querySelector('#extracted-cv-details, #parsed-preview')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+      document.querySelector('#cv-dropzone')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 60);
+  };
   const fileInputRef = useRef(null);
   const [file, setFile] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -48,6 +60,8 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
     const token = localStorage.getItem('token');
     if (!token) {
       setValidationNotice('Please sign in again before uploading your CV.');
+      showError('Please sign in again before uploading your CV.');
+      scrollToFeedback('error');
       return;
     }
 
@@ -86,11 +100,15 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
       if (data.success && data.data?.id) localStorage.setItem('lastAnalyzedCvId', String(data.data.id));
       if (onUploadSuccess) onUploadSuccess(data.data || data);
       else navigate('/cv-analysis', { state: { analysis: data.data } });
+      showSuccess('✓ CV uploaded and analyzed successfully! Review your details below.');
+      scrollCvFeedback('success');
     } catch (uploadError) {
       if (uploadError.status === 422 || /invalid|does not contain|not a cv|resume\/cv/i.test(uploadError.message || '')) {
         showInvalidFileToast(uploadError.message);
       } else {
         setToastError(uploadError.message || 'Unable to analyze your CV. Please try again.');
+        showError('⚠️ Upload failed. Please upload a valid PDF or DOCX file (max 5MB).');
+        scrollCvFeedback('error');
       }
     } finally {
       setIsUploading(false);
@@ -106,11 +124,15 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
     const extension = `.${selectedFile.name.split('.').pop().toLowerCase()}`;
     if (!ALLOWED_EXTENSIONS.includes(extension)) {
       setValidationNotice('Unsupported file type. Please upload a PDF or DOCX file.');
+      showError('⚠️ Upload failed. Please upload a valid PDF or DOCX file (max 5MB).');
+      scrollCvFeedback('error');
       return;
     }
 
     if (selectedFile.size > MAX_FILE_SIZE) {
       setValidationNotice(`File size must be under ${MAX_FILE_SIZE / (1024 * 1024)}MB.`);
+      showError('⚠️ Upload failed. Please upload a valid PDF or DOCX file (max 5MB).');
+      scrollCvFeedback('error');
       return;
     }
 
@@ -121,6 +143,8 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
   const showInvalidFileToast = (message) => {
     setIsInvalidFile(true);
     setToastError(message || 'Invalid Document - Not a Candidate CV. A valid CV must contain all 4 sections: Contact Details, Work Experience, Education, and Skills.');
+    showError('⚠️ Upload failed. Please upload a valid PDF or DOCX file (max 5MB).');
+    scrollCvFeedback('error');
   };
 
   const handleDragOver = (event) => {
@@ -145,6 +169,8 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
       setValidationNotice(
         isInvalidFile ? 'Please replace this invalid document before continuing.' : 'Please upload your CV first, or skip this step for now using the button below.'
       );
+      showError('⚠️ Upload failed. Please upload a valid PDF or DOCX file (max 5MB).');
+      scrollCvFeedback('error');
       return;
     }
 
@@ -171,10 +197,10 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
 
   return (
     <main className="min-h-[85vh] bg-slate-50/70 px-4 py-8 sm:px-6 lg:py-16">
-      <div className="mx-auto grid w-full max-w-6xl items-stretch gap-6 lg:grid-cols-[0.82fr_1.18fr] lg:gap-8">
-        <aside className="relative min-h-[360px] overflow-hidden rounded-[28px] border border-slate-200 bg-slate-950 shadow-2xl shadow-slate-900/10 sm:min-h-[460px] lg:min-h-full">
-          <img src={cvImage} alt="Professional CV preview" className="absolute inset-0 h-full w-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/20 to-transparent" />
+      <div className="mx-auto grid w-full max-w-6xl items-stretch gap-6 lg:grid-cols-[1.1fr_1fr] lg:gap-8">
+        <aside className="relative min-h-112 overflow-hidden rounded-[28px] border border-slate-200 bg-slate-950 shadow-2xl shadow-slate-900/10 sm:min-h-136 lg:min-h-full">
+          <img src={cvImage} alt="Professional CV preview" className="absolute inset-0 h-full w-full scale-105 object-cover" />
+          <div className="absolute inset-0 bg-linear-to-t from-slate-950/90 via-slate-950/20 to-transparent" />
           <div className="absolute inset-x-0 bottom-0 p-7 text-left sm:p-9">
             <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-200">Your career, clearly presented</p>
             <h2 className="mt-3 max-w-sm text-2xl font-black leading-tight text-white sm:text-3xl">Turn your experience into your next opportunity.</h2>
@@ -211,6 +237,7 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
 
         {!file ? (
           <div
+            id="cv-dropzone"
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}

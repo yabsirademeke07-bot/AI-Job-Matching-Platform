@@ -3,7 +3,7 @@ const path = require('path');
 const db = require('../config/db');
 const { extractText, classifyAndExtract, calculateScores, calculateRealJobMatch, calculateJobMatches, validateCvContent, CV_CONTENT_ERROR } = require('../services/cvAnalysisService');
 
-const INVALID_CV_MESSAGE = 'We could not identify enough CV content. Please upload a readable resume with contact details and experience, education, or skills.';
+const INVALID_CV_MESSAGE = 'We could not identify enough CV content. Please upload a readable resume with your name or contact details and work history, projects, internships, or education.';
 const SUCCESS_MESSAGE = 'Your CV was analyzed successfully.';
 
 async function removeFile(file) {
@@ -81,13 +81,13 @@ async function uploadAndAnalyze(req, res) {
 }
 
 async function validateAndParse(req, res) {
-  if (!req.file) return res.status(422).json({ isCv: false, error: 'The uploaded document is not a candidate CV or Resume. Please upload a genuine CV containing your education, work experience, and technical skills.' });
+  if (!req.file) return res.status(422).json({ isCv: false, error: 'Please upload a readable candidate CV or resume.' });
   try {
     let parsedText;
     try {
       parsedText = await extractText(req.file);
     } catch (error) {
-      return res.status(422).json({ isCv: false, error: 'The uploaded document is not a candidate CV or Resume. Please upload a genuine CV containing your education, work experience, and technical skills.' });
+      return res.status(422).json({ isCv: false, error: 'We could not read this document. Please upload a readable PDF or DOCX CV.' });
     }
     const validation = validateCvContent(parsedText);
     if (!validation.valid && !validation.needsAiReview) return res.status(422).json({ isCv: false, error: validation.message || CV_CONTENT_ERROR, validation: validation.sections });
@@ -185,32 +185,7 @@ async function syncProfile(req, res) {
     );
     if (!profileRows[0]) throw new Error('Unable to create seeker profile.');
 
-    await connection.execute('DELETE FROM seeker_experience WHERE user_id = ?', [req.user.id]);
-    await connection.execute('DELETE FROM seeker_education WHERE user_id = ?', [req.user.id]);
-    await connection.execute('DELETE FROM seeker_languages WHERE user_id = ?', [req.user.id]);
-    for (const skill of data.skills || []) {
-      if (!skill.skill_name) continue;
-      await connection.execute(`INSERT INTO seeker_skills (user_id, skill_name, skill_category, proficiency_level, years_of_experience) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE skill_category = VALUES(skill_category), proficiency_level = VALUES(proficiency_level), years_of_experience = VALUES(years_of_experience)`, [req.user.id, skill.skill_name, skill.skill_category || null, skill.proficiency_level || 'intermediate', skill.years_of_experience || null]);
-    }
-    for (const item of data.experience || []) {
-      if (!item.company_name || !item.job_title) continue;
-      await connection.execute(`INSERT INTO seeker_experience (user_id, company_name, job_title, employment_type, location, start_date, end_date, is_current, description, years_of_experience) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [req.user.id, item.company_name, item.job_title, item.employment_type || 'contract', item.location || null, item.start_date || null, item.end_date || null, Boolean(item.is_current), item.description || null, item.years_of_experience || null]);
-    }
-    for (const item of data.education || []) {
-      const schoolName = item.school_name || item.institution || null;
-      const degree = item.degree || null;
-      const fieldOfStudy = item.field_of_study || null;
-      await connection.execute(`INSERT INTO seeker_education (user_id, school_name, degree, field_of_study, start_date, end_date, is_current, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, [req.user.id, schoolName, degree, fieldOfStudy, item.start_date || null, item.end_date || null, Boolean(item.is_current), item.description || null]);
-    }
-    for (const language of data.languages || []) {
-      if (!language.language_name) continue;
-      const allowedProficiencies = ['elementary', 'limited-working', 'professional-working', 'full-professional', 'native'];
-      const proficiency = allowedProficiencies.includes(language.proficiency) ? language.proficiency : 'professional-working';
-      await connection.execute(
-        'INSERT INTO seeker_languages (user_id, language_name, proficiency) VALUES (?, ?, ?)',
-        [req.user.id, language.language_name, proficiency]
-      );
-    }
+    await connection.execute('UPDATE job_seeker_profiles SET education = ?, skills = ?, languages = ?, parsed_json_payload = ?, updated_at = NOW() WHERE user_id = ?', [JSON.stringify(data.education || []), JSON.stringify(data.skills || []), JSON.stringify(data.languages || []), JSON.stringify(data), req.user.id]);
     await connection.commit();
     return res.json({ success: true, message: 'Your profile was updated from the analyzed CV.', profile_completion_percentage: data.profileCompletion || 0 });
   } catch (error) {

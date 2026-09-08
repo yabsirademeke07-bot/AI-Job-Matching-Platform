@@ -46,13 +46,14 @@ function normalizeExtractedText(value) {
     .trim();
 }
 
-const CV_CONTENT_ERROR = 'We could not identify enough CV content. Please upload a readable resume containing contact details and at least two of: experience, education, or skills.';
+const CV_CONTENT_ERROR = 'We could not identify enough CV content. Please upload a readable resume containing your name or contact details and work history, projects, internships, or education.';
 const EMAIL_PATTERN = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
 const PHONE_PATTERN = /(?:\+251\s?9\d{2}[\s.-]?\d{3}[\s.-]?\d{3}|09\d{2}[\s.-]?\d{3}[\s.-]?\d{3}|\+?\d[\d\s().-]{7,}\d)/;
-const EXPERIENCE_PATTERN = /\b(experience|employment|work\s+history|career|projects|professional\s+background|internship|roles)\b/i;
-const EDUCATION_PATTERN = /\b(education|academic|university|college|degree|b\.?\s?sc|m\.?\s?sc|diploma|studies|school|certifications?)\b/i;
+const EXPERIENCE_PATTERN = /\b(experience|employment|work\s+history|career|career\s+history|professional\s+background|background|projects?|internships?|roles?|responsibilities|work\s+experience|employment\s+history)\b/i;
+const EDUCATION_PATTERN = /\b(education|academic|academic\s+history|studies|qualifications?|university|college|degree|b\.?\s?sc|m\.?\s?sc|diploma|school|certifications?)\b/i;
 const SKILLS_PATTERN = /\b(skills?|technologies|tools|competencies|proficiencies|expertise|stack|languages|abilities)\b/i;
 const CONTACT_LABEL_PATTERN = /\b(phone|mobile|contact|linkedin|github|address|email)\b/i;
+const NAME_PATTERN = /(?:^|\n)\s*[A-Z][A-Za-z'\-]+(?:\s+[A-Z][A-Za-z'\-]+){1,3}\s*(?:\n|$)/m;
 const CV_REJECTION_MARKERS = /\b(invoice|receipt|bill|bank statement|utility bill|purchase order)\b/i;
 const NON_CV_DOCUMENT_MARKERS = /\b(course\s+(outline|description|material|handout)|course\s+syllabus|syllabus|learning\s+outcomes?|assignments?|semester|lecture\s+notes?|chapter\s+\d+|table\s+of\s+contents?)\b/i;
 
@@ -60,13 +61,11 @@ function looksLikeCv(text) {
   const source = normalizeExtractedText(text);
   const lower = source.toLowerCase();
   const wordCount = source.split(/\s+/).filter(Boolean).length;
-  const hasContact = Boolean(source.match(EMAIL_PATTERN) || PHONE_PATTERN.test(source) || CONTACT_LABEL_PATTERN.test(lower));
-  const sectionCount = [EXPERIENCE_PATTERN, EDUCATION_PATTERN, SKILLS_PATTERN].filter((pattern) => pattern.test(lower)).length;
-  const hasCareerEvidence = /\b(developer|engineer|designer|analyst|manager|intern|administrator|consultant|technician|responsibilit|employment|work experience|professional)\b/i.test(lower);
-  const hasEducationEvidence = /\b(bachelor|master|phd|bsc|msc|diploma|university|college|degree)\b/i.test(lower);
-  const hasSkillEvidence = /\b(javascript|typescript|python|java|react|node|sql|excel|communication|leadership|programming|software|technology)\b/i.test(lower);
-  const isObviousNonCv = NON_CV_DOCUMENT_MARKERS.test(lower) || (CV_REJECTION_MARKERS.test(lower) && !hasCareerEvidence);
-  return Boolean(source) && wordCount > 50 && hasContact && sectionCount >= 2 && !isObviousNonCv && (hasCareerEvidence || hasEducationEvidence || hasSkillEvidence);
+  const hasContact = Boolean(source.match(EMAIL_PATTERN) || PHONE_PATTERN.test(source) || CONTACT_LABEL_PATTERN.test(lower) || NAME_PATTERN.test(source));
+  const hasCareerEvidence = EXPERIENCE_PATTERN.test(lower) || /\b(developer|engineer|designer|analyst|manager|intern|administrator|consultant|technician|responsibilit|employment|professional)\b/i.test(lower);
+  const hasEducationEvidence = EDUCATION_PATTERN.test(lower) || /\b(bachelor|master|phd|bsc|msc|diploma|university|college|degree)\b/i.test(lower);
+  const isObviousNonCv = NON_CV_DOCUMENT_MARKERS.test(lower) || CV_REJECTION_MARKERS.test(lower);
+  return Boolean(source) && wordCount >= 20 && hasContact && (hasCareerEvidence || hasEducationEvidence) && !isObviousNonCv;
 }
 
 function validateCvContent(text) {
@@ -78,18 +77,18 @@ function validateCvContent(text) {
     experience: EXPERIENCE_PATTERN.test(lower),
     education: EDUCATION_PATTERN.test(lower),
     skills: SKILLS_PATTERN.test(lower),
-    contact: Boolean(email || PHONE_PATTERN.test(source) || CONTACT_LABEL_PATTERN.test(lower)),
+    contact: Boolean(email || PHONE_PATTERN.test(source) || CONTACT_LABEL_PATTERN.test(lower) || NAME_PATTERN.test(source)),
   };
-  const contentSections = [sections.experience, sections.education, sections.skills].filter(Boolean).length;
-  const rejectedDocument = NON_CV_DOCUMENT_MARKERS.test(lower) || (CV_REJECTION_MARKERS.test(lower) && contentSections < 2);
-  const tooShallow = wordCount <= 50;
-  const valid = Boolean(source) && !rejectedDocument && sections.contact && contentSections >= 2 && !tooShallow;
+  const hasProfessionalHistory = sections.experience || sections.education;
+  const rejectedDocument = NON_CV_DOCUMENT_MARKERS.test(lower) || CV_REJECTION_MARKERS.test(lower);
+  const tooShallow = wordCount < 20;
+  const valid = Boolean(source) && !rejectedDocument && sections.contact && hasProfessionalHistory && !tooShallow;
   let message = null;
   if (!source) message = 'We could not read any text from this document. Please upload a text-based PDF or DOCX, not a blank or image-only file.';
-  else if (tooShallow) message = 'We could not read enough text from this document. Please make sure the CV is not a scanned photo-only document.';
+  else if (tooShallow) message = 'We could not read enough text from this document. Please make sure the CV is not blank or image-only.';
   else if (!sections.contact) message = 'We could not find contact details in this document. Please include an email address or phone number.';
-  else if (contentSections < 2 || rejectedDocument) message = CV_CONTENT_ERROR;
-  const needsAiReview = !valid && !rejectedDocument && wordCount > 50 && (sections.contact || contentSections >= 1);
+  else if (!hasProfessionalHistory || rejectedDocument) message = CV_CONTENT_ERROR;
+  const needsAiReview = !valid && !rejectedDocument && wordCount >= 20 && sections.contact && hasProfessionalHistory;
   return { valid, needsAiReview, sections, wordCount, normalizedText: source, message };
 }
 
@@ -187,11 +186,12 @@ function localParse(text) {
   const phone = text.match(/(?:\+251\s?9\d{2}[\s.-]?\d{3}[\s.-]?\d{3}|09\d{2}[\s.-]?\d{3}[\s.-]?\d{3}|\+?\d[\d\s().-]{7,}\d)/)?.[0]?.replace(/\s+/g, ' ').trim() || '';
   const fullName = normalizeName('', text, email);
   const location = lines.find((line) => LOCATION_WORDS.some((place) => line.toLowerCase().includes(place))) || '';
-  const titleLine = lines.find((line) => /developer|engineer|designer|manager|analyst|consultant|specialist|administrator|accountant|marketing|student|professional/i.test(line) && line.length < 100) || '';
+  const rolePattern = /developer|engineer|designer|manager|analyst|consultant|specialist|administrator|accountant|agronomist|agriculture|biologist|biology|nurse|nursing|teacher|teaching|lecturer|professor|researcher|scientist|pharmacist|physician|doctor|healthcare|sales|marketing|human resources|operations|officer|coordinator|assistant|farmer|student|professional/i;
+  const titleLine = lines.find((line) => rolePattern.test(line) && line.length < 100) || '';
   const skills = Object.entries(SKILL_CATALOG).flatMap(([category, catalog]) => catalog.filter((skill) => lower.includes(skill)).map((skill) => ({ skill_name: skill, skill_category: category, proficiency_level: 'intermediate', years_of_experience: null })));
   const uniqueSkills = skills.filter((skill, index, list) => list.findIndex((item) => item.skill_name === skill.skill_name) === index);
   const education = lines.filter((line) => /university|college|school|institute|bachelor|master|phd|degree|diploma|b\.sc|m\.sc/i.test(line)).slice(0, 5).map((line) => ({ school_name: /university|college|school|institute/i.test(line) ? line.replace(/\s*[|,].*$/, '').trim() : null, degree: line.match(/(?:b\.?\s?sc|m\.?\s?sc|bachelor(?:'s)?|master(?:'s)?|phd|doctorate|diploma)[^,|;]*/i)?.[0]?.trim() || null, field_of_study: null, graduationYear: line.match(/\b(?:19|20)\d{2}\b/)?.[0] || null, start_date: dateFromText(line), end_date: line.match(/\b(?:19|20)\d{2}\b/)?.[0] ? `${line.match(/\b(?:19|20)\d{2}\b/)[0]}-01-01` : null, is_current: false, description: null }));
-  const experience = lines.filter((line) => /engineer|developer|manager|analyst|consultant|specialist|administrator|intern|coordinator|designer|technician/i.test(line) && !/skill|education|summary/i.test(line)).slice(0, 5).map((line) => ({ company_name: line.split(/\s+at\s+|\s+@\s+|\s+\|\s+/i)[1]?.split(/\s+(?:19|20)\d{2}/)[0]?.trim() || null, job_title: line.split(/\s+at\s+|\s+@\s+|\s+\|\s+/i)[0]?.slice(0, 100).trim() || line.slice(0, 100), employment_type: 'contract', location: null, start_date: dateFromText(line), end_date: null, duration: line.match(/(?:19|20)\d{2}\s*[-–]\s*(?:(?:19|20)\d{2}|present|current)/i)?.[0] || null, is_current: /present|current/i.test(line), description: line, responsibilities: [], years_of_experience: null }));
+  const experience = lines.filter((line) => rolePattern.test(line) && !/skill|education|summary|qualification/i.test(line)).slice(0, 5).map((line) => ({ company_name: line.split(/\s+at\s+|\s+@\s+|\s+\|\s+/i)[1]?.split(/\s+(?:19|20)\d{2}/)[0]?.trim() || null, job_title: line.split(/\s+at\s+|\s+@\s+|\s+\|\s+/i)[0]?.slice(0, 100).trim() || line.slice(0, 100), employment_type: 'contract', location: null, start_date: dateFromText(line), end_date: null, duration: line.match(/(?:19|20)\d{2}\s*[-–]\s*(?:(?:19|20)\d{2}|present|current)/i)?.[0] || null, is_current: /present|current/i.test(line), description: line, responsibilities: [], years_of_experience: null }));
   const certifications = lines.filter((line) => /certified|certification|certificate|aws|scrum|pmp/i.test(line)).slice(0, 5).map((line) => ({ name: line, issuer: null, date: dateFromText(line) }));
   const languages = lines.filter((line) => /english|amharic|french|german|spanish|arabic/i.test(line)).slice(0, 5).map((line) => ({ language_name: line, proficiency: 'professional-working' }));
   const isCv = looksLikeCv(text);

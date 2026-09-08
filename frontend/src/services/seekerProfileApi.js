@@ -36,11 +36,15 @@ function getStoredProfile() {
 
 async function request(path, options, fallback) {
   try {
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
     const response = await fetch(`${API_BASE_URL}${path}`, {
       ...options,
-      headers: { Accept: 'application/json', ...(options?.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }), ...(options?.headers || {}) },
+      headers: { Accept: 'application/json', ...(options?.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }), ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(options?.headers || {}) },
     });
-    if (!response.ok) throw new Error(`Profile request failed with status ${response.status}`);
+    if (!response.ok) {
+      const details = await response.json().catch(() => ({}));
+      throw new Error(details.message || `Profile request failed with status ${response.status}`);
+    }
     return await response.json();
   } catch (error) {
     if (USE_MOCKS) return typeof fallback === 'function' ? fallback() : fallback;

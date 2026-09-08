@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../hooks/useToast.js';
+import { scrollToFeedback } from '../utils/scrollHelper.js';
 import { clearUserWorkspace } from '../utils/authSession';
 import GoogleAuthButton from '../components/GoogleAuthButton';
 import {
@@ -12,6 +14,7 @@ import EmailInputWithDomains from '../components/EmailInputWithDomains';
 const Register = () => {
   const navigate = useNavigate();
   const { setSession } = useAuth();
+  const { showSuccess, showError } = useToast();
 
   // Multi-step Registration State: 1 = Form, 2 = OTP, 3 = Role
   const [step, setStep] = useState(1);
@@ -122,6 +125,10 @@ const Register = () => {
     }
 
     setErrors(newErrors);
+    if (Object.keys(newErrors).length) {
+      showError('Please correct the highlighted fields.');
+      scrollToFeedback('error');
+    }
     return Object.keys(newErrors).length === 0;
   };
 
@@ -182,12 +189,16 @@ const Register = () => {
       setStep(2);
       setOtpTimer(180);
       setApiSuccess('OTP code sent to your email.');
+      showSuccess('Verification code sent successfully.');
     } catch (error) {
       console.error('Registration Error:', error);
       const isNetworkError = error instanceof TypeError && /fetch|network|failed/i.test(error.message || '');
-      setApiError(isNetworkError
+      const message = isNetworkError
         ? 'Unable to reach the signup service. Please make sure the backend is running and try again.'
-        : (error.message || 'Unable to create your account. Please try again.'));
+        : (error.message || 'Unable to create your account. Please try again.');
+      setApiError(message);
+      showError(message);
+      scrollToFeedback('error');
     } finally {
       setIsLoading(false);
     }

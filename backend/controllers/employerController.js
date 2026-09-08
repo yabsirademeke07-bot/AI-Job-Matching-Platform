@@ -340,9 +340,11 @@ exports.getEmployerPipeline = async (req, res) => {
     );
 
     const pipeline = await Promise.all(rows.map(async (row) => {
-      const [matchedSkillsRaw] = await db.execute('SELECT skill_name FROM seeker_skills WHERE user_id = ? ORDER BY skill_name ASC LIMIT 20', [row.candidateId]);
+      const [matchedSkillsRaw] = await db.execute('SELECT skills FROM job_seeker_profiles WHERE user_id = ? LIMIT 1', [row.candidateId]);
       const [requiredSkillsRaw] = await db.execute('SELECT skill_name FROM job_required_skills WHERE job_id = ? ORDER BY skill_name ASC', [row.jobId]);
-      const matched = [...new Set(matchedSkillsRaw.map((item) => item.skill_name))].filter((skill) => requiredSkillsRaw.some((required) => required.skill_name === skill));
+      let savedSkills = [];
+      try { savedSkills = Array.isArray(matchedSkillsRaw[0]?.skills) ? matchedSkillsRaw[0].skills : JSON.parse(matchedSkillsRaw[0]?.skills || '[]'); } catch { savedSkills = []; }
+      const matched = [...new Set(savedSkills.map((item) => typeof item === 'string' ? item : item?.skill_name || item?.name).filter(Boolean))].filter((skill) => requiredSkillsRaw.some((required) => required.skill_name === skill));
       const missing = [...new Set(requiredSkillsRaw.map((item) => item.skill_name))].filter((skill) => !matched.includes(skill));
       return {
         ...row,

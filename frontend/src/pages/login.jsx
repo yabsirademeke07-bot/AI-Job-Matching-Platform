@@ -4,6 +4,8 @@ import './login.css';
 import GoogleAuthButton from '../components/GoogleAuthButton';
 import { continueApplicationFlow, getNextOnboardingStep, getPendingApplication } from '../utils/applicationFlow';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../hooks/useToast.js';
+import { scrollToFeedback } from '../utils/scrollHelper.js';
 import {
   Sparkles, ShieldCheck, Cpu, Lock,
   ArrowRight, Eye, EyeOff, Target, ArrowLeft
@@ -16,6 +18,7 @@ const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { setSession } = useAuth();
+  const { showSuccess, showError } = useToast();
 
   // Redirect or success message passed from Register step
   const successMessage = location.state?.message || '';
@@ -59,6 +62,10 @@ const Login = () => {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) nextErrors.emailOrPhone = 'Please provide a valid email address.';
     if (typeof formData.password !== 'string' || formData.password.length < 6) nextErrors.password = 'Password is required and must be at least 6 characters.';
     setErrors(nextErrors);
+    if (Object.keys(nextErrors).length) {
+      showError('Please correct the highlighted fields.');
+      scrollToFeedback('error');
+    }
     return Object.keys(nextErrors).length === 0;
   };
 
@@ -170,10 +177,13 @@ const Login = () => {
       if (!res.ok) throw new Error(data.message || 'Unable to send login OTP.');
       if (data.requires_otp || data.success) {
         openOtpStep(data.email, LOGIN_OTP_WINDOW_SECONDS, `We sent a verification code to ${(data.email || formData.emailOrPhone).trim().toLowerCase()}.`);
+        showSuccess('Verification code sent successfully.');
         return;
       }
     } catch (error) {
       setApiError(error.message || 'Unable to sign in. Please try again.');
+      showError(error.message || 'Unable to sign in. Please try again.');
+      scrollToFeedback('error');
     } finally {
       setIsLoading(false);
     }

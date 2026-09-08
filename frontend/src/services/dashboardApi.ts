@@ -88,7 +88,7 @@ export async function fetchRecentApplications(): Promise<JobApplication[]> {
 }
 
 export async function fetchMatchedJobs(): Promise<any[]> {
-  const { data } = await api.get('/seeker/matched-jobs');
+  const { data } = await api.get('/jobs/match');
   return (data.jobs || []).map((job: any) => ({
     ...job,
     company: job.company || job.company_name,

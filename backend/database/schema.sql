@@ -48,88 +48,38 @@ CREATE TABLE IF NOT EXISTS job_seeker_profiles (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL UNIQUE,
     headline VARCHAR(150),
+    job_category VARCHAR(80),
+    experience_level VARCHAR(30),
+    education_level VARCHAR(80),
     bio TEXT,
     location VARCHAR(100),
     country VARCHAR(100),
     city VARCHAR(100),
-    state_province VARCHAR(100),
-    latitude DECIMAL(10, 8),
-    longitude DECIMAL(11, 8),
-    preferred_job_type ENUM('full-time', 'part-time', 'contract', 'freelance', 'internship') DEFAULT 'full-time',
-    preferred_work_mode ENUM('on-site', 'remote', 'hybrid') DEFAULT 'hybrid',
+    education JSON,
+    graduation_year VARCHAR(10),
+    skills JSON,
+    languages JSON,
+    job_preferences JSON,
+    job_type VARCHAR(40),
+    expected_salary INT,
+    work_setup VARCHAR(30),
+    raw_cv_text LONGTEXT,
+    parsed_json_payload JSON,
+    preferred_job_type ENUM('full-time', 'part-time', 'freelance', 'contractual', 'contract', 'volunteer', 'intern (paid)', 'intern (unpaid)', 'internship') DEFAULT 'full-time',
+    preferred_work_mode ENUM('on-site', 'remote', 'hybrid', 'any') DEFAULT 'hybrid',
     salary_expectation_min INT,
     salary_expectation_max INT,
     currency VARCHAR(5) DEFAULT 'USD',
     is_available BOOLEAN DEFAULT TRUE,
     profile_completion_percentage INT DEFAULT 0,
+    profile_completed BOOLEAN DEFAULT FALSE,
     is_open_to_opportunities BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_email (email),
     INDEX idx_location (location),
     INDEX idx_availability (is_available)
-);
-
--- Job Seeker Education
-CREATE TABLE IF NOT EXISTS seeker_education (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    school_name VARCHAR(150) NOT NULL,
-    degree VARCHAR(100) NOT NULL,
-    field_of_study VARCHAR(100) NOT NULL,
-    start_date DATE,
-    end_date DATE,
-    is_current BOOLEAN DEFAULT FALSE,
-    description TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    INDEX idx_user_id (user_id)
-);
-
--- Job Seeker Experience
-CREATE TABLE IF NOT EXISTS seeker_experience (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    company_name VARCHAR(150) NOT NULL,
-    job_title VARCHAR(100) NOT NULL,
-    employment_type ENUM('full-time', 'part-time', 'contract', 'temporary', 'internship', 'freelance', 'self-employed') NOT NULL,
-    location VARCHAR(100),
-    start_date DATE,
-    end_date DATE,
-    is_current BOOLEAN DEFAULT FALSE,
-    description TEXT,
-    years_of_experience INT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    INDEX idx_user_id (user_id)
-);
-
--- Job Seeker Skills
-CREATE TABLE IF NOT EXISTS seeker_skills (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    skill_name VARCHAR(100) NOT NULL,
-    skill_category VARCHAR(50),
-    proficiency_level ENUM('beginner', 'intermediate', 'advanced', 'expert') DEFAULT 'intermediate',
-    years_of_experience INT,
-    is_endorsable BOOLEAN DEFAULT TRUE,
-    endorsement_count INT DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    UNIQUE KEY unique_user_skill (user_id, skill_name),
-    INDEX idx_skill_name (skill_name)
-);
-
--- Job Seeker Languages
-CREATE TABLE IF NOT EXISTS seeker_languages (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    language_name VARCHAR(50) NOT NULL,
-    proficiency ENUM('elementary', 'limited-working', 'professional-working', 'full-professional', 'native') NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    UNIQUE KEY unique_user_language (user_id, language_name)
 );
 
 -- ============================================================================

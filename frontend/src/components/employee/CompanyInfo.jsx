@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowRight, Building2, Sparkles, User } from 'lucide-react';
 import officeImage from '../../pages/images/images3.jpg';
+import { useToast } from '../../hooks/useToast.js';
+import { scrollToFeedback } from '../../utils/scrollHelper.js';
 
 const hiringVolumeOptions = ['1-5 Hires', '6-20 Hires', '20+ Scaled Hiring', 'Continuous Talent Pool'];
 const companySizeOptions = ['1-10', '11-50', '51-200', '201-500', '1000+'];
@@ -22,6 +24,7 @@ const normalizePhoneNumber = (number = '', operator = 'ethio-telecom') => {
 };
 
 export default function CompanyInfo({ user, onComplete }) {
+  const { showSuccess, showError } = useToast();
   const currentUser = user || JSON.parse(localStorage.getItem('user') || '{}');
   const slides = [
     {
@@ -89,8 +92,12 @@ export default function CompanyInfo({ user, onComplete }) {
       localStorage.setItem('user', JSON.stringify({ ...storedUser, companyInfo: form, isOnboardingComplete: true }));
       if (onComplete) onComplete(form);
       else window.location.assign('/employer/dashboard');
+      showSuccess('Company profile saved successfully.');
+      scrollToFeedback('top');
     } catch (saveError) {
       setError(saveError.message || 'Unable to save company profile.');
+      showError(saveError.message || 'Unable to save company profile.');
+      scrollToFeedback('error');
     } finally {
       setIsSaving(false);
     }

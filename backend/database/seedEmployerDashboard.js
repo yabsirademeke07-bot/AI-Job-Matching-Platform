@@ -80,24 +80,11 @@ async function seed() {
       }
 
       await connection.query(
-        `INSERT INTO job_seeker_profiles (user_id, headline, location, preferred_work_mode, profile_completion_percentage, is_available)
-         VALUES (?, ?, ?, 'hybrid', 96, TRUE)
-         ON DUPLICATE KEY UPDATE headline = VALUES(headline)`,
-        [userId, candidate.role, 'Addis Ababa']
+        `INSERT INTO job_seeker_profiles (user_id, headline, location, preferred_work_mode, skills, profile_completion_percentage, is_available)
+         VALUES (?, ?, ?, 'hybrid', ?, 96, TRUE)
+         ON DUPLICATE KEY UPDATE headline = VALUES(headline), skills = VALUES(skills)`,
+        [userId, candidate.role, 'Addis Ababa', JSON.stringify(candidate.skills.map((skill) => ({ skill_name: skill, proficiency_level: 'advanced' })))]
       );
-
-      await connection.query(
-        `INSERT INTO seeker_skills (user_id, skill_name, proficiency_level)
-         VALUES (?, ?, 'advanced') ON DUPLICATE KEY UPDATE skill_name = skill_name`,
-        [userId, candidate.skills[0]]
-      );
-
-      for (const skill of candidate.skills) {
-        await connection.query(
-          `INSERT INTO seeker_skills (user_id, skill_name, proficiency_level) VALUES (?, ?, 'advanced') ON DUPLICATE KEY UPDATE proficiency_level = VALUES(proficiency_level)`,
-          [userId, skill]
-        );
-      }
 
       const jobIds = await connection.query('SELECT id FROM jobs WHERE employer_id = ?', [employerId]);
       if (jobIds[0].length) {

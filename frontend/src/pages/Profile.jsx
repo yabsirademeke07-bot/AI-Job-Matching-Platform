@@ -11,6 +11,7 @@ const Profile = ({ userData = {}, cvFile = null, onContinue, onNavigateNext }) =
   const navigate = useNavigate();
   const location = useLocation();
   const API_URL = import.meta.env.VITE_BACKEND_URL || '/api';
+  const excludedSkills = new Set(['javascript', 'python', 'java', 'sql', 'networking', 'communication']);
 
   // Safe fallback to load stored user from localStorage
   const getInitialUser = () => {
@@ -24,7 +25,7 @@ const Profile = ({ userData = {}, cvFile = null, onContinue, onNavigateNext }) =
   const pendingCv = location.state?.updatedProfile || (() => {
     try { return JSON.parse(localStorage.getItem('pending_cv_data') || 'null'); } catch { return null; }
   })();
-  const pendingSkills = Array.isArray(pendingCv?.skills) ? pendingCv.skills.map((skill) => typeof skill === 'string' ? skill : skill.skill_name).filter(Boolean) : [];
+  const pendingSkills = Array.isArray(pendingCv?.skills) ? pendingCv.skills.map((skill) => typeof skill === 'string' ? skill : skill.skill_name).filter(Boolean).filter((skill) => !excludedSkills.has(skill.trim().toLowerCase())) : [];
   const pendingEducation = Array.isArray(pendingCv?.education) ? pendingCv.education.map((item, index) => ({
     id: item.id || `cv-education-${index}`,
     university: item.school_name || item.institution || '',
@@ -286,7 +287,7 @@ const Profile = ({ userData = {}, cvFile = null, onContinue, onNavigateNext }) =
           </div>
 
           <div>
-            <label className="block text-slate-600 mb-1">Date of Birth (Optional)</label>
+            <label className="block text-slate-600 mb-1">Date of Birth <span className="italic">(Optional)</span></label>
             <input 
               type="date" 
               value={profileData.dob} 
@@ -296,7 +297,7 @@ const Profile = ({ userData = {}, cvFile = null, onContinue, onNavigateNext }) =
           </div>
 
           <div>
-            <label className="block text-slate-600 mb-1">Gender (Optional)</label>
+            <label className="block text-slate-600 mb-1">Gender <span className="italic">(Optional)</span></label>
             <select 
               value={profileData.gender} 
               onChange={(e) => setProfileData({ ...profileData, gender: e.target.value })}
@@ -465,11 +466,8 @@ const Profile = ({ userData = {}, cvFile = null, onContinue, onNavigateNext }) =
 
         <div className="flex flex-wrap gap-2 py-1">
           {skills.map((skill) => (
-            <span key={skill} className="px-3 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-semibold flex items-center gap-1.5 border border-blue-200">
+            <span key={skill} className="px-3 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-semibold flex items-center border border-blue-200">
               {skill}
-              <button type="button" onClick={() => handleRemoveSkill(skill)} className="hover:text-red-600 cursor-pointer">
-                <X className="w-3.5 h-3.5" />
-              </button>
             </span>
           ))}
         </div>
@@ -500,11 +498,8 @@ const Profile = ({ userData = {}, cvFile = null, onContinue, onNavigateNext }) =
 
         <div className="flex flex-wrap gap-2 py-1">
           {languages.map((lang) => (
-            <span key={lang} className="px-3 py-1 rounded-full bg-purple-100 text-purple-700 text-xs font-semibold flex items-center gap-1.5 border border-purple-200">
+            <span key={lang} className="px-3 py-1 rounded-full bg-purple-100 text-purple-700 text-xs font-semibold flex items-center border border-purple-200">
               {lang}
-              <button type="button" onClick={() => handleRemoveLanguage(lang)} className="hover:text-red-600 cursor-pointer">
-                <X className="w-3.5 h-3.5" />
-              </button>
             </span>
           ))}
         </div>
