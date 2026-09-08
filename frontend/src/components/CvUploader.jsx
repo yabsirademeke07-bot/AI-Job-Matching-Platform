@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { UploadCloud, Sparkles, Loader2, ArrowRight, FileText, ShieldCheck, CheckCircle2, X } from 'lucide-react';
 import { continueApplicationFlow, hasCompletedCv } from '../utils/applicationFlow';
+import { notifyProfileUpdated } from '../utils/profileUpdateEvent';
 
 const CvUploader = ({
   cvFile: externalCvFile,
@@ -56,6 +57,7 @@ const CvUploader = ({
     };
 
     localStorage.setItem('seekerResume', JSON.stringify(nextResume));
+    notifyProfileUpdated();
     try {
       const userData = JSON.parse(localStorage.getItem('user') || '{}');
       localStorage.setItem('user', JSON.stringify({ ...userData, cvFileName: file.name }));
@@ -69,9 +71,9 @@ const CvUploader = ({
   const processFile = (file) => {
     if (!file) return;
 
-    const validFile = /\.(pdf|doc|docx)$/i.test(file.name);
+    const validFile = /\.(pdf|docx)$/i.test(file.name);
     if (!validFile) {
-      setContinueError('Please upload a PDF, DOC, or DOCX file.');
+      setContinueError('Please upload a PDF or DOCX file.');
       return;
     }
     if (file.size > 10 * 1024 * 1024) {
@@ -108,13 +110,17 @@ const CvUploader = ({
     const uploadData = new FormData();
     uploadData.append('cv', file);
     setIsParsing(true);
+    let analyzedData;
     try {
-      const response = await fetch(`${API_URL.replace(/\/$/, '')}/seeker/upload-cv`, {
+      const response = await fetch(`${API_URL.replace(/\/$/, '')}/cv/upload-and-analyze`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: uploadData,
       });
-      if (!response.ok) throw new Error('Unable to save CV');
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.message || 'Unable to analyze CV');
+      analyzedData = result.data;
+      if (analyzedData?.id) localStorage.setItem('lastAnalyzedCvId', String(analyzedData.id));
     } catch {
       setContinueError('Unable to save your CV. Please try again.');
       setIsParsing(false);
@@ -138,7 +144,7 @@ const CvUploader = ({
       return;
     }
 
-    navigate('/profile', { replace: true });
+    navigate('/cv-analysis', { state: { analysis: analyzedData } });
   };
 
   const handleContinue = async (e) => {
@@ -229,7 +235,7 @@ const CvUploader = ({
             )}
 
             <div onDragOver={(e) => { e.preventDefault(); setIsDragActive(true); }} onDragLeave={() => setIsDragActive(false)} onDrop={handleDrop} className={`relative min-h-[260px] rounded-3xl border-2 border-dashed p-8 text-center transition-all sm:p-12 ${isDragActive ? 'bg-[var(--brand-soft-hover)] ring-4 ring-[#d0e5f5]' : 'bg-[var(--brand-soft)]'}`} style={{ borderColor: 'var(--brand-primary)' }}>
-              <input type="file" accept=".pdf,.doc,.docx" onChange={handleFileChange} className="absolute inset-0 z-10 h-full w-full cursor-pointer !opacity-0" aria-label="Upload CV" />
+              <input type="file" accept=".pdf,.docx" onChange={handleFileChange} className="absolute inset-0 z-10 h-full w-full cursor-pointer !opacity-0" aria-label="Upload CV" />
               <div className="pointer-events-none mx-auto flex max-w-lg flex-col items-center">
                 <div className="mb-5 flex h-20 w-20 items-center justify-center rounded-2xl text-white shadow-lg ring-4 ring-white/70" style={{ backgroundColor: 'var(--brand-primary)' }}>
                   <UploadCloud className="h-10 w-10" strokeWidth={2.5} aria-hidden="true" />

@@ -1639,12 +1639,8 @@ export default function ExploreJobsPage() {
     sortBy,
   ]);
 
-  const toggleJobType = (type) => {
-    if (selectedJobTypes.includes(type)) {
-      setSelectedJobTypes(selectedJobTypes.filter((t) => t !== type));
-    } else {
-      setSelectedJobTypes([...selectedJobTypes, type]);
-    }
+  const selectJobType = (type) => {
+    setSelectedJobTypes(type ? [type] : []);
   };
 
   const showToast = (msg) => {
@@ -2030,32 +2026,21 @@ export default function ExploreJobsPage() {
                 </div>
 
                 {isJobTypeOpen && (
-                  <div className="mt-3 space-y-2.5">
-                    {JOB_TYPES.map((type) => {
-                      const isChecked = selectedJobTypes.includes(type);
-                      return (
-                        <label
-                          key={type}
-                          className="flex items-center gap-3.5 p-2 rounded-xl text-base font-semibold text-slate-900 cursor-pointer hover:bg-slate-50"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={() => toggleJobType(type)}
-                            className="h-5 w-5 rounded border-slate-300 text-[#56A2D8] accent-[#56A2D8] cursor-pointer"
-                          />
-                          <span
-                            className={
-                              isChecked
-                                ? "text-[#2B73A4] font-bold"
-                                : "text-slate-800"
-                            }
-                          >
-                            {type}
-                          </span>
-                        </label>
-                      );
-                    })}
+                  <div className="mt-3">
+                    <select
+                      value={selectedJobTypes[0] || ""}
+                      onChange={(e) => selectJobType(e.target.value)}
+                      className={`w-full rounded-xl border border-slate-300 bg-slate-50/50 px-4 py-3 text-base font-semibold outline-hidden shadow-2xs transition hover:border-[#56A2D8] focus:border-[#56A2D8] focus:bg-white cursor-pointer ${selectedJobTypes.length === 0 ? "text-slate-400" : "text-slate-900"}`}
+                    >
+                      <option value="" disabled hidden>
+                        Select job type
+                      </option>
+                      {JOB_TYPES.map((type) => (
+                        <option key={type} value={type}>
+                          {type}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 )}
               </div>

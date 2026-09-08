@@ -12,9 +12,8 @@ CREATE TABLE IF NOT EXISTS otps (
     id INT AUTO_INCREMENT PRIMARY KEY,
     email VARCHAR(100) NOT NULL,
     otp_code VARCHAR(10) NOT NULL,
-    purpose ENUM('registration', 'password-reset', 'email-verification') DEFAULT 'registration',
+    purpose ENUM('registration', 'password-reset', 'email-verification', 'login') DEFAULT 'registration',
     is_used BOOLEAN DEFAULT FALSE,
-    attempts TINYINT UNSIGNED NOT NULL DEFAULT 0,
     expires_at TIMESTAMP NULL DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_email_expires (email, expires_at)
@@ -28,12 +27,14 @@ CREATE TABLE IF NOT EXISTS users (
     password VARCHAR(255) NULL,
     role ENUM('super_admin', 'admin', 'employer', 'job_seeker') NOT NULL DEFAULT 'job_seeker',
     is_verified BOOLEAN DEFAULT FALSE,
-    auth_status ENUM('pending_verification', 'active') NOT NULL DEFAULT 'pending_verification',
     is_active BOOLEAN DEFAULT TRUE,
+    onboarding_completed BOOLEAN DEFAULT FALSE,
     profile_picture_url VARCHAR(255),
     avatar_url VARCHAR(255) NULL,
     google_id VARCHAR(255) NULL,
     auth_provider VARCHAR(50) NOT NULL DEFAULT 'email',
+    last_active_page VARCHAR(100) DEFAULT '/dashboard',
+    last_state_payload JSON NULL,
     bio TEXT,
     preferred_language VARCHAR(20) DEFAULT 'en',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -47,88 +48,38 @@ CREATE TABLE IF NOT EXISTS job_seeker_profiles (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL UNIQUE,
     headline VARCHAR(150),
+    job_category VARCHAR(80),
+    experience_level VARCHAR(30),
+    education_level VARCHAR(80),
     bio TEXT,
     location VARCHAR(100),
     country VARCHAR(100),
     city VARCHAR(100),
-    state_province VARCHAR(100),
-    latitude DECIMAL(10, 8),
-    longitude DECIMAL(11, 8),
-    preferred_job_type ENUM('full-time', 'part-time', 'contract', 'freelance', 'internship') DEFAULT 'full-time',
-    preferred_work_mode ENUM('on-site', 'remote', 'hybrid') DEFAULT 'hybrid',
+    education JSON,
+    graduation_year VARCHAR(10),
+    skills JSON,
+    languages JSON,
+    job_preferences JSON,
+    job_type VARCHAR(40),
+    expected_salary INT,
+    work_setup VARCHAR(30),
+    raw_cv_text LONGTEXT,
+    parsed_json_payload JSON,
+    preferred_job_type ENUM('full-time', 'part-time', 'freelance', 'contractual', 'contract', 'volunteer', 'intern (paid)', 'intern (unpaid)', 'internship') DEFAULT 'full-time',
+    preferred_work_mode ENUM('on-site', 'remote', 'hybrid', 'any') DEFAULT 'hybrid',
     salary_expectation_min INT,
     salary_expectation_max INT,
     currency VARCHAR(5) DEFAULT 'USD',
     is_available BOOLEAN DEFAULT TRUE,
     profile_completion_percentage INT DEFAULT 0,
+    profile_completed BOOLEAN DEFAULT FALSE,
     is_open_to_opportunities BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_email (email),
     INDEX idx_location (location),
     INDEX idx_availability (is_available)
-);
-
--- Job Seeker Education
-CREATE TABLE IF NOT EXISTS seeker_education (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    school_name VARCHAR(150) NOT NULL,
-    degree VARCHAR(100) NOT NULL,
-    field_of_study VARCHAR(100) NOT NULL,
-    start_date DATE,
-    end_date DATE,
-    is_current BOOLEAN DEFAULT FALSE,
-    description TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    INDEX idx_user_id (user_id)
-);
-
--- Job Seeker Experience
-CREATE TABLE IF NOT EXISTS seeker_experience (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    company_name VARCHAR(150) NOT NULL,
-    job_title VARCHAR(100) NOT NULL,
-    employment_type ENUM('full-time', 'part-time', 'contract', 'temporary', 'internship', 'freelance', 'self-employed') NOT NULL,
-    location VARCHAR(100),
-    start_date DATE NOT NULL,
-    end_date DATE,
-    is_current BOOLEAN DEFAULT FALSE,
-    description TEXT,
-    years_of_experience INT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    INDEX idx_user_id (user_id)
-);
-
--- Job Seeker Skills
-CREATE TABLE IF NOT EXISTS seeker_skills (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    skill_name VARCHAR(100) NOT NULL,
-    skill_category VARCHAR(50),
-    proficiency_level ENUM('beginner', 'intermediate', 'advanced', 'expert') DEFAULT 'intermediate',
-    years_of_experience INT,
-    is_endorsable BOOLEAN DEFAULT TRUE,
-    endorsement_count INT DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    UNIQUE KEY unique_user_skill (user_id, skill_name),
-    INDEX idx_skill_name (skill_name)
-);
-
--- Job Seeker Languages
-CREATE TABLE IF NOT EXISTS seeker_languages (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    language_name VARCHAR(50) NOT NULL,
-    proficiency ENUM('elementary', 'limited-working', 'professional-working', 'full-professional', 'native') NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    UNIQUE KEY unique_user_language (user_id, language_name)
 );
 
 -- ============================================================================
@@ -227,11 +178,8 @@ CREATE TABLE IF NOT EXISTS employers (
     industry VARCHAR(100),
     companySize VARCHAR(50) DEFAULT '11-50',
     location VARCHAR(150),
-    phoneNumber VARCHAR(20),
-    phoneOperator VARCHAR(30),
     verificationStatus ENUM('pending', 'verified', 'rejected') DEFAULT 'pending',
     createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
     INDEX idx_employer_user (userId),
     INDEX idx_employer_verification (verificationStatus)
@@ -383,10 +331,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     years_of_experience_max INT DEFAULT 20,
     application_deadline DATE,
     is_urgent BOOLEAN DEFAULT FALSE,
-    status ENUM('draft', 'pending_approval', 'published', 'rejected', 'closed', 'filled', 'archived') DEFAULT 'draft',
-    rejection_reason TEXT,
-    approved_by INT NULL,
-    approved_at TIMESTAMP NULL DEFAULT NULL,
+    status ENUM('draft', 'active', 'published', 'closed', 'filled', 'archived') DEFAULT 'draft',
     is_featured BOOLEAN DEFAULT FALSE,
     featured_until DATETIME,
     view_count INT DEFAULT 0,
@@ -436,6 +381,7 @@ CREATE TABLE IF NOT EXISTS applications (
     job_id INT NOT NULL,
     job_seeker_id INT NOT NULL,
     cv_id INT,
+    resume_snapshot JSON NULL,
     status ENUM('applied', 'under-review', 'shortlisted', 'rejected', 'interview-scheduled', 'offered', 'hired', 'withdrawn') DEFAULT 'applied',
     application_status_flow JSON,
     ai_match_score DECIMAL(5, 2),
@@ -460,6 +406,7 @@ CREATE TABLE IF NOT EXISTS applications (
     INDEX idx_seeker_id (job_seeker_id),
     INDEX idx_status (status),
     INDEX idx_ai_score (ai_match_score)
+    ,UNIQUE KEY unique_application_candidate_job (job_id, job_seeker_id)
 );
 
 -- Skill Gaps
