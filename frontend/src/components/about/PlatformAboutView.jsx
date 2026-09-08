@@ -1,4 +1,5 @@
-import { ArrowRight, BrainCircuit, BriefcaseBusiness, CheckCircle2, FileSearch, Laptop, MapPin, MessageSquareText, ShieldCheck, Sparkles, UserRound, Users } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowRight, BrainCircuit, BriefcaseBusiness, Check, CheckCircle2, ChevronLeft, ChevronRight, Copy, FileSearch, MessageSquareText, ShieldCheck, Sparkles, Users } from "lucide-react";
 
 const features = [
   [BrainCircuit, "AI Job Matching", "Compare skills, experience, education, title, and preferences to produce a clear match score."],
@@ -15,38 +16,56 @@ const roles = [
   [ShieldCheck, "Administrators", "Manage users and jobs while monitoring the platform and supporting a trusted marketplace."],
 ];
 
-const heroImageUrl = "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=1200&q=80";
+const showcaseSlides = [
+  { title: "Clean Tech Studio", label: "STEP 01", image: "https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=1400&q=90", prompt: "An inspiring young female software engineer working comfortably at an elegant wooden desk in a bright sunlit minimalist tech studio, ultra-clean aesthetic, natural daylight streaming through large architectural windows, sleek laptop, potted plants, high detail, photorealistic professional photography. (Aspect Ratio: 16:9)" },
+  { title: "Team Collaboration", label: "STEP 02", image: "https://images.unsplash.com/photo-1521737711867-e3b97375f902?auto=format&fit=crop&w=1400&q=90", prompt: "A creative diverse group of young tech professionals collaborating in a warm modern loft office, engaging in an authentic discussion around a wooden table with laptops, soft natural lighting, stylish Scandinavian interior design, candid, photorealistic. (Aspect Ratio: 16:9)" },
+  { title: "Neural Job Matching", label: "STEP 03", image: "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1400&q=90", prompt: "Sophisticated and clean visual representation of digital talent and career matching, elegant luminous cyan and violet geometric data paths intersecting with human touchpoints in a minimalist architectural space, luxury tech editorial style, ultra-sharp detail. (Aspect Ratio: 16:9)" },
+  { title: "Developer Environment", label: "STEP 04", image: "https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1400&q=90", prompt: "A modern software developer reviewing code on dual ultra-wide displays in an aesthetic loft studio with lush green plants, warm ambient lighting, clean aesthetic, highly detailed, photorealistic editorial photography. (Aspect Ratio: 16:9)" },
+  { title: "Direct Interview", label: "STEP 05", image: "https://images.unsplash.com/photo-1556761175-b413da4baf72?auto=format&fit=crop&w=1400&q=90", prompt: "A professional job interview in an elegant sunlit glass office with indoor plants, a smiling friendly hiring manager and an enthusiastic candidate conversing warmly, natural daylight, authentic interaction, photorealistic, premium corporate aesthetic. (Aspect Ratio: 16:9)" },
+  { title: "Placement & Growth", label: "STEP 06", image: "https://images.unsplash.com/photo-1551836022-d5d88e9218df?auto=format&fit=crop&w=1400&q=90", prompt: "A happy young tech developer smiling joyfully in a stylish modern open-space office with colleagues celebrating in the soft background, holding a sleek tablet, warm golden hour sunlight through floor-to-ceiling windows, photorealistic, authentic candid emotion. (Aspect Ratio: 16:9)" },
+];
+
+function ShowcaseCarousel() {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [copied, setCopied] = useState(false);
+  const activeSlide = showcaseSlides[activeIndex];
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setActiveIndex((index) => (index + 1) % showcaseSlides.length), 4500);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const move = (direction) => setActiveIndex((index) => (index + direction + showcaseSlides.length) % showcaseSlides.length);
+  const copyPrompt = async () => {
+    await navigator.clipboard?.writeText(activeSlide.prompt);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1600);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="relative mx-auto aspect-[16/10] w-full max-w-[540px] overflow-hidden rounded-3xl border border-blue-100 bg-slate-950 shadow-2xl shadow-blue-100/60">
+        {showcaseSlides.map((slide, index) => <img key={slide.title} src={slide.image} alt={slide.title} className={`absolute inset-0 h-full w-full object-cover transition-all duration-1000 ${index === activeIndex ? "scale-100 opacity-100" : "scale-105 opacity-0"}`} />)}
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/75 via-slate-950/5 to-transparent" />
+        <div className="absolute inset-x-0 bottom-0 p-5 text-white sm:p-7"><p className="text-[10px] font-black tracking-[0.2em] text-blue-200">{activeSlide.label}</p><h2 className="mt-2 text-2xl font-black sm:text-3xl">{activeSlide.title}</h2></div>
+        <button type="button" onClick={() => move(-1)} aria-label="Previous image" className="absolute left-4 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-slate-900 shadow-lg transition hover:bg-white"><ChevronLeft className="h-5 w-5" /></button>
+        <button type="button" onClick={() => move(1)} aria-label="Next image" className="absolute right-4 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/85 text-slate-900 shadow-lg transition hover:bg-white"><ChevronRight className="h-5 w-5" /></button>
+      </div>
+      <div className="flex items-start justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3"><div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-[0.16em] text-blue-600">Current image prompt</p><p className="mt-1 text-xs leading-5 text-slate-600">{activeSlide.prompt}</p></div><button type="button" onClick={copyPrompt} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-white px-2.5 py-1.5 text-xs font-bold text-blue-700 shadow-sm">{copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}{copied ? "Copied" : "Copy Prompt"}</button></div>
+      <div className="flex items-center gap-3">
+        <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto pb-1">{showcaseSlides.map((slide, index) => <button type="button" key={`${slide.title}-thumb`} onClick={() => setActiveIndex(index)} aria-label={`Show ${slide.title}`} className={`h-14 w-20 shrink-0 overflow-hidden rounded-xl border-2 transition sm:h-16 sm:w-24 ${index === activeIndex ? "border-blue-600 shadow-md" : "border-transparent opacity-65 hover:opacity-100"}`}><img src={slide.image} alt={`${slide.title} thumbnail`} className="h-full w-full object-cover" /></button>)}</div>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-blue-100"><div className="h-full rounded-full bg-blue-600 transition-all duration-300" style={{ width: `${((activeIndex + 1) / showcaseSlides.length) * 100}%` }} /></div>
+    </div>
+  );
+}
 
 export default function PlatformAboutView({ onNavigate }) {
   return (
     <section className="space-y-6">
       <div className="overflow-hidden rounded-3xl border border-blue-100 bg-white p-5 text-slate-900 shadow-xl shadow-blue-100/50 sm:p-8 lg:p-10">
-        <div className="grid items-center gap-10 lg:grid-cols-[1fr_1.05fr] lg:gap-14">
-          <div className="relative min-h-[360px] overflow-hidden rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 via-white to-cyan-50 p-5">
-            <img src={heroImageUrl} alt="AI hiring platform team" className="absolute inset-0 h-full w-full object-cover opacity-85" />
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(59,130,246,0.18),_rgba(255,255,255,0.06)_35%,_rgba(2,6,23,0.4)_100%)]" />
-            <div className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-blue-100/70" />
-            <div className="absolute -bottom-16 -left-10 h-36 w-36 rounded-full bg-cyan-100/60" />
-            <div className="relative flex min-h-[320px] items-center justify-center">
-              <div className="absolute left-2 top-2 w-52 rounded-[22px] border border-slate-100 bg-white/90 p-4 shadow-[0_12px_28px_rgba(15,23,42,0.12)] backdrop-blur-sm sm:left-4">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600 shadow-inner"><FileSearch className="h-4 w-4" /></div>
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Step 01</p>
-                    <p className="text-[17px] font-black text-slate-800">CV / Profile</p>
-                  </div>
-                </div>
-                <div className="mt-4 flex gap-2">
-                  <span className="rounded-md bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-700">React</span>
-                  <span className="rounded-md bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-700">Node.js</span>
-                </div>
-              </div>
-              <div className="absolute right-2 top-16 w-44 rounded-2xl border border-slate-100 bg-white/90 p-4 shadow-lg backdrop-blur-sm sm:right-4"><div className="flex items-center gap-2"><div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-50 text-violet-600"><BrainCircuit className="h-4 w-4" /></div><div><p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Step 02</p><p className="text-xs font-black text-slate-800">AI Analysis</p></div></div><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full w-4/5 rounded-full bg-violet-500" /></div></div>
-              <div className="relative z-10 mt-8 flex h-44 w-40 flex-col items-center justify-end rounded-2xl border border-slate-100 bg-white/90 pb-3 shadow-xl backdrop-blur-sm"><div className="relative h-24 w-24 overflow-hidden rounded-full border-4 border-white bg-blue-50 shadow-md"><img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=280&q=90" alt="Job seeker profile" className="h-full w-full object-cover" onError={(event) => { event.currentTarget.style.display = "none"; }} /></div><div className="mt-[-2px] flex h-9 w-20 items-center justify-center rounded-t-lg border-2 border-blue-500 bg-blue-100 text-blue-600 shadow-sm"><Laptop className="h-6 w-6" aria-hidden="true" /></div><span className="mt-1 text-[10px] font-black uppercase tracking-wider text-slate-500">Job seeker</span></div>
-              <div className="absolute bottom-2 left-2 w-48 rounded-2xl border border-slate-100 bg-white/90 p-4 shadow-lg backdrop-blur-sm sm:left-4"><div className="flex items-center justify-between"><div><p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Step 03</p><p className="text-xs font-black text-slate-800">Job Matching</p></div><span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700">95%</span></div><p className="mt-2 flex items-center gap-1 text-[10px] text-slate-500"><MapPin className="h-3 w-3" /> Best fit found</p></div>
-              <div className="absolute bottom-10 right-2 w-44 rounded-2xl border border-slate-100 bg-white/90 p-4 shadow-lg backdrop-blur-sm sm:right-4"><div className="flex items-center gap-2"><div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 text-amber-600"><BriefcaseBusiness className="h-4 w-4" /></div><div><p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Step 04</p><p className="text-xs font-black text-slate-800">Recommended Jobs</p></div></div></div>
-            </div>
-          </div>
+        <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-14">
+          <ShowcaseCarousel />
           <div className="max-w-2xl">
             <div className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.16em] text-blue-700"><Sparkles className="h-3.5 w-3.5" /> About the platform</div>
             <h1 className="mt-5 text-3xl font-black tracking-tight text-slate-950 sm:text-5xl">Smart Job Matching Powered by AI</h1>
@@ -60,6 +79,11 @@ export default function PlatformAboutView({ onNavigate }) {
         <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"><p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-600">Our mission</p><h2 className="mt-2 text-2xl font-black text-slate-900">Make job searching smarter, faster, and more personal.</h2><p className="mt-3 text-sm leading-7 text-slate-600">We help people find meaningful work and help employers discover qualified talent through transparent, data-informed matching.</p></article>
         <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"><p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-600">Our vision</p><h2 className="mt-2 text-2xl font-black text-slate-900">Better matches for every career journey.</h2><p className="mt-3 text-sm leading-7 text-slate-600">A fairer, more efficient job marketplace where every recommendation explains why a role fits and what to improve next.</p></article>
       </div>
+
+      <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+        <div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-600">Prepared image prompts</p><h2 className="mt-1 text-2xl font-black text-slate-900">Six visual directions for the platform</h2></div><p className="text-xs text-slate-500">Copy any prompt for image generation.</p></div>
+        <div className="mt-6 overflow-x-auto"><table className="w-full min-w-[680px] text-left"><thead><tr className="border-b border-slate-200 text-xs uppercase tracking-wider text-slate-400"><th className="px-3 py-3">Step</th><th className="px-3 py-3">Direction</th><th className="px-3 py-3">Prompt</th><th className="px-3 py-3">Action</th></tr></thead><tbody>{showcaseSlides.map((slide, index) => <tr key={`prompt-${slide.title}`} className="border-b border-slate-100 align-top"><td className="px-3 py-4 text-xs font-black text-blue-600">0{index + 1}</td><td className="px-3 py-4 text-sm font-bold text-slate-800">{slide.title}</td><td className="max-w-xl px-3 py-4 text-xs leading-5 text-slate-500">{slide.prompt}</td><td className="px-3 py-4"><button type="button" onClick={async () => { await navigator.clipboard?.writeText(slide.prompt); }} className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100"><Copy className="h-3.5 w-3.5" /> Copy</button></td></tr>)}</tbody></table></div>
+      </article>
 
       <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
         <div className="flex items-start gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700"><BrainCircuit className="h-5 w-5" /></div><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-600">How it works</p><h2 className="mt-1 text-2xl font-black text-slate-900">From profile to opportunity</h2></div></div>

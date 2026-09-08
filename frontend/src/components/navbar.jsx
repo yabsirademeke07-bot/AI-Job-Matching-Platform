@@ -98,7 +98,7 @@ export default function Navbar() {
             className={`relative py-1 text-base xl:text-lg font-bold tracking-wide transition-colors duration-200 group ${isActive('/about') ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'
               }`}
           >
-            About
+            About Platform (6 Images)
             <span className={`absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 rounded-full transition-transform duration-300 origin-left ${isActive('/about') ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
               }`} />
           </Link>
@@ -208,7 +208,7 @@ export default function Navbar() {
               className={`px-4 py-3 rounded-xl font-bold text-base transition-colors ${isActive('/about') ? 'bg-blue-50 text-blue-600' : 'text-slate-700 hover:bg-slate-50'
                 }`}
             >
-              About
+              About Platform (6 Images)
             </Link>
 
             <Link

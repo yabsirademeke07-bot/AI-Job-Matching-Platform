@@ -119,6 +119,22 @@ export default function HeroSection({ searchTitle = '', setSearchTitle, handleSe
               alt="AI Resume Parser Match Preview" 
               className="w-full h-auto rounded-3xl shadow-2xl border border-slate-200/90 object-cover bg-white"
             />
+            <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => navigate('/find-jobs')}
+                className="flex-1 rounded-2xl border border-blue-200 bg-blue-600 px-5 py-3.5 text-sm font-extrabold text-white shadow-md shadow-blue-500/20 transition hover:bg-blue-700"
+              >
+                For Job Seekers
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/employer/post-job')}
+                className="flex-1 rounded-2xl border border-slate-300 bg-white px-5 py-3.5 text-sm font-extrabold text-slate-800 shadow-sm transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700"
+              >
+                For Employers
+              </button>
+            </div>
           </div>
         </div>
 
