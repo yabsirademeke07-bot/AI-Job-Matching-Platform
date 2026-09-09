@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowRight, Building2, CheckCircle2, Loader2, User } from 'lucide-react';
 import officeImage from '../../pages/images/images3.jpg';
+import { useToast } from '../../hooks/useToast.js';
+import { scrollToFeedback } from '../../utils/scrollHelper.js';
 
 const ambientZoomStyles = `
   @keyframes ambientSlowZoom {
@@ -27,6 +29,7 @@ const normalizePhoneNumber = (number = '') => {
 };
 
 export default function CompanyInfo({ user, onComplete }) {
+  const { showSuccess, showError } = useToast();
   const currentUser = user || JSON.parse(localStorage.getItem('user') || '{}');
   const slides = [
     {
@@ -148,8 +151,12 @@ export default function CompanyInfo({ user, onComplete }) {
       await new Promise((resolve) => setTimeout(resolve, 700));
       if (onComplete) onComplete(form);
       else window.location.assign('/employer/dashboard');
+      showSuccess('Company profile saved successfully.');
+      scrollToFeedback('top');
     } catch (saveError) {
       setError(saveError.message || 'Unable to save company profile.');
+      showError(saveError.message || 'Unable to save company profile.');
+      scrollToFeedback('error');
     } finally {
       setIsSaving(false);
     }

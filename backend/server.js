@@ -1,47 +1,19 @@
-const path = require('path');
-require('dotenv').config({ path: path.resolve(__dirname, '.env') });
+const express = require("express");
+const cors = require("cors");
+require("dotenv").config();
 
-const express = require('express');
-const cors = require('cors');
-const session = require('express-session');
-const passport = require('./config/passport');
-const fs = require('fs');
-const multer = require('multer');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const nodemailer = require('nodemailer');
-const db = require('./connection');
-const { validateSignUp, validateLogin } = require('./middleware/validateAuth');
-const { issueOtp } = require('./services/otpService');
-const { syncGoogleUser } = require('./config/googleAuth');
+const db = require("./config/db");
+const authRoutes = require("./routes/auth");
+const jobRoutes = require("./routes/jobRoutes");
+const matchRoutes = require("./routes/matchRoutes");
+const jobSeekerRoutes = require("./routes/jobSeekerRoutes");
+const cvRoutes = require("./routes/cvRoutes");
+const seekerMatchingRoutes = require("./routes/seekerMatchingRoutes");
+const profileRoutes = require("./routes/profileRoutes");
 
 const app = express();
 
-// ==========================================
-// ⚙️ MIDDLEWARES & CORS CONFIGURATION
-// ==========================================
-
-const allowedOrigins = [
-  'http://localhost:5173',
-  'http://127.0.0.1:5173',
-  'http://localhost:3000',
-  'http://localhost:5174',
-  process.env.CLIENT_URL
-].filter(Boolean);
-
-app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(null, true);
-    }
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-}));
-
+app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -462,19 +434,20 @@ function calculateRealMatch(seekerSkills = '', requiredSkills = '') {
     ? requiredSkills 
     : (requiredSkills || '').split(',').map(s => s.trim());
 
-  let seekerArray = Array.isArray(seekerSkills) 
-    ? seekerSkills 
-    : (seekerSkills || '').split(',').map(s => s.trim());
+app.use("/api", authRoutes);
+app.use("/api/auth", authRoutes);
+app.use("/api/jobs", jobRoutes);
+app.use("/api/matches", matchRoutes);
+app.use("/api/cv", cvRoutes);
+app.use("/api", seekerMatchingRoutes);
+app.use("/api/job-seekers", jobSeekerRoutes);
+app.use("/api/seeker", jobSeekerRoutes);
+app.use("/api/profile", profileRoutes);
+app.use("/uploads", express.static("uploads"));
 
-  if (!reqArray.length || reqArray[0] === '') return 50;
-
-  const seekerSet = new Set(seekerArray.map(s => s.toLowerCase()));
-  
-  let matchCount = 0;
-  reqArray.forEach(skill => {
-    if (seekerSet.has(skill.toLowerCase())) {
-      matchCount++;
-    }
+app.get("/", (req, res) => {
+  res.json({
+    message: "AI-Powered Job Matching System Backend is running"
   });
 
   const score = Math.round((matchCount / reqArray.length) * 100);
@@ -925,118 +898,43 @@ app.get('/api/jobs', async (req, res) => {
     console.error('Get Jobs Error:', error);
     res.status(500).json({ message: 'Server error / የሰርቨር ስህተት አጋጥሟል' });
   }
-});
 
-// ==========================================
-// 7. APPLY FOR A JOB API
-// ==========================================
-app.post('/api/applications', authenticateUser, upload.single('resume'), async (req, res) => {
-  const { job_id } = req.body;
-  const job_seeker_id = req.user.id;
-
-  if (!job_id) {
-    return res.status(400).json({ message: 'Missing job ID / የሥራው መለያ አልተገኘም' });
+  const [jobTypeColumns] = await db.query(
+    `SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'job_seeker_profiles' AND COLUMN_NAME = 'preferred_job_type'`
+  );
+  if (jobTypeColumns[0] && !jobTypeColumns[0].COLUMN_TYPE.includes("'contractual'")) {
+    await db.query("ALTER TABLE job_seeker_profiles MODIFY COLUMN preferred_job_type ENUM('full-time', 'part-time', 'freelance', 'contractual', 'contract', 'volunteer', 'intern (paid)', 'intern (unpaid)', 'internship') DEFAULT 'full-time'");
   }
 
-  try {
-    const userRole = (req.user.role || '').toLowerCase().trim();
-    if (userRole === 'employer') {
-      return res.status(403).json({ message: 'Only job seekers can apply / ማመልከት የሚችሉት ሥራ ፈላጊዎች ብቻ ናቸው' });
-    }
-
-    const [seeker] = await db.query('SELECT skills FROM users WHERE id = ?', [job_seeker_id]);
-    if (seeker.length === 0) {
-      return res.status(404).json({ message: 'User not found / ተጠቃሚው አልተገኘም' });
-    }
-
-    const [job] = await db.query('SELECT required_skills FROM jobs WHERE id = ?', [job_id]);
-    if (job.length === 0) {
-      return res.status(404).json({ message: 'Job not found / ሥራው አልተገኘም' });
-    }
-
-    const [existing] = await db.query('SELECT * FROM applications WHERE job_id = ? AND job_seeker_id = ?', [job_id, job_seeker_id]);
-    if (existing.length > 0) {
-      return res.status(400).json({ message: 'You have already applied for this job / ለዚህ ሥራ ቀደም ብለው አመልክተዋል' });
-    }
-
-    const resumeUrl = req.file ? `/uploads/cvs/${req.file.filename}` : '';
-    const matchScore = calculateRealMatch(seeker[0].skills, job[0].required_skills);
-
-    const query = 'INSERT INTO applications (job_id, job_seeker_id, match_score, resume_url) VALUES (?, ?, ?, ?)';
-    await db.query(query, [job_id, job_seeker_id, matchScore, resumeUrl]);
-
-    res.status(201).json({ 
-      message: 'Application submitted successfully / ማመልከቻዎ በተሳካ ሁኔታ ተልኳል!',
-      matchScore: matchScore,
-      resumeUrl: resumeUrl
-    });
-
-  } catch (error) {
-    console.error('Apply Job Error:', error);
-    res.status(500).json({ message: 'Server error / የሰርቨር ስህተት አጋጥሟል' });
+  const [applicationColumns] = await db.query(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'applications'`
+  );
+  const applicationColumnNames = new Set(applicationColumns.map(({ COLUMN_NAME: name }) => name));
+  if (!applicationColumnNames.has('cv_id')) {
+    await db.query('ALTER TABLE applications ADD COLUMN cv_id INT NULL');
   }
-});
-
-// ==========================================
-// 8. GET APPLICATIONS FOR A JOB
-// ==========================================
-app.get('/api/applications/job/:job_id', authenticateUser, async (req, res) => {
-  const { job_id } = req.params;
-
-  try {
-    const query = `
-      SELECT applications.*, users.full_name, users.email, users.skills 
-      FROM applications 
-      JOIN users ON applications.job_seeker_id = users.id 
-      WHERE applications.job_id = ?
-      ORDER BY applications.match_score DESC
-    `;
-    const [applications] = await db.query(query, [job_id]);
-    res.status(200).json(applications);
-  } catch (error) {
-    console.error('Get Applications Error:', error);
-    res.status(500).json({ message: 'Server error / የሰርቨር ስህተት አጋጥሟል' });
-  }
-});
-
-// ==========================================
-// 🚨 GLOBAL ERROR HANDLING MIDDLEWARE
-// ==========================================
-app.use((err, req, res, next) => {
-  console.error('Unhandled Error:', err);
-  res.status(err.status || 500).json({
-    success: false,
-    message: err.message || 'Internal Server Error'
-  });
-});
-
-// ==========================================
-// 🚀 SERVER START
-// ==========================================
-const startServer = async () => {
-  try {
-    await ensureDatabaseSchema();
-    console.log('✅ Database compatibility checks complete.');
-  } catch (error) {
-    console.warn('⚠️ Compatibility check failed:', error.message);
+  if (!applicationColumnNames.has('resume_snapshot')) {
+    await db.query('ALTER TABLE applications ADD COLUMN resume_snapshot JSON NULL');
   }
 
-  const server = app.listen(PORT, () => {
-    console.log(`🚀 Server is running perfectly on http://localhost:${PORT}`);
-    console.log(`📝 Database: ${process.env.DB_NAME || 'job_matching'}`);
-  });
-
-  server.on('error', (error) => {
-    if (error.code === 'EADDRINUSE') {
-      console.error(`❌ Port ${PORT} is already in use.`);
-    } else {
-      console.error('❌ Server error:', error.message);
-    }
-  });
+  const [jobStatusColumns] = await db.query(
+    `SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'jobs' AND COLUMN_NAME = 'status'`
+  );
+  if (jobStatusColumns[0] && !jobStatusColumns[0].COLUMN_TYPE.includes("'active'")) {
+    await db.query("ALTER TABLE jobs MODIFY COLUMN status ENUM('draft', 'active', 'published', 'closed', 'filled', 'archived') DEFAULT 'draft'");
+  }
 };
 
-startServer();
-
-console.log("Email Pass Length:", process.env.EMAIL_PASS ? process.env.EMAIL_PASS.length : "ባዶ ነው");
-
-console.log("Email User:", process.env.EMAIL_USER);
+ensureAuthColumns()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+    });
+  })
+  .catch((error) => {
+    console.error('❌ Database schema migration failed:', error.message);
+    process.exit(1);
+  });

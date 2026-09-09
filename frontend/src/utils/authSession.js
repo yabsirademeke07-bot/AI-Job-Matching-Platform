@@ -44,6 +44,21 @@ export const removeStoredAccount = (email) => {
   localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
 };
 
+export const clearUserWorkspace = () => {
+  [
+    'userProfile',
+    'seekerResume',
+    'pending_cv_data',
+    'candidateProfile',
+    'cvUploaded',
+    'lastAnalyzedCvId',
+    'savedJobs',
+    'mockApplications',
+    'pendingApplication',
+    'pendingApplicationJob',
+  ].forEach((key) => localStorage.removeItem(key));
+};
+
 export const getUserDestination = (user) => {
   const role = resolveUserRole(user);
   if (user?.isEmailVerified !== true && user?.is_verified !== true && user?.isVerified !== true) return '/verify-otp';
@@ -63,8 +78,8 @@ export const getUserDestination = (user) => {
       localStorage.getItem('userProfile')
     );
 
-    if (user?.onboardingRoleSelected !== true || !role) return '/select-role';
-    if (user?.onboardingCvUploaded === false || (!user?.onboardingCvUploaded && !hasResume)) return '/seeker/cv-upload';
+    if (!role || role === 'pending') return '/select-role';
+    if (user?.has_cv === false || user?.onboarding_step === 'cv_upload' || user?.onboardingCvUploaded === false || (!user?.onboardingCvUploaded && !hasResume)) return '/seeker/cv-upload';
     if (user?.onboardingProfileCompleted === false || (!user?.onboardingProfileCompleted && !hasProfile)) return '/seeker/personal-info';
 
     return '/dashboard';

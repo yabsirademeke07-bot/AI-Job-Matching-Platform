@@ -1,5 +1,15 @@
 @import "tailwindcss";
 
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(1.5rem); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes toastProgress {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+
 /* The employer workspace keeps only its dark-mode action in the secondary
    header; the global navigation owns search, notifications, company identity,
    and logout. */
@@ -34,8 +44,14 @@ html,
 body,
 #root {
   min-height: 100%;
+  width: 100%;
   margin: 0;
   background: var(--background);
+}
+
+html,
+body {
+  overflow-x: hidden;
 }
 
 html {
@@ -153,6 +169,59 @@ input,
 textarea,
 select {
   font: inherit;
+  min-height: 44px;
+}
+
+input,
+textarea {
+  display: block;
+  max-width: 100%;
+  color: #0f172a;
+  font-style: normal;
+  font-weight: 500;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+}
+
+input,
+textarea,
+select {
+  font-style: normal !important;
+  font-size: 0.9375rem !important;
+  font-weight: 500 !important;
+  color: #0f172a !important;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #94a3b8 !important;
+  font-style: italic !important;
+  font-size: 0.8125rem !important;
+  font-weight: 400 !important;
+  letter-spacing: 0.01em;
+  opacity: 1 !important;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgb(59 130 246 / 20%);
+}
+
+@media (prefers-color-scheme: dark) {
+  input::placeholder,
+  textarea::placeholder {
+    color: #64748b !important;
+  }
+}
+
+@media (max-width: 639px) {
+  button,
+  input,
+  textarea,
+  select {
+    min-height: 44px;
+  }
 }
 
 button:focus-visible,
@@ -208,6 +277,20 @@ select:focus-visible {
 }
 
 @layer utilities {
+  .responsive-container {
+    @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8;
+  }
+
+  .responsive-split {
+    @apply grid grid-cols-1 gap-6 md:grid-cols-2 lg:gap-8;
+  }
+
+  .responsive-heading {
+    font-size: clamp(1.5rem, 3vw, 2.25rem);
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+  }
+
   .no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
@@ -681,8 +764,7 @@ main>section:nth-of-type(3) aside>div:last-child {
 
 .information-page input::placeholder,
 .information-page textarea::placeholder {
-  color: #64748b !important;
-  opacity: 1;
+  color: #94a3b8 !important;
 }
 
 /* Keep seeker profile labels and fields visually consistent with the brand. */
@@ -690,16 +772,23 @@ main>section:nth-of-type(3) aside>div:last-child {
   color: var(--brand-deep) !important;
 }
 
-.profile-readable label::after {
-  content: ':';
-  margin-left: 0.15rem;
-}
-
 .profile-readable input,
 .profile-readable textarea,
 .profile-readable select {
   background-color: var(--brand-soft) !important;
   border-color: var(--brand-border) !important;
+}
+
+.profile-readable select.profile-job-preference-select,
+.profile-readable select.profile-job-preference-select option {
+  font-style: normal !important;
+  font-size: 0.875rem !important;
+  font-weight: 400 !important;
+}
+
+.profile-readable select.profile-job-preference-select:has(option:checked[value=""]) {
+  color: #94a3b8 !important;
+  font-style: italic !important;
 }
 
 .information-page input:focus,
@@ -860,4 +949,26 @@ main table thead th {
 .seeker-module-page .border-slate-700,
 .seeker-module-page .border-slate-800 {
   border-color: var(--brand-border) !important;
+}
+
+@keyframes fieldShake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-3px); }
+  75% { transform: translateX(3px); }
+}
+
+@keyframes alertPulse {
+  0% { opacity: 0; transform: scale(0.98); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+input {
+  overflow-x: hidden;
+  text-overflow: ellipsis;
+}
+
+textarea {
+  overflow-x: hidden;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
