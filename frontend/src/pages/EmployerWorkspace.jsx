@@ -597,14 +597,18 @@ export default function EmployerWorkspace() {
     );
     try {
       await api.patch(`/employer/jobs/${item.id}/status`, { status: next });
-    } catch {}
+    } catch (requestError) {
+      console.warn('Unable to update job status:', requestError);
+    }
     notify(`Job ${next}`);
   };
   const deleteJob = async (id) => {
     setJobs((current) => current.filter((item) => item.id !== id));
     try {
       await api.delete(`/employer/jobs/${id}`);
-    } catch {}
+    } catch (requestError) {
+      console.warn('Unable to delete job:', requestError);
+    }
     notify("Job deleted");
   };
   const editJob = (item) => {
@@ -803,7 +807,7 @@ export default function EmployerWorkspace() {
 
   return (
     <>
-      <div className={`min-h-screen ${shell}`}>
+      <div className={`min-h-screen max-w-full overflow-x-hidden ${shell}`}>
         <select
           value={language}
           onChange={changeLanguage}
@@ -820,7 +824,7 @@ export default function EmployerWorkspace() {
             </option>
           ))}
         </select>
-        <div className="flex min-h-[calc(100vh-5rem)]">
+        <div className="flex min-h-[calc(100vh-5rem)] min-w-0 sm:min-h-[calc(100vh-6rem)]">
           {sidebarOpen && (
             <button
               type="button"
@@ -838,7 +842,7 @@ export default function EmployerWorkspace() {
             onClose={() => setSidebarOpen(false)}
             stages={stages}
           />
-          <main className="min-w-0 flex-1 overflow-y-auto bg-slate-50/50 p-4 sm:p-6 lg:p-8">
+          <main className="min-w-0 max-w-full flex-1 overflow-y-auto overflow-x-hidden bg-slate-50/50 p-3 sm:p-6 lg:p-8">
             <div className="mx-auto max-w-7xl">
               <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
                 <div>

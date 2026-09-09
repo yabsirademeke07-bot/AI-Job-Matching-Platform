@@ -1,5 +1,10 @@
 const twilio = require('twilio');
+const crypto = require('crypto');
 const { sendEmailOtp } = require('./notificationService');
+
+const resendHistory = new Map();
+const RESEND_WINDOW_MS = 60 * 60 * 1000;
+const MAX_RESENDS_PER_HOUR = 5;
 
 const smsClient = process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN
   ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
@@ -31,7 +36,15 @@ const sendOtpSms = async (phone, otpCode) => {
 
 const issueOtp = async ({ dbClient, email, phone, purpose = 'registration', expiresInMinutes = 3 }) => {
   const cleanEmail = email.trim().toLowerCase();
-  const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+  const now = Date.now();
+  const recentResends = (resendHistory.get(cleanEmail) || []).filter((timestamp) => now - timestamp < RESEND_WINDOW_MS);
+  if (recentResends.length >= MAX_RESENDS_PER_HOUR) {
+    const error = new Error('Too many OTP requests. Please try again later.');
+    error.code = 'OTP_RATE_LIMITED';
+    throw error;
+  }
+  resendHistory.set(cleanEmail, [...recentResends, now]);
+  const otpCode = crypto.randomInt(100000, 1000000).toString();
   const client = dbClient;
   const safeExpiry = Number.isInteger(expiresInMinutes) && expiresInMinutes > 0 ? expiresInMinutes : 3;
 
@@ -42,7 +55,9 @@ const issueOtp = async ({ dbClient, email, phone, purpose = 'registration', expi
       [cleanEmail, otpCode, purpose]
   );
 
-  console.log('[OTP CODE]:', otpCode);
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`[DEV ONLY] OTP for ${cleanEmail}: ${otpCode}`);
+  }
   const delivery = { email: false, sms: false };
   await sendEmailOtp(cleanEmail, otpCode);
   delivery.email = true;

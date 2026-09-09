@@ -61,6 +61,7 @@ export const clearUserWorkspace = () => {
 
 export const getUserDestination = (user) => {
   const role = resolveUserRole(user);
+  if (user?.isEmailVerified !== true && user?.is_verified !== true && user?.isVerified !== true) return '/verify-otp';
   if (['admin', 'super_admin'].includes(role)) return '/admin/dashboard';
   if (['employer', 'company', 'recruiter'].includes(role)) return '/employer/dashboard';
   if (['job_seeker', 'seeker', 'jobseeker', 'user', 'employee'].includes(role)) {

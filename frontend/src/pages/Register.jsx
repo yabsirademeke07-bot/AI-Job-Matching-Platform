@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../hooks/useToast.js';
 import { scrollToFeedback } from '../utils/scrollHelper.js';
@@ -13,6 +13,7 @@ import EmailInputWithDomains from '../components/EmailInputWithDomains';
 
 const Register = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { setSession } = useAuth();
   const { showSuccess, showError } = useToast();
 
@@ -22,7 +23,7 @@ const Register = () => {
   // Form State (Phone Number Removed)
   const [formData, setFormData] = useState({
     fullName: '',
-    email: '',
+    email: location.state?.email || '',
     password: '',
     confirmPassword: '',
     role: '' // 'jobseeker' or 'employer'
@@ -30,7 +31,7 @@ const Register = () => {
 
   // OTP State
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
-  const [otpTimer, setOtpTimer] = useState(180);
+  const [otpTimer, setOtpTimer] = useState(60);
   const canResendOtp = otpTimer === 0;
 
   // UI States
@@ -39,7 +40,7 @@ const Register = () => {
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState('');
-  const [apiSuccess, setApiSuccess] = useState('');
+  const [apiSuccess, setApiSuccess] = useState(location.state?.message || '');
   const [emailSuggestion, setEmailSuggestion] = useState('');
 
   const API_URL = import.meta.env.VITE_BACKEND_URL || '/api';
@@ -187,7 +188,7 @@ const Register = () => {
       }
 
       setStep(2);
-      setOtpTimer(180);
+      setOtpTimer(60);
       setApiSuccess('OTP code sent to your email.');
       showSuccess('Verification code sent successfully.');
     } catch (error) {
@@ -284,7 +285,7 @@ const Register = () => {
     setApiError('');
     setApiSuccess('');
     await sendOtpRequest(formData.email.trim());
-    setOtpTimer(180);
+    setOtpTimer(60);
     setOtp(['', '', '', '', '', '']);
     setIsLoading(false);
   };
@@ -311,20 +312,8 @@ const Register = () => {
       if (!roleResponse.ok || !roleData.user || !roleData.token) throw new Error(roleData.message || 'Unable to save role');
 
       setFormData((prev) => ({ ...prev, role: normalizedRole }));
-      const updatedUser = {
-        ...JSON.parse(localStorage.getItem('user') || '{}'),
-        ...roleData.user,
-        role: normalizedRole,
-        onboardingRoleSelected: true,
-        onboardingCvUploaded: false,
-        onboardingProfileCompleted: false,
-        is_verified: true,
-      };
-      localStorage.setItem('token', roleData.token);
-      localStorage.setItem('user', JSON.stringify(updatedUser));
-      localStorage.setItem('currentUser', JSON.stringify(updatedUser));
-      setSession({ token: roleData.token, user: updatedUser });
-      navigate(normalizedRole === 'employer' ? '/employer/onboarding' : '/seeker/cv-upload', { replace: true });
+      setStep(2);
+      setOtpTimer(60);
     } catch (err) {
       console.error('Registration error:', err);
       setApiError(err.message || 'Unable to create your account. Please try again.');

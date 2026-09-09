@@ -21,7 +21,7 @@ export default function EmployerSidebar({ active, onSelect, onLogout, applicatio
 
   return <>
     {isOpen && <button type="button" aria-label="Close employer navigation" onClick={onClose} className="fixed inset-0 z-40 bg-slate-950/40 lg:hidden" />}
-    <aside className={`employer-sidebar fixed left-0 top-20 z-40 flex h-[calc(100vh-5rem)] w-72 flex-col border-r border-slate-200 bg-white/95 p-5 pb-6 shadow-xl backdrop-blur-sm transition-transform lg:sticky lg:top-20 lg:h-[calc(100vh-5rem)] lg:w-[280px] lg:translate-x-0 lg:shadow-none ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+    <aside className={`employer-sidebar fixed left-0 top-20 z-40 flex h-[calc(100vh-5rem)] w-72 max-w-[85vw] flex-col border-r border-slate-200 bg-white/95 p-5 pb-6 shadow-xl backdrop-blur-sm transition-transform sm:top-24 sm:h-[calc(100vh-6rem)] lg:sticky lg:top-24 lg:h-[calc(100vh-6rem)] lg:w-[280px] lg:max-w-none lg:translate-x-0 lg:shadow-none ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
       <button type="button" aria-label="Close employer navigation" onClick={onClose} className="absolute right-4 top-5 text-slate-500 lg:hidden"><X className="h-5 w-5" /></button>
 
       <div className="mb-5 flex shrink-0 items-center gap-3 border-b border-slate-100 pb-4">

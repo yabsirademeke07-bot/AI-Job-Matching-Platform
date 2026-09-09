@@ -7,7 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../hooks/useToast.js';
 import { scrollToFeedback } from '../utils/scrollHelper.js';
 import {
-  Sparkles, ShieldCheck, Cpu, Lock,
+  Sparkles, ShieldCheck, Cpu, Lock, Mail,
   ArrowRight, Eye, EyeOff, Target, ArrowLeft
 } from 'lucide-react';
 import EmailInputWithDomains from '../components/EmailInputWithDomains';
@@ -181,9 +181,12 @@ const Login = () => {
         return;
       }
     } catch (error) {
-      setApiError(error.message || 'Unable to sign in. Please try again.');
-      showError(error.message || 'Unable to sign in. Please try again.');
-      scrollToFeedback('error');
+      const response = error.response;
+      if (response?.status === 403 && response.data?.requiresVerification) {
+        navigate('/verify-otp', { state: { email: response.data.email || formData.emailOrPhone.trim().toLowerCase() } });
+        return;
+      }
+      setApiError(response?.data?.message || 'Unable to sign in. Please try again.');
     } finally {
       setIsLoading(false);
     }

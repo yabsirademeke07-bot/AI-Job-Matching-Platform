@@ -19,14 +19,18 @@ export default function AIRecommendedTalent({ jobId }) {
     api.get(`/employer/jobs/${jobId}/ai-talent-pool`).then(({ data }) => {
       const items = data?.candidates || data || [];
       setTalent(items);
-    }).catch(() => {});
+    }).catch(() => {
+      setTalent([]);
+    });
   }, [jobId]);
 
   const action = async (candidate, type) => {
     if (type === 'shortlist') {
       try {
         await api.patch(`/employer/applications/${candidate.applicationId || candidate.id}/status`, { status: 'shortlisted' });
-      } catch {}
+      } catch (requestError) {
+        console.warn('Unable to shortlist candidate:', requestError);
+      }
       setTalent((current) => current.map((item) => item.id === candidate.id ? { ...item, shortlisted: true } : item));
       setMessage(`${candidate.name} moved to shortlist.`);
       return;

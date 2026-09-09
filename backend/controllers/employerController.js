@@ -51,6 +51,9 @@ exports.getCompanyProfile = async (req, res) => {
 };
 
 exports.updateCompanyProfile = async (req, res) => {
+  const phoneDigits = String(req.body.phoneNumber || req.body.phone || '').replace(/\D/g, '').replace(/^251/, '').replace(/^0/, '');
+  if (phoneDigits && !/^[97]\d{8}$/.test(phoneDigits)) return res.status(422).json({ success: false, message: 'Phone number must be 9 digits and start with 9 or 7.' });
+  const normalizedPhone = phoneDigits ? `+251${phoneDigits}` : null;
   const socialUrls = (req.body.social_media_urls && typeof req.body.social_media_urls === 'object') ? req.body.social_media_urls : {};
   const fields = [
     'company_name', 'representative_name', 'representative_title', 'work_email', 'phone',
@@ -97,9 +100,9 @@ exports.updateCompanyProfile = async (req, res) => {
     );
 
     await db.execute(
-      `INSERT INTO employers (userId, companyName, legalBusinessName, tinNumber, licenseDocumentUrl, logoUrl, website, industry, companySize, location, verificationStatus)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
-       ON DUPLICATE KEY UPDATE companyName = VALUES(companyName), legalBusinessName = VALUES(legalBusinessName), tinNumber = VALUES(tinNumber), licenseDocumentUrl = VALUES(licenseDocumentUrl), logoUrl = VALUES(logoUrl), website = VALUES(website), industry = VALUES(industry), companySize = VALUES(companySize), location = VALUES(location)`,
+      `INSERT INTO employers (userId, companyName, legalBusinessName, tinNumber, licenseDocumentUrl, logoUrl, website, industry, companySize, location, phoneNumber, phoneOperator, verificationStatus)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+       ON DUPLICATE KEY UPDATE companyName = VALUES(companyName), legalBusinessName = VALUES(legalBusinessName), tinNumber = VALUES(tinNumber), licenseDocumentUrl = VALUES(licenseDocumentUrl), logoUrl = VALUES(logoUrl), website = VALUES(website), industry = VALUES(industry), companySize = VALUES(companySize), location = VALUES(location), phoneNumber = VALUES(phoneNumber), phoneOperator = VALUES(phoneOperator)`,
       [
         req.user.id,
         req.body.company_name || req.body.companyName || '',
@@ -111,6 +114,8 @@ exports.updateCompanyProfile = async (req, res) => {
         req.body.industry || null,
         req.body.company_size || req.body.companySize || '11-50',
         req.body.location || null,
+        normalizedPhone,
+        req.body.phoneOperator || null,
       ]
     );
 
