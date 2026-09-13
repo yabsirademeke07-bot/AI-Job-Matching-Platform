@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../hooks/useToast.js';
 import { scrollToFeedback } from '../utils/scrollHelper.js';
@@ -13,6 +13,7 @@ import EmailInputWithDomains from '../components/EmailInputWithDomains';
 
 const Register = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { setSession } = useAuth();
   const { showSuccess, showError } = useToast();
 
@@ -22,7 +23,7 @@ const Register = () => {
   // Form State (Phone Number Removed)
   const [formData, setFormData] = useState({
     fullName: '',
-    email: '',
+    email: location.state?.email || '',
     password: '',
     confirmPassword: '',
     role: '' // 'jobseeker' or 'employer'
@@ -39,7 +40,7 @@ const Register = () => {
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState('');
-  const [apiSuccess, setApiSuccess] = useState('');
+  const [apiSuccess, setApiSuccess] = useState(location.state?.message || '');
   const [emailSuggestion, setEmailSuggestion] = useState('');
 
   const API_URL = import.meta.env.VITE_BACKEND_URL || '/api';
@@ -187,8 +188,7 @@ const Register = () => {
       }
 
       setStep(2);
-      setOtpTimer(180);
-      setApiSuccess('OTP code sent to your email.');
+      setOtpTimer(60);
       showSuccess('Verification code sent successfully.');
     } catch (error) {
       console.error('Registration Error:', error);
@@ -213,9 +213,7 @@ const Register = () => {
         body: JSON.stringify({ email }),
       });
       const data = await res.json().catch(() => ({}));
-      if (res.ok) {
-        setApiSuccess('OTP code sent to your email.');
-      } else {
+      if (!res.ok) {
         setApiError(data.message || 'Failed to send OTP.');
       }
     } catch (otpErr) {
@@ -311,20 +309,8 @@ const Register = () => {
       if (!roleResponse.ok || !roleData.user || !roleData.token) throw new Error(roleData.message || 'Unable to save role');
 
       setFormData((prev) => ({ ...prev, role: normalizedRole }));
-      const updatedUser = {
-        ...JSON.parse(localStorage.getItem('user') || '{}'),
-        ...roleData.user,
-        role: normalizedRole,
-        onboardingRoleSelected: true,
-        onboardingCvUploaded: false,
-        onboardingProfileCompleted: false,
-        is_verified: true,
-      };
-      localStorage.setItem('token', roleData.token);
-      localStorage.setItem('user', JSON.stringify(updatedUser));
-      localStorage.setItem('currentUser', JSON.stringify(updatedUser));
-      setSession({ token: roleData.token, user: updatedUser });
-      navigate(normalizedRole === 'employer' ? '/employer/onboarding' : '/seeker/cv-upload', { replace: true });
+      setStep(2);
+      setOtpTimer(60);
     } catch (err) {
       console.error('Registration error:', err);
       setApiError(err.message || 'Unable to create your account. Please try again.');
@@ -409,19 +395,6 @@ const Register = () => {
 
         {/* RIGHT SIDE: Dynamic Form (Step 1, 2, 3) */}
         <div className="md:col-span-7 bg-white p-6 sm:p-8 md:p-10 lg:p-12 flex flex-col justify-center relative min-h-full">
-
-          {/* API Notifications */}
-          {apiError && (
-            <div className="mb-4 sm:mb-6 p-3.5 sm:p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-semibold flex items-center justify-between">
-              <span>{apiError}</span>
-            </div>
-          )}
-
-          {apiSuccess && (
-            <div className="mb-4 sm:mb-6 p-3.5 sm:p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold">
-              {apiSuccess}
-            </div>
-          )}
 
           {/* STEP 1: Registration Credentials Form */}
           {step === 1 && (
@@ -590,15 +563,15 @@ const Register = () => {
                   {otpTimer > 0 ? (
                     <p>Resend code in <span className="text-blue-600 font-bold">{formatOtpTime(otpTimer)}</span></p>
                   ) : (
-                    <span className="inline-flex items-center gap-1.5 text-red-600 font-bold">
+                    <span className="inline-flex items-center gap-1.5 text-red-600 font-bold italic">
                       OTP expired —
                       <button
                         type="button"
                         onClick={handleResendOtp}
                         disabled={isLoading}
-                        className="inline-flex items-center gap-1.5 text-blue-600 hover:text-blue-800 font-bold hover:underline cursor-pointer"
+                        className="inline-flex items-center gap-1.5 text-red-600 hover:text-red-800 font-bold italic hover:underline cursor-pointer"
                       >
-                        <RefreshCw className="w-3.5 h-3.5" /> ኮድ እንደገና ላክ (Resend OTP)
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Resend OTP
                       </button>
                     </span>
                   )}
