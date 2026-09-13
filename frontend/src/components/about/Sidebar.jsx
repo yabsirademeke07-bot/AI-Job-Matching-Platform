@@ -1,4 +1,3 @@
-import React from "react";
 import {
   BriefcaseBusiness,
   Briefcase,
@@ -8,6 +7,10 @@ import {
   Layers3,
   MessageSquareText,
   Sparkles,
+  Target,
+  BarChart3,
+  FileText,
+  UserRound,
 } from "lucide-react";
 
 const defaultNavItems = [
@@ -19,8 +22,7 @@ const defaultNavItems = [
   { id: "jobs", label: "Jobs" },
   { id: "about", label: "About" },
   { id: "prompts", label: "Prompt Studio" },
-  { id: "contact", label: "Contact" },
-  { id: "create-profile", label: "Create / Edit Profile" },
+  { id: "about", label: "About" },
 ];
 
 export default function Sidebar({
@@ -45,9 +47,12 @@ export default function Sidebar({
     services: Layers3,
     jobs: Briefcase,
     about: Sparkles,
+    matches: Target,
+    scores: BarChart3,
+    applications: FileText,
+    profile: UserRound,
     prompts: MessageSquareText,
     contact: ContactRound,
-    "create-profile": BriefcaseBusiness,
   };
 
   return (

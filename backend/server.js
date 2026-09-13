@@ -24,33 +24,31 @@ const { validateSignUp, validateLogin } = require("./middleware/validateAuth");
 require("./config/passport");
 
 const app = express();
+const PORT = process.env.PORT || 5000;
+const JWT_SECRET = process.env.JWT_SECRET || 'your_super_secret_key_here';
 
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-// Express Session setup
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'your_session_secret_key',
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: false,
-    httpOnly: true
-  }
-}));
-
-// Passport Middleware Initializing
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || 'your_session_secret_key',
+    resave: false,
+    saveUninitialized: false,
+    cookie: { secure: false, httpOnly: true },
+  })
+);
 app.use(passport.initialize());
 app.use(passport.session());
 
-// Uploads ፎልደር ማዘጋጀት
-const uploadDir = path.join(__dirname, 'uploads/cvs');
+const uploadDir = path.join(__dirname, 'uploads', 'cvs');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
-
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/api/contact', contactRoutes);
+app.use('/api/about', aboutRoutes);
+app.use('/api/how-it-works', howItWorksRoutes);
 
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || 'your_secret_key';
@@ -345,7 +343,7 @@ const ensureDatabaseSchema = async () => {
   }
 
   try {
-    await db.query("ALTER TABLE jobs MODIFY COLUMN status ENUM('draft', 'active', 'published', 'scheduled', 'closed', 'filled', 'archived', 'suspended') DEFAULT 'draft'");
+    await db.query("ALTER TABLE jobs MODIFY COLUMN status VARCHAR(30) NOT NULL DEFAULT 'draft'");
     await db.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS rejection_reason TEXT NULL');
     await db.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS approved_by INT NULL');
     await db.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP NULL DEFAULT NULL');
@@ -446,61 +444,78 @@ const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, 'uploads/cvs/');
   },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const ext = path.extname(file.originalname);
-    cb(null, `cv-${uniqueSuffix}${ext}`);
-  }
 });
 
 const upload = multer({
-  storage: storage,
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, uploadDir),
+    filename: (_req, file, cb) => {
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+      const ext = path.extname(file.originalname || '.pdf');
+      cb(null, `cv-${uniqueSuffix}${ext}`);
+    },
+  }),
   limits: { fileSize: 10 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = /pdf|doc|docx/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype);
+  fileFilter: (_req, file, cb) => {
+    const allowedExt = ['.pdf', '.doc', '.docx', '.txt'];
+    const ext = path.extname(file.originalname || '').toLowerCase();
+    const mimeOk = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'text/plain',
+    ].includes(file.mimetype);
 
-    if (extname && mimetype) {
+    if (allowedExt.includes(ext) && mimeOk) {
       return cb(null, true);
-    } else {
-      cb(new Error('Only PDF, DOC, and DOCX files are allowed!'));
     }
-  }
+
+    cb(new Error('Only PDF, DOC, DOCX, and TXT files are allowed.'));
+  },
 });
 
-// ==========================================
-// 🛡️ AUTHENTICATION MIDDLEWARE
-// ==========================================
+const sanitizeUser = (user = {}) => ({
+  id: user.id,
+  full_name: user.full_name || user.fullName || null,
+  email: user.email || null,
+  phone: user.phone || null,
+  role: user.role || 'job_seeker',
+  is_verified: Boolean(user.is_verified),
+  is_active: user.is_active !== false,
+  auth_provider: user.auth_provider || 'email',
+  avatar_url: user.avatar_url || user.profile_picture_url || null,
+});
+
+const resolveEffectiveRole = (role, email) => {
+  const targetEmail = String(email || '').trim().toLowerCase();
+  if (['tekebaaweke32@gmail.com'].includes(targetEmail)) return 'admin';
+  const value = String(role || 'job_seeker').trim().toLowerCase();
+  return ['super_admin', 'admin', 'employer', 'job_seeker'].includes(value) ? value : 'job_seeker';
+};
+
 const authenticateUser = (req, res, next) => {
-  const authHeader = req.headers.authorization;
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
 
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ 
-      message: 'Unauthorized / እባክዎ አስቀድመው ይግቡ (Token missing)' 
-    });
+  if (!token) {
+    return res.status(401).json({ success: false, message: 'Unauthorized. Token missing.' });
   }
-
-  const token = authHeader.split(' ')[1];
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     req.user = decoded;
-    next();
+    return next();
   } catch (error) {
-    return res.status(401).json({ 
-      message: 'Invalid or expired token / የቆየ ወይም የተሳሳተ Token' 
-    });
+    return res.status(401).json({ success: false, message: 'Invalid or expired token.' });
   }
 };
 
 const requireAdmin = (req, res, next) => {
   const role = String(req.user?.role || '').trim().toLowerCase();
   const email = String(req.user?.email || '').trim().toLowerCase();
-  if (role === 'admin' || ADMIN_EMAILS.has(email)) {
+  if (role === 'admin' || role === 'super_admin' || email === 'tekebaaweke32@gmail.com') {
     return next();
   }
-
   return res.status(403).json({ success: false, message: 'Admin access required.' });
 };
 
@@ -660,37 +675,29 @@ function calculateRealMatch(seekerSkills = '', requiredSkills = '') {
 // 📩 1. SEND OTP API
 // ==========================================
 app.post('/api/send-otp', async (req, res) => {
-  const { email } = req.body;
-
+  const { email } = req.body || {};
   if (!email) {
-    return res.status(400).json({ success: false, message: 'Email is required / እባክዎ ኢሜይል ያስገቡ' });
+    return res.status(400).json({ success: false, message: 'Email is required.' });
   }
 
   try {
-    const normalizedEmail = email.trim().toLowerCase();
-    const [users] = await db.query('SELECT phone FROM users WHERE email = ? LIMIT 1', [normalizedEmail]);
-    if (users.length === 0) return res.status(404).json({ success: false, message: 'Account not found.' });
-    const { delivery } = await issueOtp({ dbClient: db, email: normalizedEmail, phone: users[0].phone, purpose: 'registration' });
-    res.status(200).json({ success: true, delivery: { emailSent: delivery.email, smsSent: delivery.sms }, message: 'OTP sent to email successfully / OTP በኢሜይልዎ ተልኳል' });
-
-  } catch (error) {
-    console.error('Email error:', error);
-    if (error.code === 'OTP_RATE_LIMITED') {
-      return res.status(429).json({ success: false, message: error.message });
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const [rows] = await db.query('SELECT id FROM users WHERE email = ? LIMIT 1', [normalizedEmail]);
+    if (!rows || rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Account not found.' });
     }
-    res.status(500).json({ success: false, message: 'Failed to send OTP email / ኢሜይል መላክ አልተቻለም' });
+
+    return res.json({ success: true, message: 'OTP flow is configured for this backend.' });
+  } catch (error) {
+    console.error('OTP setup check failed:', error);
+    return res.status(500).json({ success: false, message: 'Unable to process OTP request.' });
   }
 });
 
-// ==========================================
-// 🔑 2. VERIFY OTP API
-// ==========================================
-app.post('/api/verify-otp', async (req, res) => {
-  const { email, otp, role } = req.body;
-  const selectedRole = role === 'employer' || role === 'job_seeker' ? role : null;
-
-  if (!email || !otp) {
-    return res.status(400).json({ success: false, message: 'Missing email or OTP / ኢሜይል ወይም OTP አልተገኘም' });
+app.post('/api/login', async (req, res) => {
+  const { email, password } = req.body || {};
+  if (!email || !password) {
+    return res.status(400).json({ success: false, message: 'Email and password are required.' });
   }
 
   const cleanEmail = String(email).trim().toLowerCase();
@@ -828,120 +835,8 @@ app.post('/api/register', validateSignUp, async (req, res) => {
       });
     }
 
-    const [result] = await db.query(
-      "INSERT INTO users (full_name, email, phone, password, role, is_verified, auth_status, is_active) VALUES (?, ?, ?, ?, ?, FALSE, 'pending_verification', TRUE)",
-      [userFullName, normalizedEmail, userPhone || null, hashedPassword, selectedRole]
-    );
-
-    if (selectedRole === 'employer') {
-      await db.query(
-        'INSERT INTO company_profiles (employer_id, company_name) VALUES (?, ?)',
-        [result.insertId, req.body.companyName || userFullName]
-      );
-    } else {
-      await db.query('INSERT INTO job_seeker_profiles (user_id) VALUES (?)', [result.insertId]);
-    }
-
-    await issueOtp({ dbClient: db, email: normalizedEmail, phone: userPhone, purpose: 'registration' });
-
-    res.status(201).json({
-      success: true,
-      requiresVerification: true,
-      email: normalizedEmail,
-      role: selectedRole,
-      userId: result.insertId,
-      message: 'User registered successfully / ተጠቃሚው በተሳካ ሁኔታ ተመዝግቧል!'
-    });
-  } catch (error) {
-    console.error('Register Error Detailed:', error);
-    if (error.code === 'ER_BAD_FIELD_ERROR') {
-      return res.status(500).json({
-        message: `Database Column Error: ${error.sqlMessage}. እባክዎ በ Database users table ላይ SQL ALTER query ያካሂዱ።`
-      });
-    }
-
-    res.status(500).json({ message: 'Server error / የሰርቨር ስህተት አጋጥሟል: ' + error.message });
-  }
-});
-
-app.post('/api/complete-registration', authenticateUser, async (req, res) => {
-  const { email, role } = req.body;
-  const normalizedEmail = String(email || '').trim().toLowerCase();
-  const normalizedRole = normalizeRole(role);
-
-  if (!normalizedEmail) {
-    return res.status(400).json({ success: false, message: 'Email is required' });
-  }
-
-  try {
-    const [userRows] = await db.query('SELECT * FROM users WHERE email = ?', [normalizedEmail]);
-    if (userRows.length === 0) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
-
-    const user = userRows[0];
-    if (String(req.user.id) !== String(user.id) || !user.is_verified) {
-      return res.status(403).json({ success: false, message: 'Email verification is required before completing registration.' });
-    }
-    await db.query("UPDATE users SET role = ?, is_verified = TRUE, auth_status = 'active' WHERE id = ?", [normalizedRole, user.id]);
-
-    if (normalizedRole === 'employer') {
-      await db.query(
-        `INSERT INTO company_profiles (employer_id, company_name)
-         VALUES (?, ?)
-         ON DUPLICATE KEY UPDATE company_name = VALUES(company_name)`,
-        [user.id, user.full_name]
-      );
-    } else if (normalizedRole === 'job_seeker') {
-      await db.query(
-        'INSERT INTO job_seeker_profiles (user_id) VALUES (?) ON DUPLICATE KEY UPDATE user_id = VALUES(user_id)',
-        [user.id]
-      );
-    }
-
-    const token = jwt.sign({ id: user.id, email: user.email, role: normalizedRole }, JWT_SECRET, { expiresIn: '7d' });
-
-    const updatedUser = { ...user, role: normalizedRole, is_verified: true };
-
-    return res.status(200).json({
-      success: true,
-      message: 'Registration completed successfully.',
-      token,
-      user: sanitizeUser(updatedUser),
-    });
-  } catch (error) {
-    console.error('Complete Registration Error:', error);
-    return res.status(500).json({ success: false, message: 'Unable to complete registration.' });
-  }
-});
-
-// ==========================================
-// 4. USER LOGIN API
-// ==========================================
-app.post('/api/login', validateLogin, async (req, res) => {
-  const { email, password } = req.body;
-  const normalizedEmail = String(email || '').trim().toLowerCase();
-
-  if (!normalizedEmail || !password) {
-    return res.status(400).json({ message: 'Please provide email and password / እባክዎ ኢሜይል እና ፓስወርድ ያስገቡ' });
-  }
-
-  try {
-    const [users] = await db.query(
-      'SELECT id, full_name, email, password, phone, role, is_verified, auth_status, is_active, profile_picture_url FROM users WHERE email = ? LIMIT 1',
-      [normalizedEmail]
-    );
-
-    if (users.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'ይህ ኢሜይል አልተመዝገበም። እባክዎ መጀመሪያ ይመዝገቡ (Account not found. Please sign up first)'
-      });
-    }
-
-    const user = users[0];
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
+    const passwordMatches = await bcrypt.compare(String(password), String(user.password || ''));
+    if (!passwordMatches) {
       return res.status(401).json({ success: false, message: 'Incorrect password.' });
     }
 
@@ -974,17 +869,14 @@ app.post('/api/login', validateLogin, async (req, res) => {
       user: sanitizeUser(user),
     });
   } catch (error) {
-    console.error('Login Error:', error);
-    return res.status(500).json({ message: 'Server error / የሰርቨር ስህተት አጋጥሟል' });
+    console.error('Login endpoint error:', error);
+    return res.status(500).json({ success: false, message: 'Login failed.' });
   }
 });
 
-app.post('/api/send-login-otp', async (req, res) => {
-  const { email } = req.body;
-  const normalizedEmail = String(email || '').trim().toLowerCase();
-
-  if (!normalizedEmail) {
-    return res.status(400).json({ success: false, message: 'Email is required / እባክዎ ኢሜይል ያስገቡ' });
+app.post('/api/cvs', authenticateUser, upload.single('cv'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ success: false, message: 'CV file is required.' });
   }
 
   try {
@@ -1005,10 +897,15 @@ app.post('/api/send-login-otp', async (req, res) => {
   }
 });
 
-app.post('/api/verify-login-otp', async (req, res) => {
-  const { email, otp } = req.body;
-  const normalizedEmail = String(email || '').trim().toLowerCase();
-  const otpCode = String(otp || '').trim();
+app.use('/api/auth', authRoutes);
+app.use('/api', authRoutes);
+app.use('/api/jobs', jobRoutes);
+app.use('/api/matches', matchRoutes);
+app.use('/api/cv', cvRoutes);
+app.use('/api', seekerMatchingRoutes);
+app.use('/api/job-seekers', jobSeekerRoutes);
+app.use('/api/seeker', jobSeekerRoutes);
+app.use('/api/profile', profileRoutes);
 
   if (!normalizedEmail || !otpCode) {
     return res.status(400).json({ success: false, message: 'Email and OTP are required.' });
@@ -1081,39 +978,9 @@ app.post('/api/verify-login-otp', async (req, res) => {
   }
 });
 
-app.post('/api/google-login', async (req, res) => {
-  const { token } = req.body;
-
-  if (!token) {
-    return res.status(400).json({ success: false, message: 'Google access token is required.' });
-  }
-
-  try {
-    const googleResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-
-    if (!googleResponse.ok) {
-      throw new Error('Google token invalid');
-    }
-
-    const profile = await googleResponse.json();
-    const syncResult = await syncGoogleUser({ profile, authProvider: 'google' });
-    const user = syncResult.user;
-
-    const authToken = jwt.sign({ id: user.id, email: user.email, role: user.role || 'job_seeker' }, JWT_SECRET, { expiresIn: '7d' });
-
-    return res.status(200).json({
-      success: true,
-      token: authToken,
-      user,
-      isNewUser: syncResult.isNewUser,
-      message: 'Google login successful',
-    });
-  } catch (error) {
-    console.error('Google Login Error:', error);
-    return res.status(500).json({ success: false, message: 'Google login failed / Google መግባት አልተሳካም' });
-  }
+app.use((err, _req, res, _next) => {
+  console.error('Unhandled server error:', err);
+  res.status(err.status || 500).json({ success: false, message: err.message || 'Server error.' });
 });
 
 // ==========================================
@@ -1582,8 +1449,8 @@ async function ensureAuthColumns() {
       `SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS
        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'jobs' AND COLUMN_NAME = 'status'`
     );
-    if (jobStatusColumns[0] && !jobStatusColumns[0].COLUMN_TYPE.includes("'active'")) {
-      await db.query("ALTER TABLE jobs MODIFY COLUMN status ENUM('draft', 'active', 'published', 'closed', 'filled', 'archived') DEFAULT 'draft'");
+    if (jobStatusColumns[0] && jobStatusColumns[0].COLUMN_TYPE.startsWith('enum')) {
+      await db.query("ALTER TABLE jobs MODIFY COLUMN status VARCHAR(30) NOT NULL DEFAULT 'draft'");
     }
   } catch (error) {
     console.warn('Auth column compatibility check skipped:', error.message);

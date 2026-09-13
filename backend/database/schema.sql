@@ -365,9 +365,11 @@ CREATE TABLE IF NOT EXISTS jobs (
     id INT AUTO_INCREMENT PRIMARY KEY,
     employer_id INT NOT NULL,
     title VARCHAR(150) NOT NULL,
+    company_name VARCHAR(255),
     slug VARCHAR(200) UNIQUE,
     description LONGTEXT NOT NULL,
     category VARCHAR(100),
+    sector VARCHAR(150),
     job_type ENUM('full-time', 'part-time', 'contract', 'temporary', 'internship', 'freelance', 'self-employed') NOT NULL,
     experience_level ENUM('entry-level', 'mid-level', 'senior-level', 'executive') DEFAULT 'mid-level',
     location VARCHAR(100),
@@ -382,13 +384,14 @@ CREATE TABLE IF NOT EXISTS jobs (
     salary_period ENUM('hourly', 'monthly', 'yearly') DEFAULT 'yearly',
     is_salary_negotiable BOOLEAN DEFAULT TRUE,
     benefits TEXT,
+    required_skills TEXT,
     required_education ENUM('high-school', 'associate', 'bachelor', 'master', 'phd', 'any') DEFAULT 'bachelor',
     years_of_experience_min INT DEFAULT 0,
     years_of_experience_max INT DEFAULT 20,
     application_deadline DATE,
     scheduled_date DATETIME NULL,
     is_urgent BOOLEAN DEFAULT FALSE,
-    status ENUM('draft', 'active', 'published', 'scheduled', 'rejected', 'closed', 'filled', 'archived') DEFAULT 'draft',
+    status VARCHAR(30) NOT NULL DEFAULT 'draft',
     rejection_reason TEXT,
     approved_by INT NULL,
     approved_at TIMESTAMP NULL DEFAULT NULL,
@@ -717,5 +720,86 @@ CREATE TABLE IF NOT EXISTS job_analytics (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
 );
+
+-- Contact Messages
+CREATE TABLE IF NOT EXISTS contact_messages (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    full_name VARCHAR(150) NOT NULL,
+    email VARCHAR(255) NOT NULL,
+    subject VARCHAR(255) NOT NULL,
+    message TEXT NOT NULL,
+    status ENUM('new', 'read', 'replied', 'archived') NOT NULL DEFAULT 'new',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_contact_email (email),
+    INDEX idx_contact_status (status),
+    INDEX idx_contact_created_at (created_at)
+);
+
+-- About Page Content
+CREATE TABLE IF NOT EXISTS about_content (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    description TEXT NOT NULL,
+    mission TEXT NOT NULL,
+    vision TEXT NOT NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+INSERT INTO about_content (title, description, mission, vision)
+SELECT
+    'About AI-Powered Job Matching System',
+    'An intelligent job matching platform that connects job seekers with relevant opportunities by analyzing their skills, experience, education, and career preferences.',
+    'Our mission is to make job discovery and recruitment faster, smarter, and more personalized through artificial intelligence.',
+    'Our vision is to create an intelligent employment ecosystem where employers find the right talent and people find meaningful work.'
+WHERE NOT EXISTS (SELECT 1 FROM about_content);
+
+-- How It Works Steps
+CREATE TABLE IF NOT EXISTS how_it_works_steps (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    audience ENUM('seekers', 'employers') NOT NULL,
+    step_number TINYINT UNSIGNED NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    description TEXT NOT NULL,
+    type VARCHAR(50) NOT NULL,
+    route VARCHAR(255),
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_audience_step (audience, step_number),
+    INDEX idx_how_it_works_audience (audience, is_active)
+);
+
+INSERT INTO how_it_works_steps (audience, step_number, title, description, type, route)
+SELECT 'seekers', 1, 'Create your profile', 'Add your skills, experience, and career preferences so the platform can understand what you are looking for.', 'profile', '/profile'
+WHERE NOT EXISTS (SELECT 1 FROM how_it_works_steps WHERE audience = 'seekers' AND step_number = 1);
+
+INSERT INTO how_it_works_steps (audience, step_number, title, description, type, route)
+SELECT 'seekers', 2, 'Discover relevant jobs', 'Browse opportunities ranked by how closely they match your profile and goals.', 'search', '/jobs'
+WHERE NOT EXISTS (SELECT 1 FROM how_it_works_steps WHERE audience = 'seekers' AND step_number = 2);
+
+INSERT INTO how_it_works_steps (audience, step_number, title, description, type, route)
+SELECT 'seekers', 3, 'Review your match score', 'See the skills and experience behind each recommendation before you apply.', 'ai', '/matches'
+WHERE NOT EXISTS (SELECT 1 FROM how_it_works_steps WHERE audience = 'seekers' AND step_number = 3);
+
+INSERT INTO how_it_works_steps (audience, step_number, title, description, type, route)
+SELECT 'seekers', 4, 'Apply with confidence', 'Submit your CV and track application progress from one place.', 'apply', '/applications'
+WHERE NOT EXISTS (SELECT 1 FROM how_it_works_steps WHERE audience = 'seekers' AND step_number = 4);
+
+INSERT INTO how_it_works_steps (audience, step_number, title, description, type, route)
+SELECT 'employers', 1, 'Create a job listing', 'Describe the role, required skills, and experience you need.', 'profile', '/employer/jobs'
+WHERE NOT EXISTS (SELECT 1 FROM how_it_works_steps WHERE audience = 'employers' AND step_number = 1);
+
+INSERT INTO how_it_works_steps (audience, step_number, title, description, type, route)
+SELECT 'employers', 2, 'Reach matched candidates', 'Connect with job seekers whose profiles align with your requirements.', 'search', '/employer/matches'
+WHERE NOT EXISTS (SELECT 1 FROM how_it_works_steps WHERE audience = 'employers' AND step_number = 2);
+
+INSERT INTO how_it_works_steps (audience, step_number, title, description, type, route)
+SELECT 'employers', 3, 'Compare applications', 'Review candidate profiles and match evidence in one focused view.', 'ai', '/employer/applications'
+WHERE NOT EXISTS (SELECT 1 FROM how_it_works_steps WHERE audience = 'employers' AND step_number = 3);
+
+INSERT INTO how_it_works_steps (audience, step_number, title, description, type, route)
+SELECT 'employers', 4, 'Build your team', 'Move promising candidates through your hiring workflow and connect directly.', 'connect', '/employer/applications'
+WHERE NOT EXISTS (SELECT 1 FROM how_it_works_steps WHERE audience = 'employers' AND step_number = 4);
 
 COMMIT;

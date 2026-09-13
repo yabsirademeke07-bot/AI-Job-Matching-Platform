@@ -1,4 +1,4 @@
-const nameRegex = /^[a-zA-Z\s]{3,60}$/;
+const nameRegex = /^[\p{L}\s]{3,60}$/u;
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>/?]).{6,32}$/;
 const phoneRegex = /^\+?[0-9]{9,15}$/;
