@@ -172,7 +172,7 @@ export default function Navbar() {
 
         {/* BRAND LOGO - ሙሉ በሙሉ ወደ ግራ */}
         <Link to="/" className="flex items-center gap-2.5 group shrink-0">
-          <div className="h-10 w-10 overflow-hidden rounded-full border border-slate-200 bg-slate-950 shadow-md shadow-blue-500/10 transition-transform duration-200 group-hover:scale-[1.02] sm:h-12 sm:w-12">
+          <div className="h-16 w-16 overflow-hidden rounded-full border border-slate-200 bg-slate-950 shadow-md shadow-blue-500/10 transition-transform duration-200 group-hover:scale-[1.02] sm:h-20 sm:w-20">
             <img
               src={siteLogo}
               alt="AI Job Match"
