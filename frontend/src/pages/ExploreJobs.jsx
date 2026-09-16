@@ -1578,7 +1578,78 @@ export default function ExploreJobsPage() {
       benefits: Array.isArray(job.benefits) ? job.benefits : [],
     };
   };
+
+  const readActiveSeekerProfile = () => {
+    try {
+      const stored = localStorage.getItem('activeSeekerProfile');
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const getJobMatchSnapshot = (job, profile) => {
+    if (!profile) {
+      return {
+        score: Math.max(20, Number(job.aiMatchScore || 0) || 76),
+        reason: 'Complete your profile to unlock a more accurate match score.',
+        breakdown: { skills: 80, title: 80, education: 80, experience: 80, location: 80, workplace: 80 },
+      };
+    }
+
+    const normalizeSkillText = (value) => String(value || '').toLowerCase().trim().replace(/nodejs/g, 'node.js').replace(/[^a-z0-9+#.]+/g, ' ');
+    const skillNames = Array.isArray(profile.skills)
+      ? profile.skills.map((skill) => normalizeSkillText(typeof skill === 'string' ? skill : (skill?.skill_name || skill?.name))).filter(Boolean)
+      : [];
+    const profileSkillSet = new Set(skillNames);
+    const rawJobSkills = Array.isArray(job.required_skills)
+      ? job.required_skills
+      : Array.isArray(job.tags)
+        ? job.tags
+        : String(job.required_skills || '').split(',');
+    const jobSkills = [...new Set(rawJobSkills.map((skill) => String(skill).trim()).filter(Boolean))];
+    const matchedSkills = jobSkills.filter((skill) => profileSkillSet.has(normalizeSkillText(skill)));
+    const skillScore = jobSkills.length ? matchedSkills.length / jobSkills.length : 0.7;
+
+    const candidateTitle = normalizeSkillText(profile.headline || profile.preferredJob || profile.professional_title || '');
+    const jobTitle = normalizeSkillText(job.title || '');
+    const titleTokens = new Set(jobTitle.split(/\s+/).filter((token) => token.length > 2));
+    const candidateTokens = new Set(candidateTitle.split(/\s+/).filter((token) => token.length > 2));
+    const titleScore = titleTokens.size ? [...titleTokens].filter((token) => candidateTokens.has(token)).length / titleTokens.size : 0.7;
+
+    const requiredEducation = String(job.education || 'Any').toLowerCase();
+    const profileEducation = String(profile.educationLevel || profile.education || '').toLowerCase();
+    const educationScore = requiredEducation.includes('any') || !requiredEducation ? 1 : profileEducation.includes(requiredEducation) || (requiredEducation.includes('bachelor') && profileEducation.includes('degree')) ? 1 : 0.75;
+
+    const profileExperience = String(profile.experienceLevel || '').toLowerCase();
+    const jobExperience = String(job.experienceLevel || '').toLowerCase();
+    const experienceScore = !jobExperience || jobExperience.includes('all') ? 1 : profileExperience.includes(jobExperience.split('(')[0].trim()) || (profileExperience.includes('senior') && jobExperience.includes('junior')) ? 1 : 0.8;
+
+    const profileLocation = String(profile.location || profile.city || '').toLowerCase();
+    const jobLocation = String(job.locationValue || job.location || '').toLowerCase();
+    const locationScore = !jobLocation || jobLocation.includes('remote') ? 1 : profileLocation.includes(jobLocation) || jobLocation.includes(profileLocation) ? 1 : 0.7;
+
+    const profileSetup = String(profile.preferredWorkSetup || profile.workSetup || '').toLowerCase();
+    const workplaceScore = !job.workplace || job.workplace.toLowerCase() === 'all' ? 1 : profileSetup.includes(String(job.workplace).toLowerCase()) || profileSetup.includes('any') || profileSetup.includes('flexible') ? 1 : 0.8;
+
+    const weighted = skillScore * 0.46 + titleScore * 0.18 + educationScore * 0.14 + experienceScore * 0.12 + locationScore * 0.06 + workplaceScore * 0.04;
+    const score = Math.max(20, Math.min(98, Math.round(weighted * 100)));
+
+    return {
+      score,
+      reason: matchedSkills.length ? `${matchedSkills.slice(0, 3).join(', ')} align closely with this role.` : 'This role matches your background and experience well.',
+      breakdown: {
+        skills: Math.round(skillScore * 100),
+        title: Math.round(titleScore * 100),
+        education: Math.round(educationScore * 100),
+        experience: Math.round(experienceScore * 100),
+        location: Math.round(locationScore * 100),
+        workplace: Math.round(workplaceScore * 100),
+      },
+    };
+  };
   const [jobs, setJobs] = useState([]);
+  const [activeSeekerProfile, setActiveSeekerProfile] = useState(readActiveSeekerProfile);
   const [search, setSearch] = useState("");
   useEffect(() => {
     let mounted = true;
@@ -1592,17 +1663,28 @@ export default function ExploreJobsPage() {
         setJobs(rawJobs.map(normalizeApiJob));
       } catch (error) {
         console.error("Unable to load jobs from API:", error);
-        if (mounted) {
-          setJobs(initialJobs);
-        }
+        if (mounted) setJobs([]);
       }
     };
 
     loadJobs();
+    const syncProfile = () => setActiveSeekerProfile(readActiveSeekerProfile());
+    window.addEventListener('storage', syncProfile);
     return () => {
       mounted = false;
+      window.removeEventListener('storage', syncProfile);
     };
   }, []);
+
+  const jobsWithDynamicMatch = useMemo(() => jobs.map((job) => {
+    const match = getJobMatchSnapshot(job, activeSeekerProfile);
+    return {
+      ...job,
+      aiMatchScore: match.score,
+      matchReason: match.reason,
+      matchBreakdown: match.breakdown,
+    };
+  }), [jobs, activeSeekerProfile]);
 
   // Pagination / Limit State
   const INITIAL_VISIBLE_COUNT = 4;
@@ -1766,7 +1848,7 @@ export default function ExploreJobsPage() {
   const filteredJobs = useMemo(() => {
     const query = search.toLowerCase().trim();
 
-    const result = jobs.filter((job) => {
+    const result = jobsWithDynamicMatch.filter((job) => {
       if (query) {
         const matchesTitle = job.title.toLowerCase().includes(query);
         const matchesCompany = job.company.toLowerCase().includes(query);
@@ -1845,7 +1927,7 @@ export default function ExploreJobsPage() {
 
     return sorted;
   }, [
-    jobs,
+    jobsWithDynamicMatch,
     search,
     selectedSector,
     selectedLocation,

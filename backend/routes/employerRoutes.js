@@ -71,7 +71,7 @@ router.delete('/employer/jobs/:jobId', controller.deleteJob);
 router.post('/jobs', controller.createJob);
 router.put('/jobs/:jobId', controller.updateJob);
 router.patch('/jobs/:jobId/publish', (req, res) => { req.body.status = 'published'; return controller.setJobStatus(req, res); });
-router.patch('/jobs/:jobId/schedule', (req, res) => { req.body.status = 'published'; return controller.setJobStatus(req, res); });
+router.patch('/jobs/:jobId/schedule', (req, res) => { req.body.status = 'scheduled'; return controller.setJobStatus(req, res); });
 router.patch('/applications/:applicationId/shortlist', (req, res) => { req.body.status = 'shortlisted'; return controller.updateApplicationStatus(req, res); });
 router.patch('/applications/:applicationId/hire', (req, res) => { req.body.status = 'hired'; return controller.updateApplicationStatus(req, res); });
 router.patch('/applications/:applicationId/reject', (req, res) => { req.body.status = 'rejected'; return controller.updateApplicationStatus(req, res); });

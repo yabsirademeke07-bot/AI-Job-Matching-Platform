@@ -10,7 +10,7 @@ async function getJobs(req, res) {
 
 async function getJob(req, res) {
   try {
-    const job = await jobModel.findJobById(req.params.id);
+    const job = await jobModel.findPublicJobById(req.params.id);
     if (!job) return res.status(404).json({ success: false, message: 'Job not found.' });
     return res.json({ success: true, job });
   } catch (error) {
@@ -23,7 +23,7 @@ async function createJob(req, res) {
   if (!title || !description || !jobType) return res.status(400).json({ success: false, message: 'title, description, and jobType are required.' });
   try {
     const job = await jobModel.createJob({ ...req.body, employerId: req.user.id });
-    return res.status(201).json({ success: true, status: 'pending', message: 'Job submitted for admin approval.', job });
+    return res.status(201).json({ success: true, status: 'pending_approval', message: 'Job submitted for admin approval.', job });
   } catch (error) {
     return res.status(500).json({ success: false, message: 'Unable to create job.' });
   }

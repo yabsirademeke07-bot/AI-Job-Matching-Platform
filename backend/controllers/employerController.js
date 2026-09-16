@@ -22,10 +22,42 @@ const normalizeOptionalDate = (value) => {
   return text && text.length >= 8 ? text : null;
 };
 
+const normalizeApplicationStatus = (value) => {
+  const raw = String(value ?? '').trim().toLowerCase();
+  if (!raw) return 'pending';
+
+  const aliases = {
+    pending: 'pending',
+    applied: 'pending',
+    submitted: 'pending',
+    new: 'pending',
+    review: 'review',
+    'under-review': 'review',
+    'under review': 'review',
+    'in-review': 'review',
+    'in review': 'review',
+    shortlisted: 'shortlisted',
+    interview: 'interviewed',
+    interviewed: 'interviewed',
+    'interview-scheduled': 'interviewed',
+    'interview scheduled': 'interviewed',
+    hired: 'hired',
+    accepted: 'hired',
+    offer: 'hired',
+    rejected: 'rejected',
+    declined: 'rejected',
+    withdrawn: 'rejected',
+  };
+
+  return aliases[raw] || raw;
+};
+
 const normalizeJobPayload = (body = {}) => ({
   title: normalizeNullableText(body.title || body.jobTitle) || '',
   description: normalizeNullableText(body.description) || 'No description provided.',
-  status: normalizeNullableText(body.status) || 'draft',
+  status: ['draft', 'scheduled'].includes(String(body.status || '').toLowerCase())
+    ? String(body.status).toLowerCase()
+    : 'pending_approval',
   category: normalizeNullableText(body.category || body.department || body.sector || body.categoryName) || 'General',
   job_type: normalizeNullableText(body.job_type || body.jobType || body.job_type_name) || 'full-time',
   experience_level: normalizeNullableText(body.experience_level || body.experienceLevel || body.experience_level_name) || 'mid-level',
@@ -51,6 +83,7 @@ const normalizeJobPayload = (body = {}) => ({
   years_of_experience_min: normalizeOptionalNumber(body.years_of_experience_min ?? body.yearsOfExperienceMin) ?? 0,
   years_of_experience_max: normalizeOptionalNumber(body.years_of_experience_max ?? body.yearsOfExperienceMax) ?? 20,
   application_deadline: normalizeOptionalDate(body.application_deadline ?? body.applicationDeadline ?? body.deadline),
+  scheduled_date: normalizeOptionalDate(body.scheduled_date ?? body.scheduledDate ?? body.scheduledAt),
   is_urgent: Boolean(body.is_urgent || body.isUrgent),
   required_skills: normalizeList(body.required_skills ?? body.requiredSkills ?? body.skills).map((skill) => typeof skill === 'string' ? { skill_name: skill } : skill),
   required_languages: normalizeList(body.required_languages || body.requiredLanguages).map((language) => typeof language === 'string' ? { language_name: language } : language),
@@ -176,7 +209,7 @@ exports.getDashboardOverview = async (req, res) => {
       [req.user.id]
     );
     const [appStats] = await db.execute(
-      `SELECT COUNT(*) AS totalApplicants, SUM(CASE WHEN status IN ('applied', 'new') THEN 1 ELSE 0 END) AS newApplicants, SUM(CASE WHEN status IN ('shortlisted', 'interview') THEN 1 ELSE 0 END) AS shortlistedOrInterviewing, AVG(COALESCE(ai_match_score, 0)) AS avgAiMatch FROM applications a JOIN jobs j ON j.id = a.job_id WHERE j.employer_id = ?`,
+      `SELECT COUNT(*) AS totalApplicants, SUM(CASE WHEN status IN ('pending', 'applied', 'new') THEN 1 ELSE 0 END) AS newApplicants, SUM(CASE WHEN status IN ('review', 'shortlisted', 'interview', 'interviewed') THEN 1 ELSE 0 END) AS shortlistedOrInterviewing, AVG(COALESCE(ai_match_score, 0)) AS avgAiMatch FROM applications a JOIN jobs j ON j.id = a.job_id WHERE j.employer_id = ?`,
       [req.user.id]
     );
     const [recentApplications] = await db.execute(
@@ -191,8 +224,8 @@ exports.getDashboardOverview = async (req, res) => {
       activeJobs: Number(jobStats[0]?.activeJobs || 0),
       totalJobs: Number(jobStats[0]?.totalJobs || 0),
       totalApplicants: Number(appStats[0]?.totalApplicants || 0),
-      newApplicants: Number(appStats[0]?.newApplicants || 0),
-      shortlistedOrInterviewing: Number(appStats[0]?.shortlistedOrInterviewing || 0),
+      newApplicants: normalizePipelineCounts(appStats[0]?.newApplicants),
+      shortlistedOrInterviewing: normalizePipelineCounts(appStats[0]?.shortlistedOrInterviewing),
       avgAiMatch: Number(appStats[0]?.avgAiMatch || 0),
     };
 
@@ -228,15 +261,15 @@ exports.createJob = async (req, res) => {
     const job = normalizeJobPayload(req.body);
     if (!job.title || !job.description || !job.application_deadline) return res.status(400).json({ success: false, message: 'Title, description, and application deadline are required.' });
     await connection.beginTransaction();
-    const slug = `${job.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}-${Date.now()}`;
-    const [result] = await connection.execute(`INSERT INTO jobs (employer_id, title, slug, description, category, job_type, experience_level, location, country, city, work_mode, gender_preference, salary_min, salary_max, currency, salary_period, is_salary_negotiable, benefits, required_education, years_of_experience_min, years_of_experience_max, application_deadline, is_urgent, status, published_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [req.user.id, job.title, slug, job.description, job.category, job.job_type, job.experience_level, job.location, job.country, job.city, job.work_mode, job.gender_preference, job.salary_min, job.salary_max, job.currency, job.salary_period, job.is_salary_negotiable, job.benefits, job.required_education, job.years_of_experience_min, job.years_of_experience_max, job.application_deadline, job.is_urgent, job.status || 'draft', job.status === 'published' ? new Date() : null]);
+    const requiredSkills = job.required_skills.map((skill) => skill.skill_name).filter(Boolean).join(', ');
+    const [result] = await connection.execute(`INSERT INTO jobs (employer_id, title, description, category, job_type, vacancy_level, location, work_mode, gender_preference, salary_min, salary_max, compensation_currency, application_deadline, scheduled_date, required_skills, status, is_approved) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE)`, [req.user.id, job.title, job.description, job.category, job.job_type, job.experience_level, job.location, job.work_mode, job.gender_preference, job.salary_min, job.salary_max, job.currency, job.application_deadline, job.scheduled_date, requiredSkills, job.status]);
     const jobId = result.insertId;
     for (const skill of job.required_skills) if (skill.skill_name) await connection.execute('INSERT INTO job_required_skills (job_id, skill_name, proficiency_level, is_must_have) VALUES (?, ?, ?, ?)', [jobId, String(skill.skill_name).trim(), skill.proficiency_level || 'intermediate', Boolean(skill.is_must_have)]);
     for (const language of job.required_languages) if (language.language_name) await connection.execute('INSERT INTO job_required_languages (job_id, language_name, proficiency, is_must_have) VALUES (?, ?, ?, ?)', [jobId, String(language.language_name).trim(), language.proficiency || 'professional-working', Boolean(language.is_must_have)]);
     await connection.execute('INSERT INTO job_analytics (job_id) VALUES (?)', [jobId]);
     await connection.commit();
     const [rows] = await connection.execute('SELECT * FROM jobs WHERE id = ?', [jobId]);
-    return res.status(201).json({ success: true, ...rows[0], jobId, id: jobId, slug });
+    return res.status(201).json({ success: true, ...rows[0], job: rows[0], jobId, id: jobId });
   } catch (error) {
     await connection.rollback();
     const sqlError = error?.sqlMessage || error?.message || 'Unknown database error';
@@ -248,15 +281,77 @@ exports.createJob = async (req, res) => {
 
 exports.getEmployerJobs = async (req, res) => {
   try {
-    const [jobs] = await db.execute(`SELECT j.*, COUNT(a.id) applicantsCount, SUM(a.status = 'shortlisted') shortlisted FROM jobs j LEFT JOIN applications a ON a.job_id = j.id WHERE j.employer_id = ? GROUP BY j.id ORDER BY j.created_at DESC`, [req.user.id]);
-    return res.json({ success: true, jobs });
-  } catch (error) { return res.status(500).json({ success: false, message: 'Failed to retrieve jobs.' }); }
+    const currentUserId = req.user?.id || req.user?.userId || req.user?.user_id || req.user?.sub;
+    if (!currentUserId) return res.status(401).json({ success: false, message: 'Authenticated employer id is missing.' });
+
+    const [rows] = await db.execute(
+      `SELECT
+         j.id,
+         j.employer_id AS employerId,
+         j.title,
+         j.description,
+         j.category,
+         j.sector,
+         j.job_type,
+         j.vacancy_level,
+         j.location,
+         j.work_mode,
+         j.gender_preference,
+         j.salary_min,
+         j.salary_max,
+         j.compensation_currency,
+         j.application_deadline,
+         j.scheduled_date,
+         j.required_skills,
+         j.status,
+         j.is_approved AS isApproved,
+         j.rejection_reason AS rejectionReason,
+         j.reviewed_at AS reviewedAt,
+         j.reviewed_by AS reviewedBy,
+         j.created_at,
+         j.updated_at,
+         COUNT(a.id) AS applicantsCount,
+         COALESCE(SUM(a.status = 'shortlisted'), 0) AS shortlisted
+       FROM jobs j
+       LEFT JOIN applications a ON a.job_id = j.id
+       WHERE j.employer_id = ?
+       GROUP BY j.id
+       ORDER BY j.created_at DESC`,
+      [currentUserId]
+    );
+
+    const jobs = rows.map((job) => ({
+      ...job,
+      employer_id: job.employerId,
+      employerId: String(job.employerId),
+      isApproved: Boolean(job.isApproved),
+      sector: job.sector || job.category || 'General',
+      category: job.category || job.sector || 'General',
+      experienceLevel: job.vacancy_level || 'mid-level',
+      level: job.vacancy_level || 'mid-level',
+      type: job.job_type || 'full-time',
+      workMode: job.work_mode || 'hybrid',
+      salary: job.salary_min || job.salary_max
+        ? `${job.compensation_currency || 'ETB'} ${job.salary_min || ''}${job.salary_min && job.salary_max ? ' - ' : ''}${job.salary_max || ''}`
+        : 'Negotiable',
+      deadline: job.application_deadline || 'No deadline',
+      createdAt: job.created_at,
+      applicantsCount: Number(job.applicantsCount || 0),
+      applicantCount: Number(job.applicantsCount || 0),
+    }));
+
+    console.log(`Employer ${currentUserId}: found ${jobs.length} jobs.`);
+    return res.json({ success: true, count: jobs.length, jobs, data: jobs });
+  } catch (error) {
+    console.error('Failed to retrieve employer jobs:', error.message);
+    return res.status(500).json({ success: false, message: 'Failed to retrieve jobs.', error: error.message });
+  }
 };
 
 exports.updateJob = async (req, res) => {
   const job = normalizeJobPayload(req.body);
   try {
-    const [result] = await db.execute(`UPDATE jobs SET title = ?, description = ?, category = ?, job_type = ?, experience_level = ?, location = ?, work_mode = ?, gender_preference = ?, salary_min = ?, salary_max = ?, currency = ?, application_deadline = ? WHERE id = ? AND employer_id = ?`, [job.title, job.description, job.category, job.job_type, job.experience_level, job.location, job.work_mode, job.gender_preference, job.salary_min, job.salary_max, job.currency, job.application_deadline, req.params.jobId, req.user.id]);
+    const [result] = await db.execute(`UPDATE jobs SET title = ?, description = ?, category = ?, job_type = ?, vacancy_level = ?, location = ?, work_mode = ?, gender_preference = ?, salary_min = ?, salary_max = ?, compensation_currency = ?, application_deadline = ? WHERE id = ? AND employer_id = ?`, [job.title, job.description, job.category, job.job_type, job.experience_level, job.location, job.work_mode, job.gender_preference, job.salary_min, job.salary_max, job.currency, job.application_deadline, req.params.jobId, req.user.id]);
     if (!result.affectedRows) return res.status(404).json({ success: false, message: 'Job not found.' });
     const [rows] = await db.execute('SELECT * FROM jobs WHERE id = ?', [req.params.jobId]);
     return res.json({ success: true, ...rows[0] });
@@ -264,11 +359,14 @@ exports.updateJob = async (req, res) => {
 };
 
 exports.setJobStatus = async (req, res) => {
-  const status = req.body.status === 'paused' ? 'closed' : (req.body.status || 'published');
+  const requestedStatus = String(req.body.status === 'paused' ? 'closed' : (req.body.status || 'pending_approval')).toLowerCase();
+  const status = ['draft', 'scheduled', 'closed'].includes(requestedStatus) ? requestedStatus : 'pending_approval';
   try {
-    const [result] = await db.execute("UPDATE jobs SET status = ?, published_at = CASE WHEN ? = 'published' THEN COALESCE(published_at, NOW()) ELSE published_at END, closed_at = CASE WHEN ? = 'closed' THEN NOW() ELSE closed_at END WHERE id = ? AND employer_id = ?", [status, status, status, req.params.jobId, req.user.id]);
+    const scheduledDate = req.body.scheduledDate || req.body.scheduled_date || null;
+    const [result] = await db.execute('UPDATE jobs SET status = ?, scheduled_date = COALESCE(?, scheduled_date), is_approved = FALSE, approved_at = NULL, approved_by = NULL WHERE id = ? AND employer_id = ?', [status, scheduledDate, req.params.jobId, req.user.id]);
     if (!result.affectedRows) return res.status(404).json({ success: false, message: 'Job not found.' });
-    return res.json({ success: true, status });
+    const [rows] = await db.execute('SELECT * FROM jobs WHERE id = ? AND employer_id = ?', [req.params.jobId, req.user.id]);
+    return res.json({ success: true, status, job: rows[0] || null, ...(rows[0] || {}) });
   } catch (error) { return res.status(500).json({ success: false, message: 'Failed to update job status.' }); }
 };
 
@@ -349,13 +447,13 @@ exports.saveTalentPoolCandidate = async (req, res) => {
 };
 
 exports.updateApplicationStatus = async (req, res) => {
-  const validStatuses = ['applied', 'under-review', 'shortlisted', 'interview', 'hired', 'rejected'];
-  const requestedStatus = String(req.body.status || '').trim().toLowerCase();
+  const validStatuses = ['pending', 'review', 'shortlisted', 'interviewed', 'hired', 'rejected'];
+  const requestedStatus = normalizeApplicationStatus(req.body.status || 'pending');
 
   if (!validStatuses.includes(requestedStatus)) {
     return res.status(400).json({
       success: false,
-      message: 'Invalid application status. Use one of: Applied, Under Review, Shortlisted, Interview, Hired, Rejected.',
+      message: 'Invalid application status. Use one of: Pending, Review, Shortlisted, Interviewed, Hired, Rejected.',
     });
   }
 
@@ -376,6 +474,11 @@ exports.updateApplicationStatus = async (req, res) => {
   }
 };
 
+const normalizePipelineCounts = (value) => {
+  if (value === null || value === undefined || value === '') return 0;
+  return Number(value) || 0;
+};
+
 exports.getEmployerPipeline = async (req, res) => {
   try {
     const [rows] = await db.execute(
@@ -383,7 +486,7 @@ exports.getEmployerPipeline = async (req, res) => {
               u.full_name AS name, u.email, u.phone,
               j.title AS jobTitle,
               c.file_url AS resumeUrl,
-              a.seeker_cover_letter AS coverLetter
+              NULL AS coverLetter
        FROM applications a
        JOIN jobs j ON j.id = a.job_id
        JOIN users u ON u.id = a.job_seeker_id

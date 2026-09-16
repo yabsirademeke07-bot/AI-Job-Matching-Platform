@@ -66,6 +66,28 @@ select {
   color: #475569;
 }
 
+.seeker-dashboard-main .dashboard-match-panel {
+  font-size: 1rem;
+}
+
+.seeker-dashboard-main .dashboard-match-panel h2 {
+  font-size: 1.5rem;
+}
+
+.seeker-dashboard-main .dashboard-match-panel h3 {
+  font-size: 1.125rem;
+}
+
+.seeker-dashboard-main .dashboard-match-panel button {
+  min-height: 3rem;
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.seeker-dashboard-main .dashboard-match-panel article {
+  padding: 1.5rem;
+}
+
 .badge {
   border: 1px solid #d0e5f5;
   border-radius: 9999px;

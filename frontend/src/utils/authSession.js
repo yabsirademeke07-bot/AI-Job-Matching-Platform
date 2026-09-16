@@ -98,6 +98,6 @@ export const persistSession = ({ token, user }) => {
 };
 
 export const clearActiveSession = () => {
-  [ACTIVE_TOKEN_KEY, ACTIVE_USER_KEY, 'currentUser', 'job_matching_auth_user'].forEach((key) => localStorage.removeItem(key));
+  [ACTIVE_TOKEN_KEY, ACTIVE_USER_KEY, 'currentUser', 'job_matching_auth_user', 'hasEnteredDashboard'].forEach((key) => localStorage.removeItem(key));
   ['token', 'user'].forEach((key) => sessionStorage.removeItem(key));
 };

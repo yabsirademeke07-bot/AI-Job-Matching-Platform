@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LogIn,
   LogOut,
+  User,
   LayoutDashboard,
   Menu,
   UserPlus,
@@ -33,8 +34,32 @@ export default function Navbar() {
   // የ Role ዓይነቶች ማረጋገጫ
   const role = (user?.role || user?.userType || '').toString().trim().toLowerCase().replace(/[\s-]+/g, '_');
   const isEmployer = ['employer', 'company', 'recruiter'].includes(role);
-  const isAdmin = role === 'admin';
+  const isAdmin = ['admin', 'super_admin'].includes(role);
+  const isSeeker = ['job_seeker', 'seeker', 'jobseeker', 'user', 'employee'].includes(role);
   const isSeekerDashboardPage = ['/dashboard', '/seeker-dashboard', '/seekerDashboard'].includes(location.pathname);
+
+  const employerOnboardingPaths = ['/employer-info', '/employee-info', '/employer/onboarding', '/employer/setup'];
+  const isEmployerOnboardingPage = employerOnboardingPaths.includes(location.pathname)
+    || location.pathname.startsWith('/employer-info/')
+    || location.pathname.startsWith('/employee-info/')
+    || location.pathname.startsWith('/employer/onboarding/')
+    || location.pathname.startsWith('/employer/setup/');
+
+  const isEmployerDashboardRoute = location.pathname === '/employer-dashboard'
+    || location.pathname.startsWith('/employer-dashboard/')
+    || location.pathname === '/employer/workspace'
+    || location.pathname.startsWith('/employer/workspace/')
+    || location.pathname === '/employer/dashboard'
+    || location.pathname.startsWith('/employer/dashboard/');
+
+  const isInsideDashboard = isEmployerDashboardRoute
+    || location.pathname.startsWith('/seeker')
+    || location.pathname.startsWith('/admin')
+    || location.pathname.includes('dashboard');
+  const hasEnteredDashboard = isAuthenticated && (
+    localStorage.getItem('hasEnteredDashboard') === 'true'
+    || isInsideDashboard
+  );
   const displayName = user?.name || user?.full_name || user?.email || 'User';
   const avatarUrl = user?.avatarUrl || user?.avatar_url;
 
@@ -59,7 +84,7 @@ export default function Navbar() {
     }
 
     if (employerRoles.includes(role)) {
-      return !Boolean(storedUser.companyVerified || storedUser.companyProfileComplete);
+      return !(storedUser.companyVerified || storedUser.companyProfileComplete);
     }
 
     return false;
@@ -67,6 +92,7 @@ export default function Navbar() {
 
   const getRoleLabel = (roleName) => {
     const normalized = String(roleName || '').toLowerCase().replace(/[\s-]+/g, '_');
+    if (['admin', 'super_admin'].includes(normalized)) return 'Admin';
     if (['employer', 'company', 'recruiter'].includes(normalized)) return 'Employer';
     if (['job_seeker', 'seeker', 'jobseeker', 'user', 'employee'].includes(normalized)) return 'Job Seeker';
     return 'Job Seeker';
@@ -165,6 +191,27 @@ export default function Navbar() {
     return () => document.removeEventListener('mousedown', closeProfileMenu);
   }, []);
 
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const dashboardPaths = [
+      '/employer/dashboard',
+      '/employer-dashboard',
+      '/dashboard',
+      '/seeker-dashboard',
+    ];
+
+    const hasReachedDashboard = dashboardPaths.includes(location.pathname)
+      || location.pathname.startsWith('/employer/dashboard/')
+      || location.pathname.startsWith('/employer-dashboard/')
+      || location.pathname.startsWith('/seeker-dashboard/')
+      || location.pathname.startsWith('/dashboard/');
+
+    if (hasReachedDashboard) {
+      localStorage.setItem('hasEnteredDashboard', 'true');
+    }
+  }, [isAuthenticated, location.pathname]);
+
   return (
     <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-sm transition-all w-full">
       {/* Container: px-4 sm:px-6 lg:px-8 በመጠቀም ወደ ግራ እና ቀኝ ዳር እንዲጠጋ ተደርጓል */}
@@ -235,17 +282,24 @@ export default function Navbar() {
           </Link>
 
           {/* ተጠቃሚው Login ካደረገ የሚታዩ Dashboard Links */}
-          {isAuthenticated && isEmployer && (
-            <Link to="/employer-dashboard" className="text-xs font-extrabold bg-indigo-50 text-indigo-600 px-3.5 py-1.5 rounded-full hover:bg-indigo-100 transition flex items-center gap-2 shrink-0">
+          {!isEmployerOnboardingPage && isAuthenticated && isEmployer && hasEnteredDashboard && (
+            <Link to="/employer/dashboard" className="text-xs font-extrabold bg-indigo-50 text-indigo-600 px-3.5 py-1.5 rounded-full hover:bg-indigo-100 transition flex items-center gap-2 shrink-0">
               <LayoutDashboard className="w-4 h-4" />
               <span>Employer dashboard</span>
             </Link>
           )}
 
-          {isAuthenticated && isAdmin && (
+          {isAuthenticated && isAdmin && hasEnteredDashboard && (
             <Link to="/admin-dashboard" className="text-xs font-extrabold bg-purple-50 text-purple-600 px-3.5 py-1.5 rounded-full hover:bg-purple-100 transition flex items-center gap-2 shrink-0">
               <LayoutDashboard className="w-4 h-4" />
               <span>Admin dashbord</span>
+            </Link>
+          )}
+
+          {isAuthenticated && isSeeker && hasEnteredDashboard && (
+            <Link to="/seeker-dashboard" className="text-xs font-extrabold bg-blue-50 text-blue-600 px-3.5 py-1.5 rounded-full hover:bg-blue-100 transition flex items-center gap-2 shrink-0">
+              <LayoutDashboard className="w-4 h-4" />
+              <span>Seeker Dashboard</span>
             </Link>
           )}
         </nav>
@@ -279,6 +333,10 @@ export default function Navbar() {
                   <button type="button" onClick={() => { setProfileMenuOpen(false); handleResumeProgress(); }} className="mt-1 flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-bold text-slate-700 transition hover:bg-blue-50 hover:text-blue-700" role="menuitem">
                     <Play className="h-4 w-4" />
                     <span>Continue Profile Setup</span>
+                  </button>
+                  <button type="button" onClick={() => { setProfileMenuOpen(false); navigate('/profile/me'); }} className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-bold text-slate-700 transition hover:bg-blue-50 hover:text-blue-700" role="menuitem">
+                    <User className="h-4 w-4" />
+                    <span>My Profile</span>
                   </button>
                   <button type="button" onClick={handleSwitchRole} className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-bold text-slate-700 transition hover:bg-slate-100" role="menuitem">
                     <Repeat className="h-4 w-4" />
@@ -369,9 +427,9 @@ export default function Navbar() {
             </Link>
 
             {/* Mobile User Consoles */}
-            {isAuthenticated && isEmployer && (
+            {!isEmployerOnboardingPage && isAuthenticated && isEmployer && hasEnteredDashboard && (
               <Link
-                to="/employer-dashboard"
+                to="/employer/dashboard"
                 onClick={() => setIsMobileMenuOpen(false)}
                 className="mx-2 my-1 px-4 py-3 rounded-xl text-sm font-extrabold bg-indigo-50 text-indigo-600 flex items-center gap-2"
               >
@@ -380,7 +438,7 @@ export default function Navbar() {
               </Link>
             )}
 
-            {isAuthenticated && isAdmin && (
+            {isAuthenticated && isAdmin && hasEnteredDashboard && (
               <Link
                 to="/admin-dashboard"
                 onClick={() => setIsMobileMenuOpen(false)}

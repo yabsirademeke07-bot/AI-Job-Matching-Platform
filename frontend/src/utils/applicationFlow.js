@@ -65,7 +65,20 @@ export function hasCompletedProfile() {
 export function hasCompletedCv() {
   const resume = readStoredObject('seekerResume', {});
   const user = readStoredObject('user', {});
-  return Boolean(resume.fileName || user.cvFileName);
+  const profile = readStoredObject('activeSeekerProfile', {});
+  return Boolean(resume.fileName || user.cvFileName || user.cv_status === 'uploaded' || profile.cvStatus === 'uploaded' || profile.cv_status === 'uploaded');
+}
+
+export function getCvStatus() {
+  const user = readStoredObject('user', {});
+  const profile = readStoredObject('activeSeekerProfile', {});
+  const status = user.cv_status || user.cvStatus || profile.cv_status || profile.cvStatus;
+  if (status === 'uploaded' || status === 'skipped') return status;
+  return hasCompletedCv() ? 'uploaded' : 'none';
+}
+
+export function hasSatisfiedCvPreference() {
+  return getCvStatus() !== 'none';
 }
 
 export function getApplicationRequirements(overrides = {}) {
@@ -82,6 +95,8 @@ export function getApplicationRequirements(overrides = {}) {
     otpVerified,
     role: effectiveRole,
     hasResume: hasCompletedCv(),
+    cvStatus: getCvStatus(),
+    hasSatisfiedCvPreference: hasSatisfiedCvPreference(),
     profileCompleted: hasCompletedProfile(),
   };
 }
@@ -132,7 +147,8 @@ export function getNextOnboardingStep() {
   if (!role || role === 'pending') return '/select-role';
   if (!seekerRoles.includes(role)) return '/';
   if (user.onboardingRoleSelected === false && (!user.role || user.role === 'pending')) return '/select-role';
-  if (user.has_cv === false || user.onboarding_step === 'cv_upload' || user.onboardingCvUploaded === false || (!user.onboardingCvUploaded && !hasCompletedCv())) return '/seeker/upload-cv';
+  if (user.cv_status === 'skipped') return user.onboarding_step_completed === 'completed' ? '/dashboard' : '/seeker/personal-info';
+  if (user.has_cv === false || user.cv_status === 'none' || user.onboarding_step === 'cv_upload' || user.onboardingCvUploaded === false || (!user.onboardingCvUploaded && !hasSatisfiedCvPreference())) return '/seeker/upload-cv';
   if (user.onboardingProfileCompleted === false || (!user.onboardingProfileCompleted && !hasCompletedProfile())) return '/seeker/personal-info';
   if (!hasCompletedProfile()) return '/seeker/personal-info';
   return '/dashboard';
@@ -159,7 +175,7 @@ export function continueApplicationFlow(navigate, details = {}) {
     navigate(`/select-role?jobId=${encodeURIComponent(pendingJobId)}`);
     return 'ROLE_REQUIRED';
   }
-  if (!requirements.hasResume) {
+  if (!requirements.hasSatisfiedCvPreference) {
     navigate(`/cv-upload?jobId=${encodeURIComponent(pendingJobId)}`);
     return 'RESUME_REQUIRED';
   }
@@ -203,6 +219,17 @@ export function beginApplication(jobId, job, navigate, details = {}) {
 export function saveMockApplication(application) {
   const applications = [application, ...getMockApplications().filter((item) => String(item.jobId) !== String(application.jobId))];
   localStorage.setItem(APPLICATIONS_KEY, JSON.stringify(applications));
+  try {
+    const employerApplications = JSON.parse(localStorage.getItem('employerApplications') || '[]');
+    const nextEmployerApplications = [
+      application,
+      ...(Array.isArray(employerApplications) ? employerApplications : []).filter((item) => String(item.jobId || item.job_id) !== String(application.jobId)),
+    ];
+    localStorage.setItem('employerApplications', JSON.stringify(nextEmployerApplications));
+    window.dispatchEvent(new CustomEvent('job-matching:updated', { detail: { key: 'employerApplications' } }));
+  } catch {
+    // Keep the seeker application available even if the optional local employer cache is malformed.
+  }
   clearPendingApplication();
   return applications;
 }

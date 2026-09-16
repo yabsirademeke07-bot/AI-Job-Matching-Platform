@@ -75,6 +75,30 @@ const formatSalaryRange = (minimum, maximum) => {
   return minimum || '';
 };
 
+const normalizeList = (value, objectKeys = []) => {
+  let parsed = value;
+  if (typeof parsed === 'string') {
+    try { parsed = JSON.parse(parsed); } catch { parsed = parsed.split(','); }
+  }
+  if (!Array.isArray(parsed)) return [];
+  return parsed.map((item) => {
+    if (typeof item === 'string') return item.trim();
+    if (!item || typeof item !== 'object') return '';
+    return String(objectKeys.map((key) => item[key]).find(Boolean) || '').trim();
+  }).filter(Boolean);
+};
+
+const isValidEthiopianPhone = (value) => {
+  const digits = String(value || '').replace(/\D/g, '');
+  return /^(?:09\d{8}|07\d{8}|2519\d{8}|2517\d{8})$/.test(digits);
+};
+
+const cleanCvLocation = (value) => {
+  const location = String(value || '').trim();
+  if (!location || /@/.test(location) || /\+?251\s*9\d{8}/.test(location) || /\b09\d{8}\b/.test(location)) return '';
+  return location;
+};
+
 const isRecognizableJobTitle = (value) => {
   const title = String(value || '').trim().toLowerCase();
   if (title.length < 3 || !/[a-z]/i.test(title)) return false;
@@ -104,11 +128,10 @@ const validateProfile = (data) => {
   }
 
   const phone = String(data.phone || '').replace(/[\s()-]/g, '');
-  const phoneDigits = String(phone || '').replace(/\D/g, '');
   if (!phone) {
     errors.phone = 'Phone number is required.';
-  } else if (!/^\+?[0-9\s()-]+$/.test(phone) || phoneDigits.length < 9 || phoneDigits.length > 10) {
-    errors.phone = 'Please enter a valid phone number (e.g. 0952748973).';
+  } else if (!/^\+?[0-9\s()-]+$/.test(phone) || !isValidEthiopianPhone(phone)) {
+    errors.phone = 'Please enter a valid Ethiopian phone number (e.g. 0952748973 or +251 952748973).';
   }
 
   if (!String(data.city || '').trim()) errors.city = 'City or location is required.';
@@ -150,8 +173,8 @@ const Profile = ({ userData = {}, onContinue }) => {
   const { savedProfile, savedUser, pendingCv } = getInitialState();
   const cvName = pendingCv?.fullName || pendingCv?.full_name || pendingCv?.name || [pendingCv?.firstName, pendingCv?.lastName].filter(Boolean).join(' ') || '';
   const cvNameParts = cvName.trim().split(/\s+/).filter(Boolean);
-  const cvLocation = String(pendingCv?.location || '').split(',').map((part) => part.trim()).filter(Boolean);
-  const cvSkills = Array.isArray(pendingCv?.skills) ? pendingCv.skills.map((skill) => typeof skill === 'string' ? skill : skill?.skill_name).filter(Boolean).filter((skill) => !excludedProfileSkills.has(skill.trim().toLowerCase())) : [];
+  const cvLocation = cleanCvLocation(pendingCv?.location).split(',').map((part) => part.trim()).filter(Boolean);
+  const cvSkills = Array.isArray(pendingCv?.skills) ? pendingCv.skills.map((skill) => typeof skill === 'string' ? skill : skill?.skill_name || skill?.name).filter(Boolean).filter((skill) => !excludedProfileSkills.has(skill.trim().toLowerCase())) : [];
   const cvEducation = Array.isArray(pendingCv?.education) ? pendingCv.education.map((item, index) => ({ id: item.id || `cv-education-${index}`, university: item.school_name || item.institution || '', degree: item.degree || '', department: item.field_of_study || '', graduationYear: item.graduationYear || (item.end_date ? String(item.end_date).slice(0, 4) : '') })) : [];
   const cvExperience = Array.isArray(pendingCv?.experience) ? pendingCv.experience.map((item, index) => ({ id: item.id || `cv-experience-${index}`, company: item.company_name || item.company || '', position: item.job_title || item.role || '', startDate: item.start_date ? String(item.start_date).slice(0, 7) : '', endDate: item.end_date ? String(item.end_date).slice(0, 7) : (item.duration || ''), responsibilities: Array.isArray(item.responsibilities) ? item.responsibilities.join('\n') : item.description || '' })) : [];
 
@@ -164,10 +187,10 @@ const Profile = ({ userData = {}, onContinue }) => {
     (pendingCv ? cvExperience : savedProfile?.experience) || []
   );
 
-  const [skills, setSkills] = useState(pendingCv ? cvSkills : (savedProfile?.skills || []).filter((skill) => !excludedProfileSkills.has(String(skill).trim().toLowerCase())));
+  const [skills, setSkills] = useState(pendingCv ? cvSkills : normalizeList(savedProfile?.skills, ['skill_name', 'name']).filter((skill) => !excludedProfileSkills.has(skill.toLowerCase())));
   const [newSkill, setNewSkill] = useState('');
 
-  const [languages, setLanguages] = useState(savedProfile?.languages || []);
+  const [languages, setLanguages] = useState(normalizeList(savedProfile?.languages, ['language_name', 'language', 'name']));
   const [newLang, setNewLang] = useState('');
 
   const [isSaved, setIsSaved] = useState(false);
@@ -245,8 +268,8 @@ const Profile = ({ userData = {}, onContinue }) => {
         const savedLanguages = parseJson(saved.languages, result.languages);
         if (Array.isArray(savedEducation)) setEducationList(savedEducation);
         if (Array.isArray(savedExperience)) setExperienceList(savedExperience);
-        if (Array.isArray(savedSkills)) setSkills(savedSkills);
-        if (Array.isArray(savedLanguages)) setLanguages(savedLanguages);
+        setSkills(normalizeList(savedSkills, ['skill_name', 'name']).filter((skill) => !excludedProfileSkills.has(skill.toLowerCase())));
+        setLanguages(normalizeList(savedLanguages, ['language_name', 'language', 'name']));
         localStorage.setItem('userProfile', JSON.stringify({ ...JSON.parse(localStorage.getItem('userProfile') || '{}'), ...saved }));
       })
       .catch(() => {})
@@ -393,8 +416,8 @@ const Profile = ({ userData = {}, onContinue }) => {
       setProfileData((current) => ({ ...current, ...nextData }));
       if (Array.isArray(existingProfile.education)) setEducationList(existingProfile.education);
       if (Array.isArray(existingProfile.experience)) setExperienceList(existingProfile.experience);
-      if (Array.isArray(existingProfile.skills)) setSkills(existingProfile.skills.filter((skill) => !excludedProfileSkills.has(String(skill).trim().toLowerCase())));
-      if (Array.isArray(existingProfile.languages)) setLanguages(existingProfile.languages);
+      setSkills(normalizeList(existingProfile.skills, ['skill_name', 'name']).filter((skill) => !excludedProfileSkills.has(skill.toLowerCase())));
+      setLanguages(normalizeList(existingProfile.languages, ['language_name', 'language', 'name']));
       showSuccess('Existing information loaded.');
     } catch (error) {
       showError('No saved profile information is available yet.');
@@ -417,6 +440,7 @@ const Profile = ({ userData = {}, onContinue }) => {
     setErrors({});
     const fullProfile = {
       ...profileData,
+      verified: true,
       userId: user?.id || user?.userId || user?.user_id || JSON.parse(localStorage.getItem('user') || '{}')?.id || JSON.parse(localStorage.getItem('user') || '{}')?.userId,
       fullName: String(profileData.fullName || '').trim(),
       expectedSalary: Number(String(profileData.salaryExpectation || '').match(salaryRangePattern)?.[1]?.replace(/,/g, '')) || null,
@@ -434,8 +458,9 @@ const Profile = ({ userData = {}, onContinue }) => {
     
     const persistLocally = () => {
       localStorage.setItem('userProfile', JSON.stringify(fullProfile));
+      localStorage.setItem('activeSeekerProfile', JSON.stringify(fullProfile));
       const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
-      const updatedUser = { ...currentUser, ...user, full_name: fullProfile.fullName, email: fullProfile.email, phone: fullProfile.phone, onboardingProfileCompleted: true, profileComplete: true, profileCompleted: true, onboardingCvUploaded: true, cvSkipped: false };
+      const updatedUser = { ...currentUser, ...user, full_name: fullProfile.fullName, email: fullProfile.email, phone: fullProfile.phone, onboardingProfileCompleted: true, profileComplete: true, profileCompleted: true, is_profile_complete: true, onboardingCvUploaded: currentUser.cv_status === 'uploaded', cv_status: currentUser.cv_status || 'uploaded', cvSkipped: currentUser.cv_status === 'skipped', onboarding_step: 'completed', onboarding_step_completed: 'completed' };
       localStorage.setItem('user', JSON.stringify(updatedUser));
       const token = localStorage.getItem('token');
       if (user || token) setSession({ token, user: updatedUser });
@@ -464,7 +489,9 @@ const Profile = ({ userData = {}, onContinue }) => {
       scrollToSuccess();
     } catch (error) {
       persistLocally();
-      const errorMessage = 'Unable to save personal information . Please try again.';
+      const errorMessage = error.message && error.message !== 'Profile API unavailable'
+        ? error.message
+        : 'Unable to save personal information. Please try again.';
       setErrors({});
       showError(errorMessage);
       setIsSaved(false);
@@ -513,7 +540,7 @@ const Profile = ({ userData = {}, onContinue }) => {
       </section>
 
       <section className="h-auto min-w-0 w-full overflow-x-hidden bg-[#f8fbfd] lg:w-[55%]">
-      <div className="information-page profile-readable mx-auto min-w-0 max-w-3xl space-y-7 overflow-x-hidden px-5 py-8 pb-12 leading-relaxed sm:px-8 lg:px-10">
+      <div className="information-page profile-readable mx-auto min-w-0 max-w-3xl space-y-0 overflow-x-hidden px-5 py-8 pb-12 leading-relaxed sm:px-8 lg:px-10">
       <h1 className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">Personal Profile Setup</h1>
       {isSaved && <div id="success-banner" role="status" className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-bold text-emerald-700"><CheckCircle2 className="h-5 w-5" />your profile saved succussfuly</div>}
       <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
@@ -522,8 +549,8 @@ const Profile = ({ userData = {}, onContinue }) => {
       </div>
 
       {/* Personal Information */}
-      <div className="space-y-6 rounded-3xl border border-slate-200/80 bg-white p-6 shadow-xl transition-shadow duration-300 hover:shadow-2xl dark:border-slate-800 dark:bg-white sm:p-10">
-        <div className="flex items-center justify-between border-b pb-3">
+      <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-xl transition-shadow duration-300 hover:shadow-2xl dark:border-slate-800 dark:bg-white sm:p-10">
+        <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-bold text-slate-800">Personal Information</h3>
           <button type="button" onClick={useExistingInformation} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-black uppercase tracking-wide text-slate-700 transition hover:bg-slate-50 hover:text-blue-700">Use Existing Information</button>
         </div>
@@ -610,8 +637,8 @@ const Profile = ({ userData = {}, onContinue }) => {
 
       </div>
 
-      <div className="space-y-6 rounded-3xl border border-slate-200/80 bg-white p-6 shadow-xl transition-shadow duration-300 hover:shadow-2xl dark:border-slate-800 dark:bg-white sm:p-10">
-        <div className="border-b border-slate-200 pb-3">
+      <div className="mt-0 rounded-3xl border border-slate-200/80 bg-white p-6 shadow-xl transition-shadow duration-300 hover:shadow-2xl dark:border-slate-800 dark:bg-white sm:p-10">
+        <div className="mb-4">
           <h3 className="text-lg font-bold text-slate-800">Job Preferences</h3>
           <p className="mt-1 text-sm text-slate-500">These details help us calculate accurate job matches.</p>
         </div>
@@ -660,8 +687,8 @@ const Profile = ({ userData = {}, onContinue }) => {
           <div className="md:col-span-2 pt-5">
             <label className={labelClass}>Skills <span className="italic font-normal text-slate-500">(Optional)</span></label>
             <div className="mb-3 flex flex-wrap gap-2">
-              {skills.map((skill) => (
-                <span key={skill} className="flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
+              {skills.map((skill, index) => (
+                <span key={`${skill}-${index}`} className="flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
                   {skill}
                 </span>
               ))}
@@ -674,8 +701,8 @@ const Profile = ({ userData = {}, onContinue }) => {
           <div className="md:col-span-2 pt-5">
             <label className={labelClass}>Languages <span className="italic font-normal text-slate-500">(Optional)</span></label>
             <div className="mb-3 flex flex-wrap gap-2">
-              {languages.map((lang) => (
-                <span key={lang} className="flex items-center gap-1.5 rounded-full border border-purple-200 bg-purple-100 px-3 py-1 text-xs font-semibold text-purple-700">
+              {languages.map((lang, index) => (
+                <span key={`${lang}-${index}`} className="flex items-center gap-1.5 rounded-full border border-purple-200 bg-purple-100 px-3 py-1 text-xs font-semibold text-purple-700">
                   {lang}
                 </span>
               ))}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AlertCircle, Loader2, RefreshCw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -58,21 +58,6 @@ export default function MyProfile() {
   useEffect(() => {
     load();
   }, [load]);
-  const completion = useMemo(() => {
-    const checks = [
-      profile.name,
-      profile.email,
-      profile.headline,
-      profile.phone,
-      profile.location,
-      profile.bio,
-      profile.education?.length,
-      Object.values(profile.skills || {}).some((values) => values?.length),
-      profile.experience?.length,
-      profile.certifications?.length,
-    ];
-    return Math.round((checks.filter(Boolean).length / checks.length) * 100);
-  }, [profile]);
   const saveEditor = async (data) => {
     try {
       const key = editor.type;
@@ -216,7 +201,6 @@ export default function MyProfile() {
         )}
         <ProfileHeader
           profile={profile}
-          completion={completion}
           onEdit={() => navigate("/profile/edit")}
           onAvatarChange={handleAvatar}
         />

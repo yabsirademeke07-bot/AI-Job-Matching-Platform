@@ -129,7 +129,11 @@ const CvUploader = ({
 
     saveResumeToStorage(file);
     const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
-    const updatedUser = { ...currentUser, onboardingCvUploaded: true };
+    const updatedUser = { ...currentUser, onboardingCvUploaded: true, cv_status: 'uploaded', cvSkipped: false, onboarding_step: 'personal_info', onboarding_step_completed: 'manual_profile' };
+    if (analyzedData) {
+      const activeProfile = { ...analyzedData, verified: true, skills: analyzedData.skills || [], education: analyzedData.education || [], experience: analyzedData.experience || [] };
+      localStorage.setItem('activeSeekerProfile', JSON.stringify(activeProfile));
+    }
     localStorage.setItem('user', JSON.stringify(updatedUser));
     localStorage.setItem('currentUser', JSON.stringify(updatedUser));
     setIsParsing(false);

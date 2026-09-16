@@ -37,15 +37,21 @@ const validateRealEmail = async (email) => {
     try {
       mxRecords = await dns.resolveMx(domain);
     } catch (error) {
-      if (!['ECONNREFUSED', 'ETIMEOUT', 'SERVFAIL'].includes(error.code)) throw error;
-      dns.setServers(['8.8.8.8', '1.1.1.1']);
-      mxRecords = await dns.resolveMx(domain);
+      if (['ENOTFOUND', 'NXDOMAIN'].includes(error.code)) {
+        return { isValid: false, message: 'Email domain does not exist.' };
+      }
+
+      // DNS can be unavailable on local networks. Do not reject valid users
+      // merely because the server cannot complete an MX lookup.
+      console.warn(`Email MX lookup skipped for ${domain}:`, error.code || error.message);
+      return { isValid: true, cleanEmail };
     }
     if (!mxRecords || mxRecords.length === 0) {
       return { isValid: false, message: 'Email domain does not exist or cannot receive emails.' };
     }
-  } catch {
-    return { isValid: false, message: 'Email domain does not exist or cannot receive emails.' };
+  } catch (error) {
+    console.warn(`Email domain validation skipped for ${domain}:`, error.code || error.message);
+    return { isValid: true, cleanEmail };
   }
 
   return { isValid: true, cleanEmail };

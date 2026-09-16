@@ -57,6 +57,66 @@ const NAME_PATTERN = /(?:^|\n)\s*[A-Z][A-Za-z'\-]+(?:\s+[A-Z][A-Za-z'\-]+){1,3}\
 const CV_REJECTION_MARKERS = /\b(invoice|receipt|bill|bank statement|utility bill|purchase order)\b/i;
 const NON_CV_DOCUMENT_MARKERS = /\b(course\s+(outline|description|material|handout)|course\s+syllabus|syllabus|learning\s+outcomes?|assignments?|semester|lecture\s+notes?|chapter\s+\d+|table\s+of\s+contents?)\b/i;
 
+function hasMeaningfulValue(value) {
+  if (typeof value === 'string') return value.trim().length > 0 && value.trim().toLowerCase() !== 'not specified';
+  if (typeof value === 'number') return true;
+  if (Array.isArray(value)) return value.length > 0;
+  return Boolean(value && typeof value === 'object' && Object.keys(value).length > 0);
+}
+
+function validateCandidateProfile(data = {}) {
+  const input = data && typeof data === 'object' ? data : {};
+  const name = typeof input.name === 'string' ? input.name.trim() : '';
+  const email = typeof input.email === 'string' ? input.email.trim() : '';
+  const location = typeof input.location === 'string' ? input.location.trim() : '';
+  const hasName = name.length >= 2;
+  const hasEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const hasLocation = location.length > 0;
+  const hasEducation = hasMeaningfulValue(input.education);
+  const hasExperience = typeof input.experience === 'number'
+    || typeof input.yearsOfExperience === 'number'
+    || hasMeaningfulValue(input.experience);
+  const hasQualification = hasEducation || hasExperience;
+  const errors = [];
+  if (!hasName) errors.push('Valid candidate name is required.');
+  if (!hasEmail) errors.push('Valid email address is required.');
+  if (!hasQualification) errors.push('Either Education history OR Work Experience is required.');
+  const result = {
+    isValid: errors.length === 0,
+    errors,
+    data: { ...input, hasName, hasEmail, hasLocation, hasEducation, hasExperience, hasQualification },
+  };
+  console.log('CV VALIDATION AUDIT:', {
+    inputData: input,
+    checks: { hasName, hasEmail, hasLocation, hasEducation, hasExperience, hasQualification },
+    isValid: result.isValid,
+  });
+  return result;
+}
+
+function inferValidationFields(source, lower) {
+  const lines = source.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const labeledName = source.match(/(?:^|\n)\s*(?:name|full\s*name)\s*[:\-]\s*([^\n]+)/i)?.[1]?.trim();
+  const email = source.match(EMAIL_PATTERN)?.[0] || '';
+  const name = labeledName || lines.find((line) => {
+    const cleaned = line.replace(/[|,:].*$/, '').trim();
+    return cleaned.length >= 2
+      && !EMAIL_PATTERN.test(line)
+      && !PHONE_PATTERN.test(line)
+      && !/^(resume|curriculum vitae|cv|education|experience|skills?|summary|profile|contact|location|address)\b/i.test(cleaned);
+  }) || '';
+  const location = source.match(/(?:location|address|city|country)\s*[:\-]\s*([^\n]+)/i)?.[1]?.trim()
+    || lines.find((line) => LOCATION_WORDS.some((place) => line.toLowerCase().includes(place)))
+    || '';
+  return {
+    name,
+    email,
+    location,
+    education: EDUCATION_PATTERN.test(lower) ? { detected: true } : null,
+    experience: EXPERIENCE_PATTERN.test(lower) ? { detected: true } : null,
+  };
+}
+
 function looksLikeCv(text) {
   const source = normalizeExtractedText(text);
   const lower = source.toLowerCase();
@@ -71,25 +131,27 @@ function looksLikeCv(text) {
 function validateCvContent(text) {
   const source = normalizeExtractedText(text);
   const lower = source.toLowerCase();
-  const email = source.match(EMAIL_PATTERN)?.[0] || '';
   const wordCount = source.split(/\s+/).filter(Boolean).length;
+  const fields = inferValidationFields(source, lower);
+  const profileValidation = validateCandidateProfile(fields);
   const sections = {
     experience: EXPERIENCE_PATTERN.test(lower),
     education: EDUCATION_PATTERN.test(lower),
     skills: SKILLS_PATTERN.test(lower),
-    contact: Boolean(email || PHONE_PATTERN.test(source) || CONTACT_LABEL_PATTERN.test(lower) || NAME_PATTERN.test(source)),
+    contact: Boolean(fields.email || PHONE_PATTERN.test(source) || CONTACT_LABEL_PATTERN.test(lower) || fields.name),
   };
-  const hasProfessionalHistory = sections.experience || sections.education;
   const rejectedDocument = NON_CV_DOCUMENT_MARKERS.test(lower) || CV_REJECTION_MARKERS.test(lower);
-  const tooShallow = wordCount < 20;
-  const valid = Boolean(source) && !rejectedDocument && sections.contact && hasProfessionalHistory && !tooShallow;
+  const hasPhoneContact = PHONE_PATTERN.test(source);
+  const hasContact = profileValidation.data.hasEmail || hasPhoneContact;
+  const hasQualification = profileValidation.data.hasQualification || sections.skills;
+  const valid = Boolean(source) && !rejectedDocument && profileValidation.data.hasName && hasContact && hasQualification;
   let message = null;
   if (!source) message = 'We could not read any text from this document. Please upload a text-based PDF or DOCX, not a blank or image-only file.';
-  else if (tooShallow) message = 'We could not read enough text from this document. Please make sure the CV is not blank or image-only.';
-  else if (!sections.contact) message = 'We could not find contact details in this document. Please include an email address or phone number.';
-  else if (!hasProfessionalHistory || rejectedDocument) message = CV_CONTENT_ERROR;
-  const needsAiReview = !valid && !rejectedDocument && wordCount >= 20 && sections.contact && hasProfessionalHistory;
-  return { valid, needsAiReview, sections, wordCount, normalizedText: source, message };
+  else if (!profileValidation.data.hasName) message = 'We could not find a valid candidate name in this document.';
+  else if (!hasContact) message = 'We could not find an email address or phone number in this document.';
+  else if (!hasQualification || rejectedDocument) message = CV_CONTENT_ERROR;
+  const needsAiReview = !valid && !rejectedDocument && wordCount >= 10 && sections.contact && hasQualification;
+  return { valid, needsAiReview, sections, wordCount, normalizedText: source, message, errors: profileValidation.errors };
 }
 
 function normalizeSkill(value) {
@@ -241,7 +303,7 @@ function calculateRealJobMatch(candidateSkills = [], activeJobs = []) {
 }
 
 function normalizeMatchText(value) {
-  return String(value || '').toLowerCase().replace(/nodejs/g, 'node.js').replace(/[^a-z0-9+#.]+/g, ' ').trim();
+  return String(value || '').toLowerCase().replace(/nodejs/g, 'node.js').replace(/[^a-z0-9+#.]+/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 function toSkillNames(skills) {
@@ -252,6 +314,86 @@ function parseJobSkills(value) {
   if (Array.isArray(value)) return value;
   if (!value) return [];
   try { return JSON.parse(value); } catch { return String(value).split(','); }
+}
+
+function scoreEducationMatcher(candidateEducation, requiredEducation) {
+  if (!requiredEducation || String(requiredEducation).toLowerCase() === 'any') return 1;
+  const required = String(requiredEducation).toLowerCase();
+  const candidateText = normalizeMatchText(candidateEducation || '');
+  const rank = { 'high-school': 1, secondary: 1, 'associate': 2, 'diploma': 2, 'certificate': 2, 'bachelor': 3, 'degree': 3, 'master': 4, 'postgraduate': 4, 'phd': 5 };
+  const requiredRank = rank[required] || Object.keys(rank).find((level) => required.includes(level)) ? rank[Object.keys(rank).find((level) => required.includes(level))] : 0;
+  if (!requiredRank) return candidateText.includes(required) ? 1 : 0.2;
+  const bestCandidateRank = Object.keys(rank).reduce((best, level) => candidateText.includes(level) && rank[level] > best ? rank[level] : best, 0);
+  return requiredRank <= bestCandidateRank ? 1 : Math.max(0.2, 1 - (requiredRank - bestCandidateRank) * 0.25);
+}
+
+function scoreExperienceMatcher(candidateYears, jobExperience) {
+  const candidateText = normalizeMatchText(candidateYears || '');
+  const jobText = normalizeMatchText(jobExperience || '');
+  if (!jobText || jobText === 'all' || jobText.includes('any')) return 1;
+  const candidateValue = Number((candidateText.match(/(\d+(?:\.\d+)?)/) || [])[0] || 0);
+  const requiredValue = Number((jobText.match(/(\d+(?:\.\d+)?)/) || [])[0] || 0);
+  if (!requiredValue) return 1;
+  if (candidateValue) return candidateValue >= requiredValue ? 1 : Math.max(0.2, candidateValue / Math.max(requiredValue, 1));
+  return candidateText.includes('senior') || candidateText.includes('expert') ? 0.9 : 0.7;
+}
+
+function scoreLocationCompatibility(candidateLocation, jobLocation) {
+  if (!candidateLocation && !jobLocation) return 1;
+  const candidateText = normalizeMatchText(candidateLocation || '');
+  const jobText = normalizeMatchText(jobLocation || '');
+  if (!candidateText || !jobText) return 0.7;
+  if (jobText.includes('remote') || jobText.includes('international')) return candidateText.includes('remote') || candidateText.includes('ethiopia') || candidateText.includes('addis') ? 1 : 0.75;
+  if (candidateText.includes(jobText) || jobText.includes(candidateText)) return 1;
+  const cityMatch = ['addis ababa', 'addis', 'hawassa', 'bahir dar', 'dire dawa', 'adama', 'mekelle', 'bishoftu'].some((city) => candidateText.includes(city) && jobText.includes(city));
+  return cityMatch ? 1 : 0.5;
+}
+
+function scoreWorkModeCompatibility(candidateSetup, jobWorkMode) {
+  if (!candidateSetup || !jobWorkMode) return 1;
+  const candidate = normalizeMatchText(candidateSetup);
+  const job = normalizeMatchText(jobWorkMode);
+  if (job.includes('remote') && (candidate.includes('remote') || candidate.includes('hybrid'))) return 1;
+  if (job.includes('hybrid') && (candidate.includes('hybrid') || candidate.includes('remote') || candidate.includes('any'))) return 0.95;
+  if (job.includes('on-site') && candidate.includes('on-site')) return 1;
+  if (candidate.includes('any') || candidate.includes('flexible')) return 0.85;
+  return 0.7;
+}
+
+function buildJobMatchBreakdown(profile, job) {
+  const candidateSkillNames = toSkillNames(profile?.skills || []);
+  const requiredSkills = parseJobSkills(job.required_skills || job.requiredSkills || job.tags || []).map((skill) => normalizeSkill(typeof skill === 'string' ? skill : skill?.skill_name || skill?.name)).filter(Boolean);
+  const uniqueRequiredSkills = [...new Set(requiredSkills)];
+  const matchedSkills = uniqueRequiredSkills.filter((skill) => candidateSkillNames.has(skill));
+  const skillScore = uniqueRequiredSkills.length ? matchedSkills.length / uniqueRequiredSkills.length : 0.5;
+
+  const jobTitle = normalizeMatchText(job.title || '');
+  const profileTitle = normalizeMatchText(profile?.headline || profile?.preferredJob || profile?.professional_title || '');
+  const titleTokens = new Set(jobTitle.split(' ').filter((token) => token.length > 2));
+  const candidateTokens = new Set(profileTitle.split(' ').filter((token) => token.length > 2));
+  const titleScore = titleTokens.size ? [...titleTokens].filter((token) => candidateTokens.has(token)).length / titleTokens.size : 0.5;
+
+  const educationScore = scoreEducationMatcher(profile?.educationLevel || profile?.education || '', job.required_education || job.education || 'any');
+  const experienceScore = scoreExperienceMatcher(profile?.experienceLevel || profile?.experience || '', job.experienceLevel || '');
+  const locationScore = scoreLocationCompatibility(profile?.location || profile?.city || '', job.location || job.locationValue || '');
+  const workModeScore = scoreWorkModeCompatibility(profile?.preferredWorkSetup || profile?.workSetup || '', job.workplace || job.work_mode || '');
+
+  const weightedScore = skillScore * 0.46 + titleScore * 0.18 + educationScore * 0.14 + experienceScore * 0.12 + locationScore * 0.06 + workModeScore * 0.04;
+  const score = Math.max(20, Math.min(98, Math.round(weightedScore * 100)));
+
+  return {
+    score,
+    reason: matchedSkills.length ? `${matchedSkills.slice(0, 3).join(', ')} align with this opening.` : 'Strong role fit based on your profile and experience.',
+    breakdown: {
+      skills: Math.round(skillScore * 100),
+      title: Math.round(titleScore * 100),
+      education: Math.round(educationScore * 100),
+      experience: Math.round(experienceScore * 100),
+      location: Math.round(locationScore * 100),
+      workplace: Math.round(workModeScore * 100),
+    },
+    matchedSkills,
+  };
 }
 
 function calculateJobMatches(candidate, activeJobs = []) {
@@ -273,9 +415,14 @@ function calculateJobMatches(candidate, activeJobs = []) {
     const candidateTitleTokens = new Set(candidateTitle.split(' ').filter((token) => token.length > 2));
     const titleScore = jobTitleTokens.size ? [...jobTitleTokens].filter((token) => candidateTitleTokens.has(token)).length / jobTitleTokens.size : 0;
     const requiredEducation = String(job.required_education || 'any').toLowerCase();
-    const educationScore = requiredEducation === 'any' || (educationRank[requiredEducation] && Object.keys(educationRank).some((level) => educationRank[level] >= educationRank[requiredEducation] && candidateEducation.includes(level))) ? 1 : 0;
-    const score = Math.round((skillScore * 60 + titleScore * 25 + educationScore * 15) * 100) / 100;
-    return { ...job, required_skills: uniqueRequiredSkills, matched_skills: matchedSkills, match_breakdown: { skills: Math.round(skillScore * 100), title: Math.round(titleScore * 100), education: Math.round(educationScore * 100) }, match_score: score };
+    const educationScore = requiredEducation === 'any' ? 1 : (() => {
+      const neededLevel = Object.keys(educationRank).find((level) => requiredEducation.includes(level));
+      if (!neededLevel) return candidateEducation.includes(requiredEducation) ? 1 : 0.2;
+      const bestMatch = Object.keys(educationRank).reduce((best, level) => candidateEducation.includes(level) && educationRank[level] > best ? educationRank[level] : best, 0);
+      return educationRank[neededLevel] <= bestMatch ? 1 : Math.max(0.2, 1 - (educationRank[neededLevel] - bestMatch) * 0.25);
+    })();
+    const score = Math.max(20, Math.min(98, Math.round((skillScore * 60 + titleScore * 25 + educationScore * 15) * 100)));
+    return { ...job, required_skills: uniqueRequiredSkills, matched_skills: matchedSkills, match_breakdown: { skills: Math.round(skillScore * 100), title: Math.round(titleScore * 100), education: Math.round(educationScore * 100) }, match_score: score, aiMatchScore: score, matchReason: matchedSkills.length ? `${matchedSkills.slice(0, 3).join(', ')} align with this opening.` : 'This role is a strong fit based on your profile.' };
   }).sort((left, right) => right.match_score - left.match_score || left.id - right.id);
 }
 
@@ -315,4 +462,4 @@ async function classifyAndExtract(text) {
   return { ...local, ai_provider: 'fallback_parser', is_fallback: true };
 }
 
-module.exports = { extractText, classifyAndExtract, calculateScores, calculateRealJobMatch, calculateJobMatches, validateCvContent, CV_CONTENT_ERROR, localParse };
+module.exports = { extractText, classifyAndExtract, calculateScores, calculateRealJobMatch, calculateJobMatches, buildJobMatchBreakdown, validateCandidateProfile, validateCvContent, CV_CONTENT_ERROR, localParse };

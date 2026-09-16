@@ -222,7 +222,7 @@ function inputClass(dark) {
   return `min-h-11 w-full min-w-0 rounded-xl border px-3.5 py-3 text-sm font-medium text-slate-900 outline-none transition placeholder:font-medium placeholder:text-slate-500 focus:border-blue-600 focus:ring-4 focus:ring-blue-500/10 ${dark ? "border-slate-700 bg-slate-900 text-white placeholder:text-slate-400" : "border-slate-300 bg-white shadow-sm hover:border-slate-400"}`;
 }
 
-export default function EmployerWorkspace() {
+export default function EmployerWorkspace({ standalonePostJob = false }) {
   const { user, token, setSession, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -305,6 +305,11 @@ export default function EmployerWorkspace() {
     setToast({ message, type });
     toastTimeoutRef.current = window.setTimeout(() => setToast(null), 5000);
   };
+  useEffect(() => {
+    if (!location.state?.newlyPublished) return;
+    notify("Congratulations! Your vacancy has been successfully published.");
+    window.history.replaceState({}, document.title, window.location.href);
+  }, [location.state]);
   const validateJob = () => {
     const missing = [
       ["Job title", job.title],
@@ -409,7 +414,7 @@ export default function EmployerWorkspace() {
           api.get("/employer/onboarding"),
           api.get("/employer/interviews"),
           api.get("/employer/profile"),
-          api.get("/employer/my-jobs"),
+          api.get("/employer/jobs"),
         ]);
         console.log("--> [MY JOBS API RESPONSE]:", jobsResponse?.data);
         if (!mounted) return;
@@ -467,6 +472,24 @@ export default function EmployerWorkspace() {
       mounted = false;
     };
   }, [token]);
+  useEffect(() => {
+    let mounted = true;
+    const refreshJobs = async () => {
+      try {
+        const response = await api.get("/employer/jobs");
+        if (mounted) setJobs(response?.data?.jobs || response?.data || []);
+      } catch (error) {
+        console.warn("Unable to refresh employer jobs:", error);
+      }
+    };
+    window.addEventListener("focus", refreshJobs);
+    const intervalId = window.setInterval(refreshJobs, 10000);
+    return () => {
+      mounted = false;
+      window.removeEventListener("focus", refreshJobs);
+      window.clearInterval(intervalId);
+    };
+  }, [token]);
   const activeJobs = useMemo(
     () =>
       jobs.filter((job) =>
@@ -478,8 +501,10 @@ export default function EmployerWorkspace() {
   );
   const publishedJobs = useMemo(
     () =>
-      jobs.filter(
-        (job) => normalizeJobStatus(job.status) === "active",
+      jobs.filter((job) =>
+        ["active", "published", "pending", "pending_approval"].includes(
+          normalizeJobStatus(job.status),
+        ),
       ),
     [jobs],
   );
@@ -694,10 +719,11 @@ export default function EmployerWorkspace() {
         : await api.post("/jobs", payload);
       let savedJob = response.data;
       const savedId = savedJob.id || savedJob.jobId;
-      if (nextStatus === "published" || nextStatus === "scheduled")
+      if (nextStatus === "scheduled")
         savedJob = (
           await api.patch(`/employer/jobs/${savedId}/status`, {
-            status: nextStatus === "scheduled" ? "scheduled" : "published",
+            status: "scheduled",
+            scheduledDate: scheduledAt,
           })
         ).data;
       savedJob = { ...savedJob, id: savedJob.id || savedId };
@@ -708,16 +734,21 @@ export default function EmployerWorkspace() {
       setJob(blankJob);
       setEditingJobId(null);
       setWizard(1);
-      setActive("jobs");
+      setActive("overview");
+      navigate("/employer/dashboard", {
+        replace: true,
+        state: {
+          newlyPublished: true,
+          activeTab: "dashboard",
+        },
+      });
       notify(
         nextStatus === "published"
-          ? "Job published successfully"
+          ? "Job submitted for admin approval"
           : nextStatus === "scheduled"
             ? "Job scheduled successfully"
             : "Draft saved",
       );
-      if (nextStatus === "published")
-        confetti({ particleCount: 120, spread: 70, origin: { y: 0.65 } });
     } catch (error) {
       const serverMessage =
         error?.response?.data?.error ||
@@ -863,11 +894,31 @@ export default function EmployerWorkspace() {
       ? `Welcome, ${employeeName}`
       : stages.find(([id]) => id === active)?.[1] || "Dashboard";
   const companyName = company.company_name || user?.full_name || "Your Company";
+  const postWizardHeaders = {
+    1: {
+      title: "Create a New Job Vacancy",
+      subtitle:
+        "Define role responsibilities, required qualifications, and competitive compensation to attract top-tier candidates.",
+      icon: BriefcaseBusiness,
+    },
+    2: {
+      title: "Review the Candidate Experience",
+      subtitle:
+        "Check how your vacancy appears to applicants and refine the final messaging before publishing.",
+      icon: Search,
+    },
+    3: {
+      title: "Publish and Launch Your Role",
+      subtitle:
+        "Decide when to post, schedule the launch, or save the role as a draft for your next hiring push.",
+      icon: CheckCircle2,
+    },
+  };
 
-  const normalizeJobStatus = (statusValue) => {
+  function normalizeJobStatus(statusValue) {
     const value = String(statusValue || "draft").trim().toLowerCase();
     return value === "published" ? "active" : value;
-  };
+  }
 
   const getJobStatusClasses = (statusValue) => {
     const normalized = normalizeJobStatus(statusValue);
@@ -875,6 +926,9 @@ export default function EmployerWorkspace() {
     switch (normalized) {
       case "active":
         return "border border-emerald-200 bg-emerald-50 text-emerald-700";
+      case "pending":
+      case "pending_approval":
+        return "border border-amber-200 bg-amber-50 text-amber-700";
       case "paused":
         return "border border-amber-200 bg-amber-50 text-amber-700";
       case "draft":
@@ -1098,19 +1152,21 @@ export default function EmployerWorkspace() {
   return (
     <>
       <div className={`min-h-screen max-w-full overflow-x-hidden ${shell}`}>
-        <EmployerHeader
-          currentTabTitle={title}
-          breadcrumb={active === "overview" ? "Home / Dashboard" : `Home / ${title}`}
-          user={user}
-          unreadNotificationsCount={0}
-          onToggleSidebar={() => setSidebarOpen((current) => !current)}
-          onSearchClick={() => notify("Global search is ready for implementation.")}
-          onOpenNotifications={() => setActive("notifications")}
-          onOpenMessages={() => setActive("messages")}
-          onLogout={handleHeaderLogout}
-        />
+        {active !== "post" && (
+          <EmployerHeader
+            currentTabTitle={title}
+            breadcrumb={active === "overview" ? "Home / Dashboard" : `Home / ${title}`}
+            user={user}
+            unreadNotificationsCount={0}
+            onToggleSidebar={() => setSidebarOpen((current) => !current)}
+            onSearchClick={() => notify("Global search is ready for implementation.")}
+            onOpenNotifications={() => setActive("notifications")}
+            onOpenMessages={() => setActive("messages")}
+            onLogout={handleHeaderLogout}
+          />
+        )}
         <div className="flex min-w-0">
-          {sidebarOpen && (
+          {!standalonePostJob && sidebarOpen && (
             <button
               type="button"
               aria-label="Close navigation"
@@ -1118,16 +1174,18 @@ export default function EmployerWorkspace() {
               className="fixed inset-0 z-40 bg-slate-950/40 lg:hidden"
             />
           )}
-          <EmployerSidebar
-            active={active}
-            onSelect={selectStage}
-            onLogout={handleLogout}
-            applicationsCount={applications.length}
-            isOpen={sidebarOpen}
-            onClose={() => setSidebarOpen(false)}
-            stages={stages}
-          />
-          <main className="min-w-0 max-w-full flex-1 overflow-x-hidden bg-slate-50/50 p-3 sm:p-6 lg:p-8">
+          {!standalonePostJob && (
+            <EmployerSidebar
+              active={active}
+              onSelect={selectStage}
+              onLogout={handleLogout}
+              applicationsCount={applications.length}
+              isOpen={sidebarOpen}
+              onClose={() => setSidebarOpen(false)}
+              stages={stages}
+            />
+          )}
+          <main className={`min-w-0 max-w-full flex-1 overflow-x-hidden bg-slate-50/50 ${standalonePostJob ? "p-3 sm:p-6 lg:p-10" : "p-3 sm:p-6 lg:p-8"}`}>
             <div className="mx-auto max-w-7xl">
               {active === "overview" ? (
                 <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -1434,6 +1492,14 @@ export default function EmployerWorkspace() {
               {active === "post" && (
                 <div className="grid gap-6 xl:grid-cols-[1.25fr_.75fr]">
                   <div className={`rounded-2xl border p-6 shadow-sm ${card}`}>
+                    <div className="mb-8 text-center sm:text-left">
+                      <h1 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">
+                        {postWizardHeaders[wizard]?.title}
+                      </h1>
+                      <p className="mt-1 max-w-2xl text-sm text-slate-500">
+                        {postWizardHeaders[wizard]?.subtitle}
+                      </p>
+                    </div>
                     <div className="mb-6 flex items-center gap-2">
                       {["Job Information", "Live Preview", "Publish"].map(
                         (label, index) => (
@@ -1453,13 +1519,14 @@ export default function EmployerWorkspace() {
                     </div>
                     {wizard === 1 && (
                       <div className="grid gap-5 md:grid-cols-2">
-                        <Field label="Job Title">
+                        <Field label="Job Position / Role Title">
                           <input
                             className={inputClass(dark)}
                             value={job.title}
                             onChange={(e) =>
                               setJob({ ...job, title: e.target.value })
                             }
+                            placeholder="Senior Frontend Developer"
                           />
                         </Field>
                         <Field label="Sector">
@@ -1529,6 +1596,7 @@ export default function EmployerWorkspace() {
                             onChange={(e) =>
                               setJob({ ...job, location: e.target.value })
                             }
+                            placeholder="Addis Ababa, Ethiopia"
                           />
                         </Field>
                         <Field label="Gender Preference">
@@ -1564,6 +1632,7 @@ export default function EmployerWorkspace() {
                             onChange={(e) =>
                               setJob({ ...job, salary_min: e.target.value })
                             }
+                            placeholder="25000"
                           />
                         </Field>
                         <Field label="Maximum Salary">
@@ -1574,6 +1643,7 @@ export default function EmployerWorkspace() {
                             onChange={(e) =>
                               setJob({ ...job, salary_max: e.target.value })
                             }
+                            placeholder="40000"
                           />
                         </Field>
                         <Field label="Deadline">
@@ -1611,6 +1681,7 @@ export default function EmployerWorkspace() {
                               onChange={(e) =>
                                 setJob({ ...job, description: e.target.value })
                               }
+                              placeholder="Describe the role, responsibilities, required skills, and what success looks like in this position."
                             />
                             <button
                               type="button"
@@ -1643,10 +1714,7 @@ export default function EmployerWorkspace() {
                     )}
                     {wizard === 3 && (
                       <div className="rounded-3xl border border-blue-200 bg-gradient-to-br from-blue-50 via-white to-indigo-50 p-8 shadow-sm">
-                        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/20">
-                          <CheckCircle2 className="h-7 w-7" />
-                        </div>
-                        <h3 className="mt-4 text-2xl font-black text-slate-900">
+                        <h3 className="text-2xl font-black text-slate-900">
                           Ready to publish?
                         </h3>
                         <p className="mx-auto mt-2 max-w-lg text-sm text-slate-600">
@@ -1688,7 +1756,19 @@ export default function EmployerWorkspace() {
                           </div>
                         </div>
 
-                        <div className="mt-6 flex flex-wrap justify-center gap-3">
+                        <div className="mt-6 flex flex-wrap justify-center gap-3" />
+                      </div>
+                    )}
+                    <div className="mt-8 flex items-center justify-between gap-3">
+                      <button
+                        onClick={() => wizard === 1 ? navigate("/employer-info") : setWizard((value) => value - 1)}
+                        className="rounded-xl border px-4 py-2 text-sm font-bold disabled:opacity-30"
+                      >
+                        Back
+                      </button>
+
+                      {wizard === 3 && (
+                        <div className="ml-auto flex flex-wrap justify-end gap-3">
                           <button
                             onClick={() => saveJob("draft")}
                             className="rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-700 shadow-sm transition-all hover:border-slate-400"
@@ -1704,34 +1784,32 @@ export default function EmployerWorkspace() {
                               const scheduledDate = `${scheduleDraft.date}T${scheduleDraft.time || "00:00"}`;
                               saveJob("scheduled", scheduledDate);
                             }}
-                            className="rounded-xl bg-amber-500 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-amber-500/20 transition-all hover:bg-amber-600"
+                            className="rounded-xl bg-[var(--brand-soft)] px-4 py-3 text-sm font-bold text-[var(--brand-deep)] shadow-sm shadow-[var(--brand-primary)]/10 transition-all hover:bg-[var(--brand-soft-hover)]"
                           >
                             Schedule Post
                           </button>
                           <button
                             onClick={() => saveJob("published")}
-                            className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition-all hover:bg-blue-700"
+                            className="rounded-xl bg-[var(--brand-soft)] px-4 py-3 text-sm font-bold text-[var(--brand-deep)] shadow-sm shadow-[var(--brand-primary)]/10 transition-all hover:bg-[var(--brand-soft-hover)]"
                           >
                             Publish Job Now
                           </button>
                         </div>
-                      </div>
-                    )}
-                    <div className="mt-8 flex justify-between">
-                      <button
-                        disabled={wizard === 1}
-                        onClick={() => setWizard((value) => value - 1)}
-                        className="rounded-xl border px-4 py-2 text-sm font-bold disabled:opacity-30"
-                      >
-                        Back
-                      </button>
+                      )}
+
                       {wizard < 3 && (
-                        <button
-                          onClick={() => setWizard((value) => value + 1)}
-                          className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white"
-                        >
-                          Continue <ChevronRight className="h-4 w-4" />
-                        </button>
+                        <div className="ml-auto">
+                          <button
+                            onClick={() => {
+                              if (wizard === 1 && !validateJob()) return;
+                              localStorage.setItem("employerJobDraft", JSON.stringify(job));
+                              setWizard((value) => value + 1);
+                            }}
+                            className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white"
+                          >
+                            Continue <ChevronRight className="h-4 w-4" />
+                          </button>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -1794,7 +1872,7 @@ export default function EmployerWorkspace() {
                         label: "Total jobs",
                         value: jobs.length,
                         tone: "text-slate-900",
-                        note: jobs.length > 0 ? `${jobs.length} roles published` : "No active listings",
+                        note: jobs.length > 0 ? `${jobs.length} roles in My Jobs` : "No job posts yet",
                       },
                       {
                         label: "Live / Open",
@@ -1958,25 +2036,46 @@ export default function EmployerWorkspace() {
                                         </div>
                                       </td>
                                       <td className="px-4 py-4 text-center">
-                                        <div className="inline-flex flex-wrap justify-center gap-1.5 rounded-2xl border border-slate-200 bg-slate-50 p-1.5">
-                                          <span className="rounded-xl bg-blue-100 px-2.5 py-1 text-[10px] font-bold text-blue-700" title="Total Applicants">
-                                            {totalApplicants} Total
-                                          </span>
-                                          <span className="rounded-xl bg-amber-100 px-2.5 py-1 text-[10px] font-bold text-amber-700" title="Pending / New Applicants">
-                                            {pendingCount} New
-                                          </span>
-                                          <span className="rounded-xl bg-emerald-100 px-2.5 py-1 text-[10px] font-bold text-emerald-700" title="Shortlisted Applicants">
-                                            {shortlistedCount} Shortlisted
-                                          </span>
-                                          <span className="rounded-xl bg-violet-100 px-2.5 py-1 text-[10px] font-bold text-violet-700" title="Hired Applicants">
-                                            {hiredCount} Hired
-                                          </span>
-                                        </div>
+                                        {(() => {
+                                          const jobApplications = applications.filter(
+                                            (application) =>
+                                              String(application.job_id ?? application.jobId ?? application.job?.id ?? "") === String(item.id),
+                                          );
+                                          const reviewCount = jobApplications.filter((application) => {
+                                            const stage = normalizePipelineStatus(application.status);
+                                            return ["applied", "under-review"].includes(stage);
+                                          }).length;
+                                          const shortlistedCountJob = jobApplications.filter((application) => normalizePipelineStatus(application.status) === "shortlisted").length;
+                                          const interviewCount = jobApplications.filter((application) => normalizePipelineStatus(application.status) === "interview").length;
+                                          const hiredCountJob = jobApplications.filter((application) => normalizePipelineStatus(application.status) === "hired").length;
+                                          const rejectedCount = jobApplications.filter((application) => normalizePipelineStatus(application.status) === "rejected").length;
+                                          const pipelineStages = [
+                                            { label: "Review", count: reviewCount, tone: "bg-blue-100 text-blue-700" },
+                                            { label: "Shortlisted", count: shortlistedCountJob, tone: "bg-violet-100 text-violet-700" },
+                                            { label: "Interviewed", count: interviewCount, tone: "bg-amber-100 text-amber-700" },
+                                            { label: "Hired", count: hiredCountJob, tone: "bg-emerald-100 text-emerald-700" },
+                                            { label: "Rejected", count: rejectedCount, tone: "bg-rose-100 text-rose-700" },
+                                          ];
+
+                                          return (
+                                            <div className="inline-flex max-w-full flex-wrap justify-center gap-1.5 rounded-2xl border border-slate-200 bg-slate-50 p-1.5">
+                                              {pipelineStages.map((stage) => (
+                                                <span
+                                                  key={`${item.id}-${stage.label}`}
+                                                  className={`inline-flex items-center rounded-xl px-2 py-1 text-[10px] font-bold ${stage.tone}`}
+                                                  title={`${stage.label} applicants`}
+                                                >
+                                                  {stage.label}: {stage.count}
+                                                </span>
+                                              ))}
+                                            </div>
+                                          );
+                                        })()}
                                       </td>
                                       <td className="px-4 py-4">
                                         <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold capitalize ${getJobStatusClasses(normalizedStatus)}`}>
-                                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                                          Active
+                                          <span className={`h-1.5 w-1.5 rounded-full ${normalizedStatus === "active" ? "bg-emerald-600" : normalizedStatus === "pending" || normalizedStatus === "pending_approval" ? "bg-amber-500" : "bg-slate-400"}`} />
+                                          {normalizedStatus === "pending" || normalizedStatus === "pending_approval" ? "Pending Approval" : normalizedStatus === "active" ? "Active" : normalizedStatus.charAt(0).toUpperCase() + normalizedStatus.slice(1)}
                                         </span>
                                       </td>
                                       <td className="px-6 py-4 text-right">

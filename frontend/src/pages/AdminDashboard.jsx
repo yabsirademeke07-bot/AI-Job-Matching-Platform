@@ -1,111 +1,1105 @@
-import { useEffect, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
-import { BarChart3, Bell, BriefcaseBusiness, Building2, CircleHelp, FileText, LogOut, Maximize2, Settings, ShieldCheck, Target, UserCircle, UserRound, Users, ChevronDown, Clock3, CalendarDays, MapPin, Search, Sparkles, ArrowUpRight } from 'lucide-react';
-import { getAdminDashboardStats, getAdminOverview } from '../services/adminService';
-import { useAuth } from '../context/AuthContext';
+import { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import {
+  BarChart3,
+  Bell,
+  BriefcaseBusiness,
+  Building2,
+  CircleHelp,
+  FileText,
+  LogOut,
+  Maximize2,
+  Settings,
+  ShieldCheck,
+  Target,
+  UserCircle,
+  UserRound,
+  Users,
+  ChevronDown,
+  Menu,
+  X,
+  Clock3,
+  CalendarDays,
+  MapPin,
+  Search,
+  Sparkles,
+  ArrowUpRight,
+} from "lucide-react";
+import {
+  getAdminDashboardStats,
+  getAdminOverview,
+  moderateJob,
+  updateCompanyVerification,
+  updateReportStatus,
+  updateUserStatus,
+} from "../services/adminService";
+import { useAuth } from "../context/AuthContext";
 
 const tabs = [
-  ['overview', '/admin/dashboard', 'Dashboard', BarChart3], ['users', '/admin/users', 'Users', Users],
-  ['companies', '/admin/employers', 'Employers', Building2], ['jobs', '/admin/jobs', 'Jobs', BriefcaseBusiness],
-  ['applications', '/admin/applications', 'Applications', FileText], ['matching', '/admin/ai-matching', 'AI Matching', Target],
-  ['analytics', '/admin/analytics', 'Analytics', BarChart3], ['reports', '/admin/reports', 'Reports', Bell],
-  ['notifications', '/admin/notifications', 'Notifications', Bell], ['settings', '/admin/settings', 'Settings', Settings],
+  ["overview", "/admin/dashboard", "Dashboard", BarChart3],
+  ["users", "/admin/users", "Users", Users],
+  ["companies", "/admin/employers", "Employers", Building2],
+  ["jobs", "/admin/jobs", "Jobs", BriefcaseBusiness],
+  ["applications", "/admin/applications", "Applications", FileText],
+  ["matching", "/admin/ai-matching", "AI Matching", Target],
+  ["analytics", "/admin/analytics", "Analytics", BarChart3],
+  ["activity", "/admin/activity-log", "Activity Log", Clock3],
+  ["reports", "/admin/reports", "Reports", Bell],
+  ["notifications", "/admin/notifications", "Notifications", Bell],
+  ["settings", "/admin/settings", "Settings", Settings],
 ];
-const fallback = { totalUsers: 0, jobSeekersCount: 0, employersCount: 0, activeJobs: 0, avgMatchScore: 0, moderationQueueCount: 0, pipeline: { pending: 0, shortlisted: 0, interviewing: 0, hired: 0, rejected: 0 } };
-const statusClass = { hired: 'bg-emerald-50 text-emerald-700', shortlisted: 'bg-blue-50 text-blue-700', 'under-review': 'bg-amber-50 text-amber-700', rejected: 'bg-slate-100 text-slate-600' };
-const formatDate = (value) => value ? new Date(value).toLocaleDateString() : 'Not provided';
+const fallback = {
+  totalUsers: 0,
+  jobSeekersCount: 0,
+  employersCount: 0,
+  activeJobs: 0,
+  avgMatchScore: 0,
+  moderationQueueCount: 0,
+  pipeline: {
+    pending: 0,
+    shortlisted: 0,
+    interviewing: 0,
+    hired: 0,
+    rejected: 0,
+  },
+};
+const statusClass = {
+  hired: "bg-emerald-50 text-emerald-700",
+  shortlisted: "bg-blue-50 text-blue-700",
+  "under-review": "bg-amber-50 text-amber-700",
+  rejected: "bg-slate-100 text-slate-600",
+};
+const formatDate = (value) =>
+  value ? new Date(value).toLocaleDateString() : "Not provided";
 
 function AdminDashboard() {
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const activeTab = tabs.find(([id, path]) => path === location.pathname)?.[0] || 'overview';
+  const activeTab =
+    tabs.find(([id, path]) => path === location.pathname)?.[0] || "overview";
   const [stats, setStats] = useState(fallback);
-  const [overview, setOverview] = useState({ applications: [], companies: [], users: [], jobs: [], reports: [], notifications: [], stats: fallback });
+  const [overview, setOverview] = useState({
+    applications: [],
+    companies: [],
+    users: [],
+    jobs: [],
+    reports: [],
+    notifications: [],
+    logs: [],
+    stats: fallback,
+  });
   const [loading, setLoading] = useState(true);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     let mounted = true;
-    Promise.allSettled([getAdminDashboardStats(), getAdminOverview()]).then(([statsResult, overviewResult]) => {
-      if (!mounted) return;
-      const liveStats = statsResult.status === 'fulfilled' ? statsResult.value : null;
-      const data = overviewResult.status === 'fulfilled' ? overviewResult.value : { applications: [], companies: [] };
-      setStats({ ...fallback, ...(liveStats || {}), pipeline: { ...fallback.pipeline, ...(liveStats?.pipeline || {}) } });
-      setOverview({
-        applications: data.applications || [],
-        companies: data.companies || [],
-        users: data.users || [],
-        jobs: data.jobs || [],
-        reports: data.reports || [],
-        notifications: data.notifications || [],
-        performance: data.performance || [],
-        categories: data.categories || [],
-        stats: liveStats || fallback,
-      });
-    }).finally(() => mounted && setLoading(false));
-    return () => { mounted = false; };
+    Promise.allSettled([getAdminDashboardStats(), getAdminOverview()])
+      .then(([statsResult, overviewResult]) => {
+        if (!mounted) return;
+        const liveStats =
+          statsResult.status === "fulfilled" ? statsResult.value : null;
+        const data =
+          overviewResult.status === "fulfilled"
+            ? overviewResult.value
+            : { applications: [], companies: [] };
+        setStats({
+          ...fallback,
+          ...(liveStats || {}),
+          pipeline: { ...fallback.pipeline, ...(liveStats?.pipeline || {}) },
+        });
+        setOverview({
+          applications: data.applications || [],
+          companies: data.companies || [],
+          users: data.users || [],
+          jobs: data.jobs || [],
+          reports: data.reports || [],
+          notifications: data.notifications || [],
+          logs: data.logs || [],
+          performance: data.performance || [],
+          categories: data.categories || [],
+          stats: liveStats || fallback,
+        });
+      })
+      .finally(() => mounted && setLoading(false));
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const go = (path) => navigate(path);
   const cards = [
-    ['01', stats.totalUsers.toLocaleString(), 'Registered Accounts', `${stats.jobSeekersCount.toLocaleString()} Employees / Job Seekers and ${stats.employersCount.toLocaleString()} Employers currently registered in the database.`, '/admin/users'],
-    ['02', `${stats.activeJobs} Live`, 'Open Job Listings', 'Currently receiving verified candidate applications and AI skill screenings.', '/admin/jobs?status=published'],
-    ['03', `${stats.avgMatchScore}%`, 'Average Fit Ratio', 'Calculated from automated resume parsings and qualification signals.', '/admin/ai-matching'],
-    ['04', `${stats.moderationQueueCount} Pending`, 'Moderation Queue', 'Pending jobs, company verifications, and reports awaiting admin decision.', '/admin/jobs?status=pending'],
+    [
+      "01",
+      stats.totalUsers.toLocaleString(),
+      "Registered Accounts",
+      `${stats.jobSeekersCount.toLocaleString()} Employees / Job Seekers and ${stats.employersCount.toLocaleString()} Employers currently registered in the database.`,
+      "/admin/users",
+    ],
+    [
+      "02",
+      `${stats.activeJobs} Live`,
+      "Open Job Listings",
+      "Currently receiving verified candidate applications and AI skill screenings.",
+      "/admin/jobs?status=published",
+    ],
+    [
+      "03",
+      `${stats.avgMatchScore}%`,
+      "Average Fit Ratio",
+      "Calculated from automated resume parsings and qualification signals.",
+      "/admin/ai-matching",
+    ],
+    [
+      "04",
+      `${stats.moderationQueueCount} Pending`,
+      "Moderation Queue",
+      "Pending jobs, company verifications, and reports awaiting admin decision.",
+      "/admin/jobs?status=pending",
+    ],
   ];
-  const pipeline = [['pending', 'Pending / New', 'Initial applicant submissions', 'text-slate-800', 'bg-amber-400', '/admin/applications?status=applied'], ['shortlisted', 'Shortlisted', 'Qualified for interviews', 'text-blue-600', 'bg-blue-500', '/admin/applications?status=shortlisted'], ['interviewing', 'Interviewing', 'Active discussion rounds', 'text-purple-600', 'bg-purple-500', '/admin/applications?status=interview-scheduled'], ['hired', 'Hired', 'Formal offers accepted', 'text-emerald-600', 'bg-emerald-500', '/admin/applications?status=hired'], ['rejected', 'Rejected', 'Qualification mismatch', 'text-slate-400', 'bg-slate-300', '/admin/applications?status=rejected']];
+  const pipeline = [
+    [
+      "pending",
+      "Pending / New",
+      "Initial applicant submissions",
+      "text-slate-800",
+      "bg-amber-400",
+      "/admin/applications?status=applied",
+    ],
+    [
+      "shortlisted",
+      "Shortlisted",
+      "Qualified for interviews",
+      "text-blue-600",
+      "bg-blue-500",
+      "/admin/applications?status=shortlisted",
+    ],
+    [
+      "interviewing",
+      "Interviewing",
+      "Active discussion rounds",
+      "text-purple-600",
+      "bg-purple-500",
+      "/admin/applications?status=interview-scheduled",
+    ],
+    [
+      "hired",
+      "Hired",
+      "Formal offers accepted",
+      "text-emerald-600",
+      "bg-emerald-500",
+      "/admin/applications?status=hired",
+    ],
+    [
+      "rejected",
+      "Rejected",
+      "Qualification mismatch",
+      "text-slate-400",
+      "bg-slate-300",
+      "/admin/applications?status=rejected",
+    ],
+  ];
   const applications = overview.applications.slice(0, 5);
-  const pendingCompanies = overview.companies.filter((company) => company.verification_status === 'pending');
-  const companies = { length: String(pendingCompanies.length), map: (renderCompany) => pendingCompanies.slice(0, 4).map(renderCompany) };
+  const pendingCompanies = overview.companies.filter(
+    (company) => company.verification_status === "pending",
+  );
+  const companies = {
+    length: String(pendingCompanies.length),
+    map: (renderCompany) => pendingCompanies.slice(0, 4).map(renderCompany),
+  };
 
-  if (loading) return <div className="min-h-screen bg-slate-50 p-8 text-center text-sm font-semibold text-slate-500">Loading admin workspace...</div>;
-  return <div className="admin-shell min-h-screen bg-slate-50 text-slate-900 lg:flex">
-    <aside className="admin-sidebar w-full shrink-0 border-r border-slate-800 bg-[#061b41] text-white lg:min-h-screen lg:w-64"><div className="sticky top-0 p-5 lg:h-screen"><div className="flex items-center gap-3"><div className="rounded-xl bg-blue-500/20 p-2.5 text-blue-300"><ShieldCheck className="h-5 w-5" /></div><div><p className="font-black text-white">SmartRecruit AI</p><p className="text-xs text-blue-200/70">Admin workspace</p></div></div><nav className="admin-nav mt-8 grid grid-cols-2 gap-1 lg:grid-cols-1" aria-label="Admin sections">{tabs.map(([id, path, label, Icon]) => <button key={id} type="button" onClick={() => go(path)} className={`flex items-center gap-3 border-l-4 px-3 py-2.5 text-left text-sm font-medium transition-colors ${activeTab === id ? 'border-blue-300 bg-blue-600 text-white font-semibold' : 'border-transparent text-blue-100/75 hover:bg-white/10 hover:text-white'}`}><Icon className="h-4 w-4 shrink-0" /><span>{label}</span></button>)}</nav><button type="button" aria-label="Logout" onClick={() => { logout(); navigate('/login', { replace: true }); }} className="mt-8 inline-flex w-full items-center gap-2 rounded-xl bg-rose-600 px-3 py-2 text-xs font-bold text-white hover:bg-rose-700"><LogOut className="h-4 w-4 shrink-0" />Logout</button></div></aside>
-    <main className="admin-main min-w-0 grow px-4 pb-8 sm:px-6 lg:px-10"><header className="-mx-4 mb-8 flex h-16 items-center justify-end border-b border-slate-200 bg-white px-4 shadow-sm sm:-mx-6 sm:px-6 lg:-mx-10 lg:px-10"><div className="flex items-center gap-4"><button type="button" aria-label="Notifications" onClick={() => go('/admin/notifications')} className="relative rounded-xl p-2 text-slate-500 transition hover:bg-slate-100 hover:text-blue-700"><Bell className="h-5 w-5" /><span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-500 px-1 text-[10px] font-bold text-white">{overview.notifications.filter((item) => !item.is_read).length || 0}</span></button><button type="button" aria-label="Fullscreen" onClick={() => document.documentElement.requestFullscreen?.()} className="rounded-xl p-2 text-slate-500 transition hover:bg-slate-100 hover:text-blue-700"><Maximize2 className="h-5 w-5" /></button><div className="relative"><button type="button" onClick={() => setProfileMenuOpen((open) => !open)} aria-expanded={profileMenuOpen} className="flex items-center gap-2 rounded-xl px-2 py-1.5 text-left transition hover:bg-slate-50"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-50 text-blue-600"><UserCircle className="h-6 w-6" /></span><span className="hidden sm:block"><span className="block text-sm font-black text-slate-900">{user?.full_name || user?.name || 'Admin User'}</span><span className="block text-xs text-slate-400">{String(user?.role || '').toLowerCase() === 'super_admin' ? 'Super Admin' : 'Admin'}</span></span><ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${profileMenuOpen ? 'rotate-180' : ''}`} /></button>{profileMenuOpen && <div className="absolute right-0 top-12 z-50 w-72 rounded-2xl border border-slate-200 bg-white p-3 shadow-xl"><div className="rounded-xl bg-slate-50 p-4"><div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-blue-700"><UserCircle className="h-6 w-6" /></span><div><p className="font-black text-slate-900">{user?.full_name || user?.name || 'Admin User'}</p><p className="text-xs text-slate-500">{String(user?.role || '').toLowerCase() === 'super_admin' ? 'Super Admin' : 'Admin'} · {user?.email || 'admin@smartrecruit.ai'}</p></div></div></div><div className="mt-3 space-y-1"><button type="button" onClick={() => { setProfileMenuOpen(false); go('/admin/settings'); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50"><UserRound className="h-4 w-4 text-slate-500" />My Profile</button><button type="button" onClick={() => { setProfileMenuOpen(false); go('/admin/settings'); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50"><Settings className="h-4 w-4 text-slate-500" />Settings</button><button type="button" onClick={() => { setProfileMenuOpen(false); go('/admin/analytics'); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50"><Clock3 className="h-4 w-4 text-slate-500" />Activity Log</button><button type="button" onClick={() => { setProfileMenuOpen(false); go('/admin/reports'); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50"><CircleHelp className="h-4 w-4 text-slate-500" />Help &amp; Support</button></div><div className="mt-3 border-t border-slate-100 pt-3"><button type="button" onClick={() => { setProfileMenuOpen(false); logout(); navigate('/login', { replace: true }); }} className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-semibold text-rose-600 hover:bg-rose-50"><span className="flex items-center gap-3"><LogOut className="h-4 w-4" />Logout</span><span className="text-xs">Sign out</span></button></div></div>}</div></div></header><p className="text-xs font-bold uppercase tracking-widest text-blue-600">{activeTab === 'overview' ? 'Platform overview' : tabs.find(([id]) => id === activeTab)?.[2]}</p><h1 className="mt-2 text-3xl font-black tracking-tight">{activeTab === 'overview' ? 'Admin Dashboard' : tabs.find(([id]) => id === activeTab)?.[2]}</h1><p className="mt-2 text-sm text-slate-500">{activeTab === 'overview' ? 'A clear view of platform activity and decisions.' : 'Manage and monitor this area of the SmartRecruit platform.'}</p>
-      {activeTab !== 'overview' && <AdminModule tab={activeTab} overview={overview} go={go} />}
-      {activeTab === 'overview' && <AdminOverview stats={stats} overview={overview} go={go} />}{false && activeTab === 'overview' && <>
-      <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">{cards.map(([index, value, title, subtitle, path]) => <button key={index} type="button" onClick={() => go(path)} className="group cursor-pointer rounded-2xl border border-slate-100/90 bg-white p-7 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-lg"><p className="text-xs font-bold uppercase tracking-widest text-blue-600">{index}</p><p className="my-2.5 text-3xl font-black tracking-tight text-slate-900 lg:text-4xl">{value}</p><h2 className="text-base font-bold text-slate-800">{title}</h2><p className="mt-2 text-xs leading-relaxed text-slate-500">{subtitle}</p><span className="mt-4 block text-right text-sm font-semibold text-blue-600 transition-transform group-hover:translate-x-1">-&gt;</span></button>)}</div>
-      <section className="mt-10 rounded-2xl border border-slate-100 bg-white p-6 shadow-sm"><p className="text-xs font-bold uppercase tracking-widest text-blue-600">Pipeline overview</p><h2 className="mt-2 text-2xl font-black">Platform Recruitment Lifecycle</h2><p className="mt-1 text-sm text-slate-500">Real-time candidate distribution from application to placement.</p><div className="mt-6 grid grid-cols-2 gap-4 border-t border-slate-100 pt-6 sm:grid-cols-3 lg:grid-cols-5">{pipeline.map(([key, label, note, text, dot, path]) => <button key={key} type="button" onClick={() => go(path)} className="group rounded-xl p-2 text-left transition hover:bg-slate-50"><p className={`text-2xl font-bold ${text}`}>{stats.pipeline[key]}</p><p className="mt-2 text-sm font-semibold text-slate-700"><span className={`mr-1.5 inline-block h-2 w-2 rounded-full ${dot}`} />{label}</p><p className="mt-1 text-xs text-slate-500">{note}</p><span className="mt-2 block text-xs font-bold text-blue-600 opacity-0 transition group-hover:opacity-100">Inspect -&gt;</span></button>)}</div></section>
-      <div className="mt-10 grid grid-cols-1 gap-8 lg:grid-cols-12"><section className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm lg:col-span-8"><div className="flex items-center justify-between"><h2 className="text-lg font-black">Recent Candidate Applications</h2><button type="button" onClick={() => go('/admin/applications')} className="text-xs font-semibold text-blue-600">View All Applications -&gt;</button></div><div className="mt-5 overflow-x-auto"><table className="w-full min-w-[680px] text-left text-sm"><thead className="border-b border-slate-100 text-[10px] font-bold uppercase tracking-widest text-slate-400"><tr><th className="py-3">Candidate</th><th className="py-3">Role &amp; Company</th><th className="py-3">AI Match</th><th className="py-3">Status</th><th className="py-3">Date</th></tr></thead><tbody>{applications.map((item) => <tr key={item.id} className="border-b border-slate-100"><td className="py-3.5"><p className="font-bold">{item.candidate_name}</p><p className="text-xs text-slate-500">{item.candidate_email || 'Candidate profile'}</p></td><td className="py-3.5"><p className="font-semibold">{item.job_title}</p><p className="text-xs text-slate-500">{item.employer_name}</p></td><td className="py-3.5"><span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">{item.ai_match_score || 0}% Fit</span></td><td className="py-3.5"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass[item.status] || 'bg-slate-100 text-slate-600'}`}>{item.status}</span></td><td className="py-3.5 text-xs text-slate-500">{formatDate(item.applied_at)}</td></tr>)}</tbody></table></div></section><section className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm lg:col-span-4"><div className="flex items-center justify-between"><h2 className="text-lg font-black">Pending Verification</h2><span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-700">{companies.length || 5}</span></div><div className="mt-5 divide-y divide-slate-100">{companies.map((company) => <div key={company.id} className="py-4 first:pt-0"><p className="font-bold">{company.company_name}</p><p className="mt-1 text-xs text-slate-500">{company.industry || 'Company verification'}</p><p className="mt-2 text-xs text-slate-500">TIN: {company.tin_number || 'Pending document'}</p><button type="button" onClick={() => go('/admin/employers')} className="mt-2 text-xs font-semibold text-blue-600">Review Registration Document -&gt;</button></div>)}</div></section></div>
-      </>}
-    </main></div>;
+  if (loading)
+    return (
+      <div className="min-h-screen bg-slate-50 p-8 text-center text-sm font-semibold text-slate-500">
+        Loading admin workspace...
+      </div>
+    );
+  return (
+    <div className="admin-shell min-h-screen bg-slate-50 text-slate-900 lg:flex">
+      <aside className={`admin-sidebar w-full shrink-0 border-r border-slate-800 bg-[#061b41] text-white lg:min-h-screen lg:w-64 ${sidebarOpen ? "block" : "hidden lg:block"}`}>
+        <div className="sticky top-0 p-5 lg:h-screen">
+          <div className="flex items-center gap-3">
+            <div className="rounded-xl bg-blue-500/20 p-2.5 text-blue-300">
+              <ShieldCheck className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="font-black text-white">SmartRecruit AI</p>
+              <p className="text-xs text-blue-200/70">Admin workspace</p>
+            </div>
+          </div>
+          <nav
+            className="admin-nav mt-8 grid grid-cols-2 gap-1 lg:grid-cols-1"
+            aria-label="Admin sections"
+          >
+            {tabs.map(([id, path, label, Icon]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => { setSidebarOpen(false); go(path); }}
+                className={`flex items-center gap-3 border-l-4 px-3 py-2.5 text-left text-sm font-medium transition-colors ${activeTab === id ? "border-blue-300 bg-blue-600 text-white font-semibold" : "border-transparent text-blue-100/75 hover:bg-white/10 hover:text-white"}`}
+              >
+                <Icon className="h-4 w-4 shrink-0" />
+                <span>{label}</span>
+              </button>
+            ))}
+          </nav>
+          <button
+            type="button"
+            aria-label="Logout"
+            onClick={() => {
+              logout();
+              navigate("/login", { replace: true });
+            }}
+            className="mt-8 inline-flex w-full items-center gap-2 rounded-xl bg-rose-600 px-3 py-2 text-xs font-bold text-white hover:bg-rose-700"
+          >
+            <LogOut className="h-4 w-4 shrink-0" />
+            Logout
+          </button>
+        </div>
+      </aside>
+      <main className="admin-main min-w-0 grow px-4 pb-8 sm:px-6 lg:px-10">
+        <header className="-mx-4 mb-8 flex h-16 items-center justify-between border-b border-slate-200 bg-white px-4 shadow-sm sm:-mx-6 sm:px-6 lg:-mx-10 lg:px-10">
+          <div className="flex items-center gap-4">
+            <button type="button" aria-label={sidebarOpen ? "Close admin navigation" : "Open admin navigation"} onClick={() => setSidebarOpen((open) => !open)} className="rounded-xl p-2 text-slate-500 transition hover:bg-slate-100 hover:text-blue-700 lg:hidden">
+              {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            </button>
+          </div>
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              aria-label="Notifications"
+              onClick={() => go("/admin/notifications")}
+              className="relative rounded-xl p-2 text-slate-500 transition hover:bg-slate-100 hover:text-blue-700"
+            >
+              <Bell className="h-5 w-5" />
+              <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-500 px-1 text-[10px] font-bold text-white">
+                {overview.notifications.filter((item) => !item.is_read)
+                  .length || 0}
+              </span>
+            </button>
+            <button
+              type="button"
+              aria-label="Fullscreen"
+              onClick={() => document.documentElement.requestFullscreen?.()}
+              className="rounded-xl p-2 text-slate-500 transition hover:bg-slate-100 hover:text-blue-700"
+            >
+              <Maximize2 className="h-5 w-5" />
+            </button>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setProfileMenuOpen((open) => !open)}
+                aria-expanded={profileMenuOpen}
+                className="flex items-center gap-2 rounded-xl px-2 py-1.5 text-left transition hover:bg-slate-50"
+              >
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+                  <UserCircle className="h-6 w-6" />
+                </span>
+                <span className="hidden sm:block">
+                  <span className="block text-sm font-black text-slate-900">
+                    {user?.full_name || user?.name || "Admin User"}
+                  </span>
+                  <span className="block text-xs text-slate-400">
+                    {String(user?.role || "").toLowerCase() === "super_admin"
+                      ? "Super Admin"
+                      : "Admin"}
+                  </span>
+                </span>
+                <ChevronDown
+                  className={`h-4 w-4 text-slate-400 transition-transform ${profileMenuOpen ? "rotate-180" : ""}`}
+                />
+              </button>
+              {profileMenuOpen && (
+                <div className="absolute right-0 top-12 z-50 w-72 rounded-2xl border border-slate-200 bg-white p-3 shadow-xl">
+                  <div className="rounded-xl bg-slate-50 p-4">
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-blue-700">
+                        <UserCircle className="h-6 w-6" />
+                      </span>
+                      <div>
+                        <p className="font-black text-slate-900">
+                          {user?.full_name || user?.name || "Admin User"}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {String(user?.role || "").toLowerCase() ===
+                          "super_admin"
+                            ? "Super Admin"
+                            : "Admin"}{" "}
+                          · {user?.email || "admin@smartrecruit.ai"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-3 space-y-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProfileMenuOpen(false);
+                        go("/admin/settings");
+                      }}
+                      className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      <UserRound className="h-4 w-4 text-slate-500" />
+                      My Profile
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProfileMenuOpen(false);
+                        go("/admin/settings");
+                      }}
+                      className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      <Settings className="h-4 w-4 text-slate-500" />
+                      Settings
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProfileMenuOpen(false);
+                        go("/admin/activity-log");
+                      }}
+                      className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      <Clock3 className="h-4 w-4 text-slate-500" />
+                      Activity Log
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProfileMenuOpen(false);
+                        go("/contact");
+                      }}
+                      className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      <CircleHelp className="h-4 w-4 text-slate-500" />
+                      Help &amp; Support
+                    </button>
+                  </div>
+                  <div className="mt-3 border-t border-slate-100 pt-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProfileMenuOpen(false);
+                        logout();
+                        navigate("/login", { replace: true });
+                      }}
+                      className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-semibold text-rose-600 hover:bg-rose-50"
+                    >
+                      <span className="flex items-center gap-3">
+                        <LogOut className="h-4 w-4" />
+                        Logout
+                      </span>
+                      <span className="text-xs">Sign out</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </header>
+        <p className="text-xs font-bold uppercase tracking-widest text-blue-600">
+          {activeTab === "overview"
+            ? "Platform overview"
+            : tabs.find(([id]) => id === activeTab)?.[2]}
+        </p>
+        <h1 className="mt-2 text-3xl font-black tracking-tight">
+          {activeTab === "overview"
+            ? "Admin Dashboard"
+            : tabs.find(([id]) => id === activeTab)?.[2]}
+        </h1>
+        <p className="mt-2 text-sm text-slate-500">
+          {activeTab === "overview"
+            ? "A clear view of platform activity and decisions."
+            : "Manage and monitor this area of the SmartRecruit platform."}
+        </p>
+        {activeTab !== "overview" && (
+          <AdminModule tab={activeTab} overview={overview} go={go} />
+        )}
+        {activeTab === "overview" && (
+          <AdminOverview stats={stats} overview={overview} go={go} />
+        )}
+        {activeTab === "__legacy_disabled__" && (
+          <>
+            <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+              {cards.map(([index, value, title, subtitle, path]) => (
+                <button
+                  key={index}
+                  type="button"
+                  onClick={() => go(path)}
+                  className="group cursor-pointer rounded-2xl border border-slate-100/90 bg-white p-7 text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-lg"
+                >
+                  <p className="text-xs font-bold uppercase tracking-widest text-blue-600">
+                    {index}
+                  </p>
+                  <p className="my-2.5 text-3xl font-black tracking-tight text-slate-900 lg:text-4xl">
+                    {value}
+                  </p>
+                  <h2 className="text-base font-bold text-slate-800">
+                    {title}
+                  </h2>
+                  <p className="mt-2 text-xs leading-relaxed text-slate-500">
+                    {subtitle}
+                  </p>
+                  <span className="mt-4 block text-right text-sm font-semibold text-blue-600 transition-transform group-hover:translate-x-1">
+                    -&gt;
+                  </span>
+                </button>
+              ))}
+            </div>
+            <section className="mt-10 rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
+              <p className="text-xs font-bold uppercase tracking-widest text-blue-600">
+                Pipeline overview
+              </p>
+              <h2 className="mt-2 text-2xl font-black">
+                Platform Recruitment Lifecycle
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Real-time candidate distribution from application to placement.
+              </p>
+              <div className="mt-6 grid grid-cols-2 gap-4 border-t border-slate-100 pt-6 sm:grid-cols-3 lg:grid-cols-5">
+                {pipeline.map(([key, label, note, text, dot, path]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => go(path)}
+                    className="group rounded-xl p-2 text-left transition hover:bg-slate-50"
+                  >
+                    <p className={`text-2xl font-bold ${text}`}>
+                      {stats.pipeline[key]}
+                    </p>
+                    <p className="mt-2 text-sm font-semibold text-slate-700">
+                      <span
+                        className={`mr-1.5 inline-block h-2 w-2 rounded-full ${dot}`}
+                      />
+                      {label}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">{note}</p>
+                    <span className="mt-2 block text-xs font-bold text-blue-600 opacity-0 transition group-hover:opacity-100">
+                      Inspect -&gt;
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
+            <div className="mt-10 grid grid-cols-1 gap-8 lg:grid-cols-12">
+              <section className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm lg:col-span-8">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-black">
+                    Recent Candidate Applications
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={() => go("/admin/applications")}
+                    className="text-xs font-semibold text-blue-600"
+                  >
+                    View All Applications -&gt;
+                  </button>
+                </div>
+                <div className="mt-5 overflow-x-auto">
+                  <table className="w-full min-w-[680px] text-left text-sm">
+                    <thead className="border-b border-slate-100 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                      <tr>
+                        <th className="py-3">Candidate</th>
+                        <th className="py-3">Role &amp; Company</th>
+                        <th className="py-3">AI Match</th>
+                        <th className="py-3">Status</th>
+                        <th className="py-3">Date</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {applications.map((item) => (
+                        <tr key={item.id} className="border-b border-slate-100">
+                          <td className="py-3.5">
+                            <p className="font-bold">{item.candidate_name}</p>
+                            <p className="text-xs text-slate-500">
+                              {item.candidate_email || "Candidate profile"}
+                            </p>
+                          </td>
+                          <td className="py-3.5">
+                            <p className="font-semibold">{item.job_title}</p>
+                            <p className="text-xs text-slate-500">
+                              {item.employer_name}
+                            </p>
+                          </td>
+                          <td className="py-3.5">
+                            <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                              {item.ai_match_score || 0}% Fit
+                            </span>
+                          </td>
+                          <td className="py-3.5">
+                            <span
+                              className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass[item.status] || "bg-slate-100 text-slate-600"}`}
+                            >
+                              {item.status}
+                            </span>
+                          </td>
+                          <td className="py-3.5 text-xs text-slate-500">
+                            {formatDate(item.applied_at)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+              <section className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm lg:col-span-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-black">Pending Verification</h2>
+                  <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-700">
+                    {companies.length || 5}
+                  </span>
+                </div>
+                <div className="mt-5 divide-y divide-slate-100">
+                  {companies.map((company) => (
+                    <div key={company.id} className="py-4 first:pt-0">
+                      <p className="font-bold">{company.company_name}</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {company.industry || "Company verification"}
+                      </p>
+                      <p className="mt-2 text-xs text-slate-500">
+                        TIN: {company.tin_number || "Pending document"}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => go("/admin/employers")}
+                        className="mt-2 text-xs font-semibold text-blue-600"
+                      >
+                        Review Registration Document -&gt;
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            </div>
+          </>
+        )}
+      </main>
+    </div>
+  );
 }
 
 function AdminOverview({ stats, overview, go }) {
   const performance = overview.performance || [];
   const categories = overview.categories || [];
-  const jobs = overview.jobs.filter((job) => ['published', 'active'].includes(String(job.status || '').toLowerCase())).slice(0, 5);
+  const pendingJobs = overview.jobs.filter((job) =>
+    ["pending", "pending_approval", "draft"].includes(String(job.status || "").toLowerCase()),
+  );
+  const [moderatingJobId, setModeratingJobId] = useState(null);
+  const moderatePendingJob = async (job, action) => {
+    const reason = action === "reject" ? window.prompt("Enter a reason for rejecting this job:")?.trim() : "";
+    if (action === "reject" && !reason) return;
+
+    setModeratingJobId(job.id);
+    try {
+      await moderateJob(job.id, action, reason);
+      window.location.reload();
+    } catch (error) {
+      window.alert(error.response?.data?.message || "Unable to update this job.");
+    } finally {
+      setModeratingJobId(null);
+    }
+  };
+  const jobs = overview.jobs
+    .filter((job) =>
+      ["published", "active"].includes(String(job.status || "").toLowerCase()),
+    )
+    .slice(0, 5);
   const matches = overview.applications.slice(0, 5);
-  const maxApplications = Math.max(...performance.map((item) => Number(item.applications || 0)), 1);
-  const totalCategoryJobs = categories.reduce((sum, item) => sum + Number(item.total || 0), 0);
+  const maxApplications = Math.max(
+    ...performance.map((item) => Number(item.applications || 0)),
+    1,
+  );
+  const totalCategoryJobs = categories.reduce(
+    (sum, item) => sum + Number(item.total || 0),
+    0,
+  );
   const cardData = [
-    ['Total Candidates', stats.jobSeekersCount, 'Registered job seekers and employees', 'bg-sky-50 text-sky-600'],
-    ['Total Jobs Posted', stats.activeJobs, 'Currently approved and visible jobs', 'bg-violet-50 text-violet-600'],
-    ['Successful Matches', stats.pipeline?.shortlisted || 0, 'Applications shortlisted by employers', 'bg-emerald-50 text-emerald-600'],
-    ['Registered Companies', stats.employersCount, 'Employer accounts in the database', 'bg-amber-50 text-amber-600'],
+    [
+      "Total Candidates",
+      stats.jobSeekersCount,
+      "Registered job seekers and employees",
+      "bg-sky-50 text-sky-600",
+    ],
+    [
+      "Total Jobs Posted",
+      stats.activeJobs,
+      "Currently approved and visible jobs",
+      "bg-violet-50 text-violet-600",
+    ],
+    [
+      "Successful Matches",
+      stats.pipeline?.shortlisted || 0,
+      "Applications shortlisted by employers",
+      "bg-emerald-50 text-emerald-600",
+    ],
+    [
+      "Registered Companies",
+      stats.employersCount,
+      "Employer accounts in the database",
+      "bg-amber-50 text-amber-600",
+    ],
   ];
-  return <>
-    <div className="mt-8 grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">{cardData.map(([label, value, note, tone]) => <section key={label} className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-start justify-between"><span className={`flex h-11 w-11 items-center justify-center rounded-xl ${tone}`}><BriefcaseBusiness className="h-5 w-5" /></span><ArrowUpRight className="h-4 w-4 text-slate-300" /></div><p className="mt-4 text-xs font-semibold text-slate-500">{label}</p><p className="mt-1 truncate text-3xl font-black text-slate-900">{Number(value || 0).toLocaleString()}</p><p className="mt-2 truncate text-xs text-slate-400">{note}</p></section>)}</div>
-    <div className="mt-6 grid min-w-0 gap-6 xl:grid-cols-12">
-      <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-6"><div className="flex items-center justify-between"><div className="min-w-0"><h2 className="truncate font-black text-slate-900">Job Matching Performance</h2><p className="mt-1 truncate text-xs text-slate-500">Applications and average AI fit score, last 7 days</p></div><BarChart3 className="h-5 w-5 shrink-0 text-blue-500" /></div>{performance.length ? <div className="mt-6 flex h-48 items-end gap-2 border-b border-l border-slate-100 px-2 pb-2">{performance.map((item) => <div key={item.day} className="flex h-full min-w-0 flex-1 items-end gap-1" title={`${item.day}: ${item.applications} applications`}><div className="w-1/2 rounded-t bg-blue-500" style={{ height: `${Math.max((Number(item.applications || 0) / maxApplications) * 100, 4)}%` }} /><div className="w-1/2 rounded-t bg-violet-300" style={{ height: `${Math.max((Number(item.average_score || 0)), 4)}%` }} /></div>)}</div> : <EmptyPanel label="No application performance data yet." />}</section>
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-3"><div className="flex items-center justify-between"><div><h2 className="font-black text-slate-900">Job Categories</h2><p className="mt-1 text-xs text-slate-500">Published jobs by category</p></div><Target className="h-5 w-5 text-violet-500" /></div>{categories.length ? <div className="mt-6 space-y-3">{categories.map((item, index) => <div key={item.category}><div className="flex justify-between text-xs"><span className="font-semibold text-slate-700">{item.category}</span><span className="text-slate-400">{Number(item.total).toLocaleString()}</span></div><div className="mt-1 h-2 rounded-full bg-slate-100"><div className={`h-2 rounded-full ${['bg-blue-500', 'bg-violet-500', 'bg-emerald-400', 'bg-amber-400', 'bg-rose-400', 'bg-slate-400'][index % 6]}`} style={{ width: `${Math.max((Number(item.total || 0) / Math.max(totalCategoryJobs, 1)) * 100, 3)}%` }} /></div></div>)}</div> : <EmptyPanel label="No job category data yet." />}</section>
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-3"><div className="flex items-center gap-2"><Sparkles className="h-5 w-5 text-blue-500" /><h2 className="font-black text-slate-900">AI Insights</h2></div><div className="mt-5 rounded-xl bg-blue-50 p-4"><p className="text-sm font-bold text-blue-900">Live platform signals</p><p className="mt-2 text-xs leading-5 text-blue-700">Insights are calculated from the current applications, jobs, and candidate records.</p></div><Insight label="Candidates" value={stats.jobSeekersCount} /><Insight label="Open jobs" value={stats.activeJobs} /><Insight label="Average fit" value={`${stats.avgMatchScore}%`} /></section>
-    </div>
-    <div className="mt-6 grid gap-6 xl:grid-cols-2"><DataTable title="Recent Matches" icon={Target} headers={['Candidate', 'Job', 'Score', 'Status']} rows={matches.map((item) => [item.candidate_name || 'Candidate', item.job_title || 'Job', `${item.ai_match_score || 0}%`, item.status || 'applied'])} empty="No application records yet." /><DataTable title="Latest Job Listings" icon={BriefcaseBusiness} headers={['Job Title', 'Company', 'Location', 'Status']} rows={jobs.map((job) => [job.title, job.company_name || 'Employer', job.location || 'Not provided', job.status])} empty="No approved job listings yet." /></div>
-  </>;
+  return (
+    <>
+      <div className="mt-8 grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {cardData.map(([label, value, note, tone, path]) => (
+          <button
+            key={label}
+            type="button"
+            onClick={() => go(path)}
+            className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <div className="flex items-start justify-between">
+              <span
+                className={`flex h-11 w-11 items-center justify-center rounded-xl ${tone}`}
+              >
+                <BriefcaseBusiness className="h-5 w-5" />
+              </span>
+              <ArrowUpRight className="h-4 w-4 text-slate-300" />
+            </div>
+            <p className="mt-4 text-xs font-semibold text-slate-500">{label}</p>
+            <p className="mt-1 truncate text-3xl font-black text-slate-900">
+              {Number(value || 0).toLocaleString()}
+            </p>
+            <p className="mt-2 truncate text-xs text-slate-400">{note}</p>
+          </button>
+        ))}
+      </div>
+      <section className="mt-6 min-w-0 rounded-2xl border border-amber-200 bg-amber-50/50 p-4 shadow-sm sm:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-amber-700">Requires review</p>
+            <h2 className="mt-1 text-lg font-black text-slate-900">Pending Job Approvals</h2>
+            <p className="mt-1 text-sm text-slate-600">Review employer submissions before they become visible in Explore Jobs.</p>
+          </div>
+          <button type="button" onClick={() => go("/admin/jobs")} className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-amber-800 shadow-sm ring-1 ring-amber-200 hover:bg-amber-100">Open all jobs</button>
+        </div>
+        {pendingJobs.length ? (
+          <div className="mt-4 grid gap-3 lg:grid-cols-2">
+            {pendingJobs.slice(0, 6).map((job) => (
+              <div key={job.id} className="flex min-w-0 flex-col gap-3 rounded-xl border border-amber-100 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-black text-slate-900">{job.title || "Untitled job"}</p>
+                  <p className="mt-1 truncate text-xs text-slate-500">{job.company_name || job.employer_name || "Employer"} · {job.location || "Location not provided"}</p>
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  <button type="button" disabled={moderatingJobId === job.id} onClick={() => moderatePendingJob(job, "approve")} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50">Approve</button>
+                  <button type="button" disabled={moderatingJobId === job.id} onClick={() => moderatePendingJob(job, "reject")} className="rounded-lg bg-rose-600 px-3 py-2 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-50">Reject</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-4 rounded-xl bg-white p-4 text-sm text-slate-500">No jobs are waiting for approval.</p>
+        )}
+      </section>
+      <div className="mt-6 grid min-w-0 gap-6 xl:grid-cols-12">
+        <section role="button" tabIndex={0} onClick={() => go("/admin/applications")} onKeyDown={(event) => event.key === "Enter" && go("/admin/applications")} className="min-w-0 cursor-pointer rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-blue-300 hover:shadow-md sm:p-5 xl:col-span-6">
+          <div className="flex items-center justify-between">
+            <div className="min-w-0">
+              <h2 className="truncate font-black text-slate-900">
+                Job Matching Performance
+              </h2>
+              <p className="mt-1 truncate text-xs text-slate-500">
+                Applications and average AI fit score, last 7 days
+              </p>
+            </div>
+            <BarChart3 className="h-5 w-5 shrink-0 text-blue-500" />
+          </div>
+          {performance.length ? (
+            <div className="mt-6 min-w-0 overflow-x-auto pb-1">
+              <div className="flex h-52 min-w-[360px] items-end gap-2 border-b border-l border-slate-100 px-2 pb-2 sm:h-56">
+                {performance.map((item) => (
+                  <div
+                    key={item.day}
+                    className="flex h-full min-w-8 flex-1 items-end gap-1"
+                    title={`${item.day}: ${item.applications} applications`}
+                  >
+                    <div
+                      className="w-1/2 rounded-t bg-blue-500"
+                      style={{
+                        height: `${Math.max((Number(item.applications || 0) / maxApplications) * 100, 4)}%`,
+                      }}
+                    />
+                    <div
+                      className="w-1/2 rounded-t bg-violet-300"
+                      style={{
+                        height: `${Math.max(Number(item.average_score || 0), 4)}%`,
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <EmptyPanel label="No application performance data yet." className="min-h-52" />
+          )}
+        </section>
+        <section role="button" tabIndex={0} onClick={() => go("/admin/jobs")} onKeyDown={(event) => event.key === "Enter" && go("/admin/jobs")} className="min-w-0 cursor-pointer rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-blue-300 hover:shadow-md sm:p-5 xl:col-span-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="font-black text-slate-900">Job Categories</h2>
+              <p className="mt-1 text-xs text-slate-500">
+                Published jobs by category
+              </p>
+            </div>
+            <Target className="h-5 w-5 text-violet-500" />
+          </div>
+          {categories.length ? (
+            <div className="mt-6 min-h-52 space-y-3">
+              {categories.map((item, index) => (
+                <div key={item.category}>
+                  <div className="flex justify-between text-xs">
+                    <span className="font-semibold text-slate-700">
+                      {item.category}
+                    </span>
+                    <span className="text-slate-400">
+                      {Number(item.total).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="mt-1 h-2 rounded-full bg-slate-100">
+                    <div
+                      className={`h-2 rounded-full ${["bg-blue-500", "bg-violet-500", "bg-emerald-400", "bg-amber-400", "bg-rose-400", "bg-slate-400"][index % 6]}`}
+                      style={{
+                        width: `${Math.max((Number(item.total || 0) / Math.max(totalCategoryJobs, 1)) * 100, 3)}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyPanel label="No job category data yet." />
+          )}
+        </section>
+        <section role="button" tabIndex={0} onClick={() => go("/admin/ai-matching")} onKeyDown={(event) => event.key === "Enter" && go("/admin/ai-matching")} className="min-w-0 cursor-pointer rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-blue-300 hover:shadow-md sm:p-5 xl:col-span-3">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-blue-500" />
+            <h2 className="font-black text-slate-900">AI Insights</h2>
+          </div>
+          <div className="mt-5 rounded-xl bg-blue-50 p-4">
+            <p className="text-sm font-bold text-blue-900">
+              Live platform signals
+            </p>
+            <p className="mt-2 text-xs leading-5 text-blue-700">
+              Insights are calculated from the current applications, jobs, and
+              candidate records.
+            </p>
+          </div>
+          <Insight label="Candidates" value={stats.jobSeekersCount} />
+          <Insight label="Open jobs" value={stats.activeJobs} />
+          <Insight label="Average fit" value={`${stats.avgMatchScore}%`} />
+        </section>
+      </div>
+      <div className="mt-6 grid gap-6 xl:grid-cols-2">
+        <DataTable
+          title="Recent Matches"
+          icon={Target}
+          headers={["Candidate", "Job", "Score", "Status"]}
+          rows={matches.map((item) => [
+            item.candidate_name || "Candidate",
+            item.job_title || "Job",
+            `${item.ai_match_score || 0}%`,
+            item.status || "applied",
+          ])}
+          empty="No application records yet."
+        />
+        <DataTable
+          title="Latest Job Listings"
+          icon={BriefcaseBusiness}
+          headers={["Job Title", "Company", "Location", "Status"]}
+          rows={jobs.map((job) => [
+            job.title,
+            job.company_name || "Employer",
+            job.location || "Not provided",
+            job.status,
+          ])}
+          empty="No approved job listings yet."
+        />
+      </div>
+    </>
+  );
 }
 
-function Insight({ label, value }) { return <div className="mt-4 flex items-center justify-between border-t border-blue-100 pt-3 text-xs"><span className="text-slate-500">{label}</span><strong className="text-slate-900">{value}</strong></div>; }
-function EmptyPanel({ label }) { return <div className="flex h-48 items-center justify-center text-center text-sm text-slate-400">{label}</div>; }
-function DataTable({ title, icon: Icon, headers, rows, empty }) { return <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="flex items-center gap-2 border-b border-slate-100 p-5"><Icon className="h-5 w-5 text-blue-500" /><h2 className="font-black text-slate-900">{title}</h2></div><div className="overflow-x-auto">{rows.length ? <table className="w-full min-w-120 text-left text-sm"><thead className="bg-slate-50 text-xs font-bold text-slate-500"><tr>{headers.map((header) => <th key={header} className="px-5 py-3">{header}</th>)}</tr></thead><tbody className="divide-y divide-slate-100">{rows.map((row, index) => <tr key={`${title}-${index}`}>{row.map((value, valueIndex) => <td key={`${title}-${index}-${valueIndex}`} className={`px-5 py-3.5 ${valueIndex === 0 ? 'font-bold text-slate-800' : 'text-slate-500'}`}>{value}</td>)}</tr>)}</tbody></table> : <EmptyPanel label={empty} />}</div></section>; }
+function Insight({ label, value }) {
+  return (
+    <div className="mt-4 flex items-center justify-between border-t border-blue-100 pt-3 text-xs">
+      <span className="text-slate-500">{label}</span>
+      <strong className="text-slate-900">{value}</strong>
+    </div>
+  );
+}
+function EmptyPanel({ label, className = "" }) {
+  return (
+    <div className={`flex h-48 items-center justify-center text-center text-sm text-slate-400 ${className}`}>
+      {label}
+    </div>
+  );
+}
+function DataTable({ title, icon: Icon, headers, rows, empty }) {
+  return (
+    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex items-center gap-2 border-b border-slate-100 p-5">
+        <Icon className="h-5 w-5 text-blue-500" />
+        <h2 className="font-black text-slate-900">{title}</h2>
+      </div>
+      <div className="overflow-x-auto">
+        {rows.length ? (
+          <table className="w-full min-w-120 text-left text-sm">
+            <thead className="bg-slate-50 text-xs font-bold text-slate-500">
+              <tr>
+                {headers.map((header) => (
+                  <th key={header} className="px-5 py-3">
+                    {header}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {rows.map((row, index) => (
+                <tr key={`${title}-${index}`}>
+                  {row.map((value, valueIndex) => (
+                    <td
+                      key={`${title}-${index}-${valueIndex}`}
+                      className={`px-5 py-3.5 ${valueIndex === 0 ? "font-bold text-slate-800" : "text-slate-500"}`}
+                    >
+                      {value}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <EmptyPanel label={empty} />
+        )}
+      </div>
+    </section>
+  );
+}
 
 function AdminModule({ tab, overview, go }) {
-  const rows = tab === 'users' ? overview.users || [] : tab === 'companies' ? overview.companies || [] : tab === 'jobs' ? overview.jobs || [] : tab === 'applications' || tab === 'matching' ? overview.applications || [] : tab === 'reports' ? overview.reports || [] : tab === 'notifications' ? overview.notifications || [] : [];
-  if (tab === 'settings') return <div className="mt-8 grid max-w-3xl gap-6 md:grid-cols-2"><ModuleCard title="Admin Profile"><p className="text-sm text-slate-600">{overview.adminEmail || 'Administrator account'}</p><p className="mt-2 text-xs text-slate-500">Role: admin</p></ModuleCard><ModuleCard title="Platform Settings"><label className="flex items-center justify-between text-sm font-semibold text-slate-700">Maintenance mode<input type="checkbox" className="h-4 w-4 accent-blue-600" /></label><label className="mt-4 flex items-center justify-between text-sm font-semibold text-slate-700">Email notifications<input type="checkbox" defaultChecked className="h-4 w-4 accent-blue-600" /></label></ModuleCard></div>;
-  if (tab === 'analytics') return <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-4"><ModuleCard title="Users" value={overview.stats?.totalUsers || 0} /><ModuleCard title="Active Jobs" value={overview.stats?.activeJobs || 0} /><ModuleCard title="Applications" value={overview.stats?.totalApplications || 0} /><ModuleCard title="Average Match" value={`${overview.stats?.avgMatchScore || 0}%`} /></div>;
-  return <div className="mt-8 overflow-x-auto rounded-2xl border border-slate-100 bg-white shadow-sm"><table className="w-full min-w-[680px] text-left text-sm"><thead className="border-b border-slate-100 bg-slate-50 text-xs font-bold uppercase tracking-widest text-slate-500"><tr><th className="p-4">Name / Title</th><th className="p-4">Email / Company</th><th className="p-4">Status</th><th className="p-4">Date</th><th className="p-4 text-right">Action</th></tr></thead><tbody className="divide-y divide-slate-100">{rows.length ? rows.map((row) => <tr key={row.id}><td className="p-4 font-semibold text-slate-800">{row.full_name || row.company_name || row.title || row.candidate_name || row.reporter_name || row.recipient_name}</td><td className="p-4 text-slate-600">{row.email || row.rep_email || row.employer_name || row.job_title || row.message || '-'}</td><td className="p-4"><span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">{row.status || row.verification_status || (row.is_read ? 'Read' : 'Unread') || 'Active'}</span></td><td className="p-4 text-xs text-slate-500">{formatDate(row.created_at || row.applied_at)}</td><td className="p-4 text-right"><button type="button" onClick={() => tab === 'jobs' && go('/admin/jobs')} className="text-xs font-bold text-blue-600 hover:text-blue-800">View</button></td></tr>) : <tr><td colSpan="5" className="p-10 text-center text-sm text-slate-500">No records available yet.</td></tr>}</tbody></table></div>;
+  const [processingId, setProcessingId] = useState(null);
+  const [selectedJob, setSelectedJob] = useState(null);
+  const [jobRows, setJobRows] = useState(overview.jobs || []);
+  useEffect(() => {
+    if (tab === "jobs") setJobRows(overview.jobs || []);
+  }, [tab, overview.jobs]);
+  const rows =
+    tab === "users"
+      ? overview.users || []
+      : tab === "companies"
+        ? overview.companies || []
+        : tab === "jobs"
+          ? jobRows
+          : tab === "applications" || tab === "matching"
+            ? overview.applications || []
+            : tab === "reports"
+              ? overview.reports || []
+              : tab === "notifications"
+                ? overview.notifications || []
+                : tab === "activity"
+                  ? overview.logs || []
+                  : [];
+  const handleJobModeration = async (job, action) => {
+    const reason = action === "reject" ? window.prompt("Enter a reason for rejecting this job:")?.trim() : "";
+    if (action === "reject" && !reason) return;
+
+    setProcessingId(job.id);
+    const nextStatus = action === "approve" ? "active" : "rejected";
+    setJobRows((current) => current.map((item) => String(item.id) === String(job.id)
+      ? { ...item, status: nextStatus, is_approved: action === "approve", isApproved: action === "approve" }
+      : item));
+    try {
+      await moderateJob(job.id, action, reason);
+    } catch (error) {
+      setJobRows((current) => current.map((item) => String(item.id) === String(job.id) ? job : item));
+      window.alert(error.response?.data?.message || "Unable to update this job.");
+    } finally {
+      setProcessingId(null);
+    }
+  };
+  const runRowAction = async (row, action) => {
+    setProcessingId(row.id);
+    try {
+      if (tab === "users") {
+        await updateUserStatus(row.id, row.is_active ? "inactive" : "active");
+      } else if (tab === "companies") {
+        await updateCompanyVerification(row.company_profile_id || row.id, action);
+      } else if (tab === "reports") {
+        await updateReportStatus(row.id, action);
+      }
+      window.location.reload();
+    } catch (error) {
+      window.alert(error.response?.data?.message || "Unable to complete this action.");
+    } finally {
+      setProcessingId(null);
+    }
+  };
+  const getModulePath = () => ({
+    users: "/admin/users",
+    companies: "/admin/employers",
+    jobs: "/admin/jobs",
+    applications: "/admin/applications",
+    matching: "/admin/ai-matching",
+    reports: "/admin/reports",
+    notifications: "/admin/notifications",
+    activity: "/admin/activity-log",
+  })[tab] || "/admin/dashboard";
+  if (tab === "settings")
+    return (
+      <div className="mt-8 grid max-w-3xl gap-6 md:grid-cols-2">
+        <ModuleCard title="Admin Profile">
+          <p className="text-sm text-slate-600">
+            {overview.adminEmail || "Administrator account"}
+          </p>
+          <p className="mt-2 text-xs text-slate-500">Role: admin</p>
+        </ModuleCard>
+        <ModuleCard title="Platform Settings">
+          <label className="flex items-center justify-between text-sm font-semibold text-slate-700">
+            Maintenance mode
+            <input type="checkbox" className="h-4 w-4 accent-blue-600" />
+          </label>
+          <label className="mt-4 flex items-center justify-between text-sm font-semibold text-slate-700">
+            Email notifications
+            <input
+              type="checkbox"
+              defaultChecked
+              className="h-4 w-4 accent-blue-600"
+            />
+          </label>
+        </ModuleCard>
+      </div>
+    );
+  if (tab === "analytics")
+    return (
+      <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <ModuleCard title="Users" value={overview.stats?.totalUsers || 0} />
+        <ModuleCard
+          title="Active Jobs"
+          value={overview.stats?.activeJobs || 0}
+        />
+        <ModuleCard
+          title="Applications"
+          value={overview.stats?.totalApplications || 0}
+        />
+        <ModuleCard
+          title="Average Match"
+          value={`${overview.stats?.avgMatchScore || 0}%`}
+        />
+      </div>
+    );
+  return (
+    <>
+      <div className="mt-8 overflow-x-auto rounded-2xl border border-slate-100 bg-white shadow-sm">
+      <table className="w-full min-w-[680px] text-left text-sm">
+        <thead className="border-b border-slate-100 bg-slate-50 text-xs font-bold uppercase tracking-widest text-slate-500">
+          <tr>
+            <th className="p-4">Name / Title</th>
+            <th className="p-4">Email / Company</th>
+            <th className="p-4">Status</th>
+            <th className="p-4">Date</th>
+            <th className="p-4 text-right">Action</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {rows.length ? (
+            rows.map((row) => (
+              <tr key={row.id}>
+                <td className="p-4 font-semibold text-slate-800">
+                  {row.full_name ||
+                    row.company_name ||
+                    row.title ||
+                    row.candidate_name ||
+                    row.reporter_name ||
+                    row.recipient_name}
+                </td>
+                <td className="p-4 text-slate-600">
+                  {row.email ||
+                    row.rep_email ||
+                    row.employer_name ||
+                    row.job_title ||
+                    row.message ||
+                    "-"}
+                </td>
+                <td className="p-4">
+                  <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                    {row.status ||
+                      row.activity_type ||
+                      row.verification_status ||
+                      (row.is_read ? "Read" : "Unread") ||
+                      "Active"}
+                  </span>
+                </td>
+                <td className="p-4 text-xs text-slate-500">
+                  {formatDate(row.created_at || row.applied_at)}
+                </td>
+                <td className="p-4 text-right">
+                  {tab === "jobs" ? (
+                    <div className="flex flex-wrap justify-end gap-2">
+                      <button type="button" onClick={() => setSelectedJob(row)} className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Details</button>
+                      {String(row.status || "").toLowerCase() === "rejected" ? <span className="rounded-xl border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700">✕ Rejected</span> : String(row.status || "").toLowerCase() === "active" || String(row.status || "").toLowerCase() === "published" && (row.is_approved === true || row.is_approved === 1 || row.isApproved === true) ? <span className="rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">✓ Approved</span> : <><button type="button" disabled={processingId === row.id} onClick={() => handleJobModeration(row, "approve")} className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50">Approve</button><button type="button" disabled={processingId === row.id} onClick={() => handleJobModeration(row, "reject")} className="rounded-lg bg-rose-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-50">Reject</button></>}
+                    </div>
+                  ) : tab === "users" ? (
+                    <button type="button" disabled={processingId === row.id} onClick={() => runRowAction(row, "toggle")} className="rounded-lg bg-slate-800 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-slate-700 disabled:opacity-50">{row.is_active ? "Suspend" : "Activate"}</button>
+                  ) : tab === "companies" && ["pending"].includes(String(row.verification_status || "").toLowerCase()) ? (
+                    <div className="flex justify-end gap-2">
+                      <button type="button" disabled={processingId === row.id} onClick={() => runRowAction(row, "verified")} className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50">Approve</button>
+                      <button type="button" disabled={processingId === row.id} onClick={() => runRowAction(row, "rejected")} className="rounded-lg bg-rose-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-50">Reject</button>
+                    </div>
+                  ) : tab === "reports" && ["pending", "under-review"].includes(String(row.status || "").toLowerCase()) ? (
+                    <div className="flex justify-end gap-2">
+                      <button type="button" disabled={processingId === row.id} onClick={() => runRowAction(row, "resolved")} className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50">Resolve</button>
+                      <button type="button" disabled={processingId === row.id} onClick={() => runRowAction(row, "dismissed")} className="rounded-lg bg-slate-700 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-50">Dismiss</button>
+                    </div>
+                  ) : (
+                    <button type="button" onClick={() => go(getModulePath())} className="text-xs font-bold text-blue-600 hover:text-blue-800">View</button>
+                  )}
+                </td>
+              </tr>
+            ))
+          ) : (
+            <tr>
+              <td
+                colSpan="5"
+                className="p-10 text-center text-sm text-slate-500"
+              >
+                No records available yet.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+      </div>
+      {selectedJob && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" role="dialog" aria-modal="true" aria-label="Job details">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div><p className="text-xs font-bold uppercase tracking-widest text-blue-600">Job details</p><h2 className="mt-1 text-2xl font-black text-slate-900">{selectedJob.title || "Untitled job"}</h2><p className="mt-1 text-sm text-slate-500">{selectedJob.company_name || selectedJob.employer_name || "Employer"} · {selectedJob.location || "Location not provided"}</p></div>
+              <button type="button" onClick={() => setSelectedJob(null)} className="rounded-lg px-3 py-1 text-sm font-bold text-slate-500 hover:bg-slate-100">Close</button>
+            </div>
+            <div className="mt-6 grid gap-3 sm:grid-cols-3"><div className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Status</p><p className="mt-1 font-bold text-slate-900">{selectedJob.status || "Pending"}</p></div><div className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Job type</p><p className="mt-1 font-bold text-slate-900">{selectedJob.job_type || selectedJob.type || "Not provided"}</p></div><div className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Created</p><p className="mt-1 font-bold text-slate-900">{formatDate(selectedJob.created_at)}</p></div></div>
+            <p className="mt-6 whitespace-pre-wrap text-sm leading-7 text-slate-700">{selectedJob.description || "No job description provided."}</p>
+            <div className="mt-6 flex flex-wrap justify-end gap-2"><button type="button" disabled={processingId === selectedJob.id} onClick={() => handleJobModeration(selectedJob, "approve")} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50">Approve</button><button type="button" disabled={processingId === selectedJob.id} onClick={() => handleJobModeration(selectedJob, "reject")} className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700 disabled:opacity-50">Reject</button></div>
+          </div>
+        </div>
+      )}
+    </>
+  );
 }
 
-function ModuleCard({ title, value, children }) { return <section className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm"><h2 className="text-lg font-black text-slate-900">{title}</h2>{value !== undefined && <p className="mt-4 text-3xl font-black text-slate-900">{value}</p>}{children && <div className="mt-4">{children}</div>}</section>; }
+function ModuleCard({ title, value, children }) {
+  return (
+    <section className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
+      <h2 className="text-lg font-black text-slate-900">{title}</h2>
+      {value !== undefined && (
+        <p className="mt-4 text-3xl font-black text-slate-900">{value}</p>
+      )}
+      {children && <div className="mt-4">{children}</div>}
+    </section>
+  );
+}
 export default AdminDashboard;

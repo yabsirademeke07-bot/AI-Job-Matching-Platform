@@ -133,6 +133,14 @@ function AppLayout() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/employer-info"
+            element={
+              <ProtectedRoute allowedRoles={["employer", "company", "recruiter"]}>
+                <CompanyInfo />
+              </ProtectedRoute>
+            }
+          />
           <Route path="/employer/onboarding" element={<ProtectedRoute allowedRoles={["employer", "company", "recruiter"]}><CompanyInfo /></ProtectedRoute>} />
           <Route
             path="/employee-profile-completion"
@@ -304,7 +312,7 @@ function AppLayout() {
             path="/employer/post-job"
             element={
               <ProtectedRoute allowedRoles={["employer", "company", "recruiter"]}>
-                <EmployerWorkspace />
+                <EmployerWorkspace standalonePostJob />
               </ProtectedRoute>
             }
           />
@@ -312,7 +320,7 @@ function AppLayout() {
             path="/employer/jobs/new"
             element={
               <ProtectedRoute allowedRoles={["employer", "company", "recruiter"]}>
-                <EmployerWorkspace />
+                <EmployerWorkspace standalonePostJob />
               </ProtectedRoute>
             }
           />
@@ -351,6 +359,7 @@ function AppLayout() {
           <Route path="/admin/applications" element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminDashboard /></ProtectedRoute>} />
           <Route path="/admin/ai-matching" element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminDashboard /></ProtectedRoute>} />
           <Route path="/admin/analytics" element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminDashboard /></ProtectedRoute>} />
+          <Route path="/admin/activity-log" element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminDashboard /></ProtectedRoute>} />
           <Route path="/admin/reports" element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminDashboard /></ProtectedRoute>} />
           <Route path="/admin/notifications" element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminDashboard /></ProtectedRoute>} />
           <Route path="/admin/settings" element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminDashboard /></ProtectedRoute>} />

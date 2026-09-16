@@ -4,9 +4,20 @@ import {
   Building2, Briefcase, Users, UserCheck, Calendar, CheckCircle2,
   XCircle, Search, Edit3, Trash2, PauseCircle, PlayCircle,
   Download, Sparkles, Eye, X, LayoutDashboard, Settings,
-  Bell, UserRoundCheck, Target, FilePlus2
+  Bell, UserRoundCheck, Target, FilePlus2, PlusCircle
 } from 'lucide-react';
 import { notifyMockApplication, rescheduleMockInterview, scheduleMockInterview, updateMockInterview } from '../utils/interviewFlow';
+
+const sanitizeEmployerJobs = (jobsList = []) => {
+  const seen = new Set();
+  return (Array.isArray(jobsList) ? jobsList : []).filter((job) => {
+    const fingerprint = `${String(job?.title || '').trim().toLowerCase()}_${String(job?.company || job?.companyName || '').trim().toLowerCase()}_${String(job?.sector || job?.category || '').trim().toLowerCase()}`;
+    if (!fingerprint) return true;
+    if (seen.has(fingerprint)) return false;
+    seen.add(fingerprint);
+    return true;
+  });
+};
 
 const EmployerDashboard = () => {
   const navigate = useNavigate();
@@ -38,7 +49,14 @@ const EmployerDashboard = () => {
   const [jobs, setJobs] = useState(() => JSON.parse(localStorage.getItem('employerJobs') || '[]'));
 
   // 5. Applicants State
-  const [applicants, setApplicants] = useState(() => JSON.parse(localStorage.getItem('employerApplications') || '[]'));
+  const [applicants, setApplicants] = useState(() => {
+    try {
+      const employerApplications = JSON.parse(localStorage.getItem('employerApplications') || '[]');
+      return Array.isArray(employerApplications) ? employerApplications : [];
+    } catch {
+      return [];
+    }
+  });
   const [interviews, setInterviews] = useState(() => JSON.parse(localStorage.getItem('employerInterviews') || '[]'));
 
   const navigationItems = [
@@ -75,15 +93,30 @@ const EmployerDashboard = () => {
     years_of_experience_min: 0,
     application_deadline: ''
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Headers config for Auth
   useEffect(() => {
-    localStorage.setItem('employerJobs', JSON.stringify(jobs));
+    localStorage.setItem('employerJobs', JSON.stringify(sanitizeEmployerJobs(jobs)));
   }, [jobs]);
 
   useEffect(() => {
     localStorage.setItem('employerApplications', JSON.stringify(applicants));
   }, [applicants]);
+
+  useEffect(() => {
+    const refreshApplications = (event) => {
+      if (event.detail?.key !== 'employerApplications') return;
+      try {
+        const storedApplications = JSON.parse(localStorage.getItem('employerApplications') || '[]');
+        setApplicants(Array.isArray(storedApplications) ? storedApplications : []);
+      } catch {
+        setApplicants([]);
+      }
+    };
+    window.addEventListener('job-matching:updated', refreshApplications);
+    return () => window.removeEventListener('job-matching:updated', refreshApplications);
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('employerInterviews', JSON.stringify(interviews));
@@ -124,12 +157,32 @@ const EmployerDashboard = () => {
   // Create Job Handler
   const handleCreateJob = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
+    const title = String(newJob.title || '').trim();
+    const company = companyProfile.name || user?.full_name || 'Employer company';
+    if (!title || !String(newJob.required_skills || '').trim() || !String(newJob.description || '').trim()) return;
+
+    const duplicate = jobs.some((job) => {
+      const sameTitle = String(job?.title || '').trim().toLowerCase() === title.toLowerCase();
+      const sameCompany = String(job?.company || job?.companyName || '').trim().toLowerCase() === company.toLowerCase();
+      const recent = Date.parse(job?.createdAt || job?.created_at || 0) > Date.now() - 15000;
+      return sameTitle && sameCompany && recent;
+    });
+
+    if (duplicate) {
+      setPublishMessage('This job was already submitted recently and was blocked as a duplicate.');
+      setTimeout(() => setPublishMessage(''), 3500);
+      return;
+    }
+
+    setIsSubmitting(true);
     try {
       const today = new Date().toISOString().slice(0, 10);
       const createdJob = {
         ...newJob,
-        id: Date.now(),
-        company: companyProfile.name || user?.full_name || 'Employer company',
+        id: `job_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+        company,
         locationValue: newJob.location,
         type: newJob.job_type,
         workplace: newJob.work_mode,
@@ -148,14 +201,19 @@ const EmployerDashboard = () => {
         aiMatchScore: null,
         status: 'published',
         created_at: today,
-        applicantsCount: 0
+        createdAt: new Date().toISOString(),
+        applicantsCount: 0,
+        title,
       };
-      setJobs([createdJob, ...jobs]);
+      const nextJobs = sanitizeEmployerJobs([createdJob, ...jobs]);
+      setJobs(nextJobs);
       setPublishMessage('Job published successfully. It is now visible in Find Jobs.');
       window.setTimeout(() => setPublishMessage(''), 4000);
     } catch (error) {
       console.error('Unable to create local job:', error);
+      setPublishMessage('Unable to publish this job. Please try again.');
     } finally {
+      setIsSubmitting(false);
       setShowJobModal(false);
       setNewJob({ title: '', category: 'Software Development', location: '', salary: '', required_skills: '', description: '', job_type: 'full-time', work_mode: 'hybrid', required_education: 'any', years_of_experience_min: 0, application_deadline: '' });
     }
@@ -218,8 +276,9 @@ const EmployerDashboard = () => {
             <h1 className="mt-1 text-2xl font-black text-slate-900">Welcome to your Employer Dashboard</h1>
             <p className="mt-1 text-sm text-slate-600">Manage your company, publish jobs, and connect with the right candidates.</p>
           </div>
-          <button type="button" onClick={() => setShowJobModal(true)} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700">
-            <FilePlus2 className="h-4 w-4" /> Post New Job
+          <button type="button" onClick={() => navigate('/employer/jobs/new')} className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-black text-white shadow-lg shadow-blue-500/25 transition-all hover:bg-blue-700 active:scale-95">
+            <PlusCircle className="h-4 w-4" />
+            <span>+ Post Job</span>
           </button>
         </div>
         {publishMessage && <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{publishMessage}</div>}
@@ -658,9 +717,10 @@ const EmployerDashboard = () => {
 
               <button 
                 type="submit" 
-                className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition mt-2 cursor-pointer"
+                disabled={isSubmitting}
+                className="w-full py-3 rounded-xl font-bold transition mt-2 text-white bg-blue-600 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Publish Job Listing
+                {isSubmitting ? 'Publishing...' : 'Publish Job Listing'}
               </button>
             </form>
           </div>

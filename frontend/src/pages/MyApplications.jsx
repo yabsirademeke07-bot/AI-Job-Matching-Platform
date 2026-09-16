@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getMockApplications } from "../utils/interviewFlow";
+import api from "../services/api";
 
 const tabs = [
   "All",
@@ -14,17 +14,23 @@ const tabs = [
 const normalizeStatus = (value) => {
   const status = String(value || "Pending")
     .toLowerCase()
-    .replace(/_/g, " ");
-  if (
-    status === "submitted" ||
-    status === "applied" ||
-    status === "pending" ||
-    status === "in review"
-  )
+    .replace(/_/g, " ")
+    .trim();
+
+  if (["submitted", "applied", "pending", "in review", "new"].includes(status))
     return "Pending";
-  if (status === "under review") return "Under Review";
-  if (status === "interview scheduled") return "Interview";
-  return status.replace(/\b\w/g, (letter) => letter.toUpperCase());
+  if (["under review", "under-review", "review"].includes(status))
+    return "Under Review";
+  if (["shortlisted", "shortlist"].includes(status)) return "Shortlisted";
+  if (["interview", "interview scheduled", "interview-scheduled"].includes(status))
+    return "Interview";
+  if (["hired", "offer", "accepted"].includes(status)) return "Hired";
+  if (["rejected", "declined", "withdrawn"].includes(status)) return "Rejected";
+
+  return status
+    .split(" ")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
 };
 
 const statusStyles = {
@@ -75,16 +81,36 @@ export default function MyApplications() {
 
   useEffect(() => {
     let active = true;
-    Promise.resolve(getMockApplications())
-      .then((items) => {
-        if (active) setApplications((items || []).map(normalizeApplication));
-      })
-      .catch(() => {
-        if (active) setError("Unable to load your applications.");
-      })
-      .finally(() => {
+
+    const loadApplications = async () => {
+      try {
+        const { data } = await api.get("/seeker/applications");
+        const items = (data?.applications || []).map((item) => ({
+          ...item,
+          id: item.id ?? item.applicationId ?? item.jobId,
+          title: item.jobTitle || item.title || item.role || "Untitled application",
+          company:
+            item.company || item.company_name || item.companyName || "Company unavailable",
+          status: normalizeStatus(item.status),
+          appliedDate: formatDate(item.appliedAt || item.applied_at || item.createdAt),
+          matchScore: item.aiMatchScore ?? item.matchScore ?? item.match_breakdown?.overall,
+          interview: item.interview || null,
+        }));
+
+        if (active) setApplications(items);
+      } catch {
+        try {
+          const fallback = JSON.parse(localStorage.getItem("mockApplications") || "[]");
+          if (active) setApplications((fallback || []).map(normalizeApplication));
+        } catch {
+          if (active) setError("Unable to load your applications.");
+        }
+      } finally {
         if (active) setLoading(false);
-      });
+      }
+    };
+
+    loadApplications();
     return () => {
       active = false;
     };

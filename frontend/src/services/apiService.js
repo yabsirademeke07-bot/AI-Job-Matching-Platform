@@ -1,5 +1,6 @@
 import api from './api';
 import seekerApi from './seekerApiService';
+import { sanitizeAndDeduplicateJobs } from './jobService';
 
 const KEYS = {
   jobs: 'sharedJobs',
@@ -45,16 +46,27 @@ function addNotification(notification) {
 
 export const jobsApi = {
   async getJobs(filters = {}) {
-    return request(() => read(KEYS.jobs), async () => {
+    return request(() => sanitizeAndDeduplicateJobs(read(KEYS.jobs)), async () => {
       const { data } = await api.get('/jobs', { params: filters });
-      return data.jobs || data;
+      return sanitizeAndDeduplicateJobs(data.jobs || data);
     });
   },
   async postJob(jobData) {
-    const job = { ...jobData, id: jobData.id || `job-${Date.now()}`, status: jobData.status || 'published', createdAt: new Date().toISOString() };
-    const jobs = write(KEYS.jobs, [job, ...read(KEYS.jobs).filter((item) => String(item.id) !== String(job.id))]);
+    const jobs = read(KEYS.jobs);
+    const duplicate = jobs.find((item) => {
+      const sameTitle = String(item.title || item.jobTitle || '').trim().toLowerCase() === String(jobData.title || '').trim().toLowerCase();
+      const sameCompany = String(item.company || item.companyName || '').trim().toLowerCase() === String(jobData.company || jobData.companyName || '').trim().toLowerCase();
+      const recent = Date.parse(item.createdAt || item.created_at || 0) > Date.now() - 15000;
+      return sameTitle && sameCompany && recent;
+    });
+    if (duplicate) {
+      return { success: false, duplicate: true, message: 'This job was already submitted recently. Duplicate posting was blocked.' };
+    }
+    const job = { ...jobData, id: jobData.id || `job_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`, status: 'pending_approval', isApproved: false, createdAt: new Date().toISOString() };
+    const nextJobs = sanitizeAndDeduplicateJobs([job, ...jobs.filter((item) => String(item.id) !== String(job.id))]);
+    write(KEYS.jobs, nextJobs);
     await request(null, async () => { const { data } = await api.post('/jobs', jobData); return data; });
-    return { success: true, job, jobs };
+    return { success: true, job, jobs: nextJobs };
   },
   async applyJob(jobId, seekerProfile = {}) {
     const existing = read(KEYS.applications).find((item) => String(item.jobId) === String(jobId) && String(item.seekerId || '') === String(seekerProfile.id || ''));

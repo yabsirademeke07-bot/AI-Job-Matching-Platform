@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import officeImage from '../../pages/images/images3.jpg';
 import { useToast } from '../../hooks/useToast.js';
 import { scrollToFeedback } from '../../utils/scrollHelper.js';
@@ -82,6 +83,7 @@ const normalizePhoneNumber = (number = '') => {
 };
 
 export default function CompanyInfo({ user, onComplete }) {
+  const navigate = useNavigate();
   const { showSuccess, showError } = useToast();
   const currentUser = user || JSON.parse(localStorage.getItem('user') || '{}');
   const slides = [
@@ -308,10 +310,16 @@ export default function CompanyInfo({ user, onComplete }) {
         },
         isOnboardingComplete: true,
       }));
+      localStorage.setItem('employerInfo', JSON.stringify({
+        ...form,
+        employer_type: employerType,
+        tin_number: employerType === 'individual' ? null : tinNumber,
+        trade_license_url: employerType === 'individual' ? null : (form.trade_license_url || form.tradeLicenseName),
+      }));
       setSuccess('Company profile saved successfully!');
       await new Promise((resolve) => setTimeout(resolve, 700));
       if (onComplete) onComplete(form);
-      else window.location.assign('/employer/dashboard');
+      else navigate('/employer/jobs/new', { replace: true, state: { step: 1, fromOnboarding: true } });
       showSuccess('Company profile saved successfully.');
       scrollToFeedback('top');
     } catch (saveError) {

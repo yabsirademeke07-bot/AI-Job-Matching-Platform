@@ -434,9 +434,24 @@ export function EmployerNotifications() {
   const [notifications, setNotifications] = useState(fallbackNotifications);
 
   useEffect(() => {
-    api.get('/employer/notifications')
-      .then(({ data }) => setNotifications(data?.notifications?.length ? data.notifications : fallbackNotifications))
-      .catch(() => setNotifications(read('employerNotifications', fallbackNotifications)));
+    let mounted = true;
+    const loadNotifications = async () => {
+      try {
+        const { data } = await api.get('/employer/notifications');
+        if (mounted && Array.isArray(data?.notifications)) {
+          setNotifications(data.notifications.length ? data.notifications : []);
+        }
+      } catch (requestError) {
+        if (mounted) setNotifications(read('employerNotifications', fallbackNotifications));
+        console.warn('Unable to load employer notifications:', requestError);
+      }
+    };
+    loadNotifications();
+    const intervalId = window.setInterval(loadNotifications, 10000);
+    return () => {
+      mounted = false;
+      window.clearInterval(intervalId);
+    };
   }, []);
 
   const markRead = async (item) => {
@@ -448,7 +463,7 @@ export function EmployerNotifications() {
     }
   };
 
-  return <ViewFrame icon={Bell} title="Notifications" subtitle="Stay current with candidates, jobs, and team activity.">{notifications.map((item) => <article key={item.id} className={`flex items-start gap-4 rounded-2xl border p-5 ${item.isRead || item.read ? 'border-slate-200 bg-white' : 'border-blue-200 bg-blue-50/50'}`}><Bell className="mt-1 h-5 w-5 shrink-0 text-blue-600" /><div className="min-w-0 flex-1"><h3 className="font-black text-slate-900">{item.title}</h3><p className="mt-1 text-sm text-slate-600">{item.body || item.message}</p></div>{!(item.isRead || item.read) && <button onClick={() => markRead(item)} className="inline-flex items-center gap-1 text-xs font-bold text-blue-700"><Check className="h-4 w-4" /> Mark read</button>}</article>)}</ViewFrame>;
+  return <ViewFrame icon={Bell} title="Notifications" subtitle="Stay current with candidates, jobs, and team activity.">{notifications.length ? notifications.map((item) => <article key={item.id} className={`flex items-start gap-4 rounded-2xl border p-5 ${item.isRead || item.is_read || item.read ? 'border-slate-200 bg-white' : 'border-blue-200 bg-blue-50/50'}`}><Bell className="mt-1 h-5 w-5 shrink-0 text-blue-600" /><div className="min-w-0 flex-1"><h3 className="font-black text-slate-900">{item.title}</h3><p className="mt-1 text-sm text-slate-600">{item.body || item.message}</p>{item.createdAt && <p className="mt-2 text-xs text-slate-400">{new Date(item.createdAt).toLocaleString()}</p>}</div>{!(item.isRead || item.is_read || item.read) && <button onClick={() => markRead(item)} className="inline-flex items-center gap-1 text-xs font-bold text-blue-700"><Check className="h-4 w-4" /> Mark read</button>}</article>) : <p className="rounded-2xl border border-dashed border-slate-200 bg-white p-8 text-center text-sm text-slate-500">No notifications yet.</p>}</ViewFrame>;
 }
 
 export function EmployerSettings() {

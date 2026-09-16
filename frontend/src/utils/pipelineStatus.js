@@ -1,46 +1,47 @@
 export const PIPELINE_STATUS_OPTIONS = [
   { value: 'all', label: 'All statuses' },
-  { value: 'applied', label: 'Applied' },
-  { value: 'under-review', label: 'Under Review' },
+  { value: 'pending', label: 'Pending' },
+  { value: 'review', label: 'Review' },
   { value: 'shortlisted', label: 'Shortlisted' },
-  { value: 'interview', label: 'Interview' },
+  { value: 'interviewed', label: 'Interviewed' },
   { value: 'hired', label: 'Hired' },
   { value: 'rejected', label: 'Rejected' },
 ];
 
 const LABELS = {
-  applied: 'Applied',
-  'under-review': 'Under Review',
+  pending: 'Pending',
+  review: 'Review',
   shortlisted: 'Shortlisted',
-  interview: 'Interview',
+  interviewed: 'Interviewed',
   hired: 'Hired',
   rejected: 'Rejected',
 };
 
 const STATUS_CLASSES = {
-  applied: 'border border-amber-200 bg-amber-50 text-amber-700',
-  'under-review': 'border border-blue-200 bg-blue-50 text-blue-700',
+  pending: 'border border-amber-200 bg-amber-50 text-amber-700',
+  review: 'border border-blue-200 bg-blue-50 text-blue-700',
   shortlisted: 'border border-violet-200 bg-violet-50 text-violet-700',
-  interview: 'border border-indigo-200 bg-indigo-50 text-indigo-700',
+  interviewed: 'border border-indigo-200 bg-indigo-50 text-indigo-700',
   hired: 'border border-emerald-200 bg-emerald-50 text-emerald-700',
   rejected: 'border border-rose-200 bg-rose-50 text-rose-700',
 };
 
 const STATUS_ALIASES = {
   all: 'all',
-  applied: 'applied',
-  pending: 'applied',
-  submitted: 'applied',
-  new: 'applied',
-  'under-review': 'under-review',
-  'under review': 'under-review',
-  'in-review': 'under-review',
-  'in review': 'under-review',
-  review: 'under-review',
+  pending: 'pending',
+  applied: 'pending',
+  submitted: 'pending',
+  new: 'pending',
+  review: 'review',
+  'under-review': 'review',
+  'under review': 'review',
+  'in-review': 'review',
+  'in review': 'review',
   shortlisted: 'shortlisted',
-  interview: 'interview',
-  'interview-scheduled': 'interview',
-  'interview scheduled': 'interview',
+  interview: 'interviewed',
+  interviewed: 'interviewed',
+  'interview-scheduled': 'interviewed',
+  'interview scheduled': 'interviewed',
   hired: 'hired',
   accepted: 'hired',
   'offer': 'hired',
@@ -50,10 +51,10 @@ const STATUS_ALIASES = {
 };
 
 export function normalizePipelineStatus(value) {
-  if (value === null || value === undefined) return 'applied';
+  if (value === null || value === undefined) return 'pending';
 
   const raw = String(value).trim().toLowerCase();
-  if (!raw) return 'applied';
+  if (!raw) return 'pending';
 
   const normalized = raw.replace(/\s+/g, '-');
   return STATUS_ALIASES[raw] || STATUS_ALIASES[normalized] || normalized;

@@ -2,7 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const authMiddleware = require('../middleware/authMiddleware');
-const { uploadAndAnalyze, validateAndParse, getAnalysis, syncProfile } = require('../controllers/cvController');
+const { uploadAndAnalyze, validateAndParse, getAnalysis, syncProfile, getCurrentCv } = require('../controllers/cvController');
 
 const router = express.Router();
 const upload = multer({
@@ -18,6 +18,7 @@ router.use(authMiddleware);
 router.post('/upload-and-analyze', upload.single('cv'), uploadAndAnalyze);
 router.post('/analyze', upload.single('cv'), uploadAndAnalyze);
 router.post('/validate-and-parse', upload.single('cv'), validateAndParse);
+router.get('/current', getCurrentCv);
 router.get('/:id/analysis', getAnalysis);
 router.post('/:id/sync-profile', syncProfile);
 

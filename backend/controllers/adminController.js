@@ -1,4 +1,5 @@
 const db = require('../connection');
+const { normalizeJobStatus } = require('../models/jobModel');
 
 const safeExecute = async (query, params = [], fallback = []) => {
   try {
@@ -30,7 +31,7 @@ exports.getAdminDashboardStats = async (req, res) => {
     ]);
     const pipelineStats = { pending: 0, shortlisted: 0, interviewing: 0, hired: 0, rejected: 0 };
     pipeline.forEach((row) => { const key = row.status === 'interview-scheduled' ? 'interviewing' : row.status; if (key in pipelineStats) pipelineStats[key] = Number(row.count || 0); });
-    const [pendingJobs] = await db.execute("SELECT COUNT(*) AS count FROM jobs WHERE LOWER(status) = 'pending'");
+    const [pendingJobs] = await db.execute("SELECT COUNT(*) AS count FROM jobs WHERE LOWER(status) IN ('pending', 'pending_approval', 'draft')");
     return res.status(200).json({ success: true, stats: { totalUsers: Number(users[0]?.count || 0), jobSeekersCount: Number(seekers[0]?.count || 0), employersCount: Number(employers[0]?.count || 0), activeJobs: Number(jobs[0]?.count || 0), avgMatchScore: average[0]?.score == null ? 0 : Number(Number(average[0].score).toFixed(1)), moderationQueueCount: Number(verification[0]?.count || 0) + Number(pendingJobs[0]?.count || 0) + Number(reports[0]?.count || 0), pipeline: pipelineStats } });
   } catch (error) {
     console.error('Dashboard stats error:', error.message);
@@ -67,10 +68,25 @@ exports.getPlatformAnalytics = async (req, res) => {
 exports.getPendingCompanies = async (req, res) => {
   try {
     const [companies] = await db.execute(`
-      SELECT cp.*, u.full_name AS rep_name, u.email AS rep_email, u.phone AS rep_phone
-      FROM company_profiles cp
-      JOIN users u ON cp.employer_id = u.id
-      ORDER BY cp.created_at DESC
+      SELECT
+        COALESCE(cp.id, e.id, he.id) AS id,
+        cp.id AS company_profile_id,
+        u.id AS employer_id,
+        COALESCE(cp.company_name, e.company_name, e.companyName, he.household_name, u.full_name) AS company_name,
+        COALESCE(cp.representative_name, e.representative_name, he.full_name, u.full_name) AS rep_name,
+        u.email AS rep_email,
+        COALESCE(cp.phone, e.phone_number, e.phoneNumber, he.phone_number, u.phone) AS rep_phone,
+        COALESCE(cp.industry, e.industry, he.industry) AS industry,
+        COALESCE(cp.location, e.location, e.headquarters_location, he.residence_location) AS location,
+        COALESCE(cp.verification_status, e.verification_status, e.verificationStatus, 'pending') AS verification_status,
+        COALESCE(cp.is_verified, 0) AS is_verified,
+        COALESCE(cp.created_at, e.created_at, he.created_at, u.created_at) AS created_at
+      FROM users u
+      LEFT JOIN company_profiles cp ON cp.employer_id = u.id
+      LEFT JOIN employers e ON e.user_id = u.id OR e.userId = u.id
+      LEFT JOIN household_employers he ON he.user_id = u.id
+      WHERE u.role IN ('employer', 'company', 'recruiter')
+      ORDER BY created_at DESC
     `);
     return res.json({ success: true, companies });
   } catch (error) {
@@ -87,7 +103,10 @@ exports.updateVerificationStatus = async (req, res) => {
   }
 
   try {
-    await db.execute('UPDATE company_profiles SET is_verified = ?, verification_status = ?, verified_at = ? WHERE id = ?', [status === 'verified' ? 1 : 0, status, status === 'verified' ? new Date() : null, id]);
+    const [profileResult] = await db.execute('UPDATE company_profiles SET is_verified = ?, verification_status = ?, verified_at = ? WHERE id = ? OR employer_id = ?', [status === 'verified' ? 1 : 0, status, status === 'verified' ? new Date() : null, id, id]);
+    if (!profileResult.affectedRows) {
+      await db.execute('UPDATE employers SET verification_status = ?, verificationStatus = ? WHERE id = ? OR user_id = ? OR userId = ?', [status, status, id, id, id]);
+    }
     return res.json({ success: true, message: `Company marked as ${status}` });
   } catch (error) {
     console.error('Admin Company Status Error:', error);
@@ -121,7 +140,27 @@ exports.getAdminDashboardData = async (req, res) => {
         console.warn('Admin analytics query skipped:', error.message);
         return emptyAnalytics;
       }),
-      safeExecute(`SELECT cp.*, u.full_name AS rep_name, u.email AS rep_email, u.phone AS rep_phone FROM company_profiles cp JOIN users u ON cp.employer_id = u.id ORDER BY cp.created_at DESC`),
+      safeExecute(`
+        SELECT
+          COALESCE(cp.id, e.id, he.id) AS id,
+          cp.id AS company_profile_id,
+          u.id AS employer_id,
+          COALESCE(cp.company_name, e.company_name, e.companyName, he.household_name, u.full_name) AS company_name,
+          COALESCE(cp.representative_name, e.representative_name, he.full_name, u.full_name) AS rep_name,
+          u.email AS rep_email,
+          COALESCE(cp.phone, e.phone_number, e.phoneNumber, he.phone_number, u.phone) AS rep_phone,
+          COALESCE(cp.industry, e.industry, he.industry) AS industry,
+          COALESCE(cp.location, e.location, e.headquarters_location, he.residence_location) AS location,
+          COALESCE(cp.verification_status, e.verification_status, e.verificationStatus, 'pending') AS verification_status,
+          COALESCE(cp.is_verified, 0) AS is_verified,
+          COALESCE(cp.created_at, e.created_at, he.created_at, u.created_at) AS created_at
+        FROM users u
+        LEFT JOIN company_profiles cp ON cp.employer_id = u.id
+        LEFT JOIN employers e ON e.user_id = u.id OR e.userId = u.id
+        LEFT JOIN household_employers he ON he.user_id = u.id
+        WHERE u.role IN ('employer', 'company', 'recruiter')
+        ORDER BY created_at DESC
+      `),
       safeExecute(`SELECT j.*, cp.company_name, cp.logo_url, cp.location AS company_location, COUNT(a.id) AS total_applicants FROM jobs j LEFT JOIN company_profiles cp ON j.employer_id = cp.employer_id LEFT JOIN applications a ON j.id = a.job_id GROUP BY j.id ORDER BY j.created_at DESC`),
       safeExecute('SELECT id, full_name, email, phone, role, is_verified, is_active, created_at FROM users ORDER BY created_at DESC'),
       safeExecute(`SELECT u.full_name, u.email, u.role, l.activity_type, l.related_job_id, l.created_at FROM user_activity_log l LEFT JOIN users u ON u.id = l.user_id ORDER BY l.created_at DESC LIMIT 30`),
@@ -166,7 +205,7 @@ exports.getAdminDashboardData = async (req, res) => {
 exports.getPlatformAnalyticsData = async () => {
   const [seekers] = await db.execute("SELECT COUNT(*) AS count FROM users WHERE role = 'job_seeker'");
   const [employers] = await db.execute("SELECT COUNT(*) AS total, SUM(CASE WHEN is_verified = TRUE THEN 1 ELSE 0 END) AS verified FROM company_profiles");
-  const [jobs] = await db.execute("SELECT COUNT(*) AS active FROM jobs WHERE status = 'published'");
+  const [jobs] = await db.execute("SELECT COUNT(*) AS active FROM jobs WHERE status = 'active' AND is_approved = TRUE");
   const [allJobs] = await db.execute('SELECT COUNT(*) AS total FROM jobs');
   const [allUsers] = await db.execute('SELECT COUNT(*) AS total FROM users');
   const [apps] = await db.execute('SELECT COUNT(*) AS total, AVG(ai_match_score) AS avg_score FROM applications');
@@ -216,9 +255,9 @@ exports.moderateJob = async (req, res) => {
   const jobId = req.params.id || req.params.jobId;
   const action = String(req.body?.action || '').trim().toLowerCase();
   const reason = String(req.body?.reason || '').trim();
-  const statusByAction = { publish: 'published', approve: 'published', reject: 'rejected', close: 'closed', take_down: 'closed' };
-  const nextStatus = statusByAction[action];
-  if (!nextStatus) return res.status(422).json({ success: false, message: 'Moderation action must be publish, reject, or close.' });
+  const statusByAction = { publish: 'active', approve: 'active', reject: 'rejected' };
+  const nextStatus = normalizeJobStatus(statusByAction[action]);
+  if (!statusByAction[action]) return res.status(422).json({ success: false, message: 'Moderation action must be approve or reject.' });
   if (action === 'reject' && !reason) return res.status(422).json({ success: false, message: 'A rejection reason is required.' });
 
   const connection = await db.getConnection();
@@ -227,12 +266,37 @@ exports.moderateJob = async (req, res) => {
     const [rows] = await connection.execute('SELECT j.id, j.title, j.employer_id, u.email AS employer_email FROM jobs j JOIN users u ON u.id = j.employer_id WHERE j.id = ? FOR UPDATE', [jobId]);
     if (!rows.length) { await connection.rollback(); return res.status(404).json({ success: false, message: 'Job not found.' }); }
     const job = rows[0];
-    await connection.execute('UPDATE jobs SET status = ?, rejection_reason = ?, approved_by = ?, approved_at = CASE WHEN ? = \'published\' THEN NOW() ELSE NULL END, updated_at = NOW(), published_at = CASE WHEN ? = \'published\' THEN NOW() ELSE published_at END, closed_at = CASE WHEN ? = \'closed\' THEN NOW() ELSE NULL END WHERE id = ?', [nextStatus, nextStatus === 'rejected' ? reason : null, nextStatus === 'published' ? req.user.id : null, nextStatus, nextStatus, nextStatus, jobId]);
-    const message = nextStatus === 'published' ? `Your job listing '${job.title}' has been approved and is now live.` : nextStatus === 'rejected' ? `Your job listing '${job.title}' was rejected: ${reason}` : `Your job listing '${job.title}' has been taken down.`;
-    await connection.execute('INSERT INTO notifications (user_id, type, title, message, related_job_id, action_url) VALUES (?, \'company-update\', ?, ?, ?, ?)', [job.employer_id, nextStatus === 'published' ? 'Job approved' : nextStatus === 'rejected' ? 'Job listing needs changes' : 'Job listing closed', message, jobId, '/employer/jobs']);
-    await connection.execute('INSERT INTO admin_actions_log (admin_id, action_type, target_job_id, reason) VALUES (?, \'content-moderated\', ?, ?)', [req.user.id, jobId, reason || `Job status changed to ${nextStatus}`]);
+    await connection.execute(
+      `UPDATE jobs
+       SET status = ?,
+           is_approved = ?,
+           rejection_reason = ?,
+           approved_by = ?,
+           approved_at = CASE WHEN ? = 'active' THEN NOW() ELSE NULL END,
+           reviewed_by = ?,
+           reviewed_at = NOW(),
+           updated_at = NOW()
+       WHERE id = ?`,
+         [nextStatus, nextStatus === 'active', nextStatus === 'rejected' ? reason : null, nextStatus === 'active' ? req.user.id : null, nextStatus, req.user.id, jobId]
+    );
+    const message = nextStatus === 'active' ? `Your job listing '${job.title}' has been approved and is now live.` : `Your job listing '${job.title}' was rejected: ${reason}`;
+    try {
+      await connection.execute('INSERT INTO notifications (user_id, type, title, message, related_job_id, action_url) VALUES (?, \'company-update\', ?, ?, ?, ?)', [job.employer_id, nextStatus === 'active' ? 'Job approved' : 'Job listing needs changes', message, jobId, '/employer/jobs']);
+    } catch (notificationError) {
+      console.warn('Generic employer notification skipped:', notificationError.message);
+    }
+    try {
+      await connection.execute('INSERT INTO employer_notifications (employerId, title, body, isRead, related_job_id) VALUES (?, ?, ?, FALSE, ?)', [job.employer_id, nextStatus === 'active' ? 'Job approved' : 'Job listing needs changes', message, jobId]);
+    } catch (notificationError) {
+      console.warn('Employer notification skipped:', notificationError.message);
+    }
+    try {
+      await connection.execute('INSERT INTO admin_actions_log (admin_id, action_type, target_job_id, reason) VALUES (?, \'content-moderated\', ?, ?)', [req.user.id, jobId, reason || `Job status changed to ${nextStatus}`]);
+    } catch (auditError) {
+      console.warn('Admin moderation audit skipped:', auditError.message);
+    }
     await connection.commit();
-    return res.json({ success: true, status: nextStatus, message: nextStatus === 'published' ? 'Job approved and published successfully!' : nextStatus === 'rejected' ? 'Job posting has been rejected.' : 'Job closed successfully.' });
+    return res.json({ success: true, status: nextStatus, message: nextStatus === 'active' ? 'Job approved and published successfully!' : 'Job posting has been rejected.' });
   } catch (error) {
     await connection.rollback();
     console.error('Admin job moderation error:', error);
@@ -272,15 +336,53 @@ exports.toggleJobStatus = async (req, res) => {
   try {
     const jobId = req.params.jobId || req.params.id;
     const { status } = req.body;
-    const nextStatus = status === 'active' ? 'published' : status;
-    if (!['pending', 'published', 'closed', 'suspended', 'draft', 'rejected'].includes(nextStatus)) {
+    const reason = String(req.body?.reason || '').trim();
+    const nextStatus = normalizeJobStatus(status);
+    if (!['pending_approval', 'active', 'rejected'].includes(nextStatus)) {
       return res.status(422).json({ success: false, message: 'Invalid job moderation status.' });
     }
+    if (nextStatus === 'rejected' && !reason) {
+      return res.status(422).json({ success: false, message: 'A rejection reason is required.' });
+    }
 
-    const [rows] = await db.execute('SELECT id FROM jobs WHERE id = ?', [jobId]);
+    const [rows] = await db.execute('SELECT id, title, employer_id FROM jobs WHERE id = ?', [jobId]);
     if (!rows.length) return res.status(404).json({ success: false, message: 'Job not found.' });
 
-    await db.execute('UPDATE jobs SET status = ? WHERE id = ?', [nextStatus, jobId]);
+    await db.execute(
+      `UPDATE jobs
+       SET status = ?,
+           is_approved = ?,
+           rejection_reason = CASE WHEN ? = 'rejected' THEN ? ELSE NULL END,
+           approved_by = CASE WHEN ? = 'active' THEN ? ELSE approved_by END,
+           approved_at = CASE WHEN ? = 'active' THEN NOW() ELSE approved_at END,
+           reviewed_by = ?,
+           reviewed_at = NOW(),
+           updated_at = NOW()
+       WHERE id = ?`,
+      [nextStatus, nextStatus === 'active', nextStatus, reason, nextStatus, req.user.id, nextStatus, req.user.id, jobId]
+    );
+
+    if (nextStatus === 'active' || nextStatus === 'rejected') {
+      const message = nextStatus === 'active'
+        ? `Your job listing '${rows[0].title}' has been approved and is now live.`
+        : `Your job listing '${rows[0].title}' was rejected: ${reason}`;
+      const title = nextStatus === 'active' ? 'Job approved' : 'Job listing needs changes';
+      try {
+        await db.execute('INSERT INTO notifications (user_id, type, title, message, related_job_id, action_url) VALUES (?, \'company-update\', ?, ?, ?, ?)', [rows[0].employer_id, title, message, jobId, '/employer/jobs']);
+      } catch (notificationError) {
+        console.warn('Generic employer notification skipped:', notificationError.message);
+      }
+      try {
+        await db.execute('INSERT INTO employer_notifications (employerId, title, body, isRead, related_job_id) VALUES (?, ?, ?, FALSE, ?)', [rows[0].employer_id, title, message, jobId]);
+      } catch (notificationError) {
+        console.warn('Employer notification skipped:', notificationError.message);
+      }
+      try {
+        await db.execute('INSERT INTO admin_actions_log (admin_id, action_type, target_job_id, reason) VALUES (?, \'content-moderated\', ?, ?)', [req.user.id, jobId, reason || `Job status changed to ${nextStatus}`]);
+      } catch (auditError) {
+        console.warn('Admin moderation audit skipped:', auditError.message);
+      }
+    }
 
     return res.status(200).json({ success: true, status: nextStatus, message: 'Job moderation status updated.' });
   } catch (error) {

@@ -65,6 +65,7 @@ const AiCvAnalysis = () => {
       const pendingData = {
         ...analysis,
         skills,
+        verified: true,
         fullName: extractedName || '',
         full_name: extractedName || '',
         firstName: labeledName.firstName || analysis?.firstName || nameParts[0] || '',
@@ -72,12 +73,16 @@ const AiCvAnalysis = () => {
       };
       localStorage.setItem('pending_cv_data', JSON.stringify(pendingData));
       localStorage.setItem('candidateProfile', JSON.stringify(pendingData));
+      localStorage.setItem('activeSeekerProfile', JSON.stringify(pendingData));
       localStorage.setItem('cvUploaded', 'true');
       const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
       localStorage.setItem('user', JSON.stringify({
         ...currentUser,
         onboardingCvUploaded: true,
+        cv_status: 'uploaded',
         cvSkipped: false,
+        onboarding_step: 'personal_info',
+        onboarding_step_completed: 'manual_profile',
         cvFileName: pendingData.file_name || currentUser.cvFileName,
       }));
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -117,7 +122,7 @@ const AiCvAnalysis = () => {
   const firstEducation = analysis?.education?.[0];
   const firstExperience = analysis?.experience?.[0];
   const matchScore = analysis?.matchScore ?? analysis?.keywordMatch;
-  const skillLabel = (skill) => typeof skill === 'string' ? skill : skill.skill_name;
+  const skillLabel = (skill) => typeof skill === 'string' ? skill : skill?.skill_name || skill?.name || '';
   const visibleSkills = skills.filter((skill) => skillLabel(skill));
 
   return (
@@ -150,6 +155,15 @@ const AiCvAnalysis = () => {
             <div className="grid grid-cols-1 gap-8 pt-8 lg:grid-cols-12">
               <div className="space-y-6 lg:col-span-7">
                 <section className="space-y-4 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-6">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-emerald-700">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      Verified profile data
+                    </div>
+                    <div className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-blue-700">
+                      {typeof matchScore === 'number' ? `${matchScore}% match` : 'Profile ready'}
+                    </div>
+                  </div>
                   <div className="flex items-center justify-between"><span className="text-xs font-bold uppercase tracking-wider text-slate-400">Candidate profile</span><button type="button" onClick={() => setEditing((value) => !value)} className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-800">{editing ? <Save className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}{editing ? 'Done' : 'Edit fields'}</button></div>
                   {editing ? <div className="space-y-3">{[['firstName', 'First name'], ['lastName', 'Last name'], ['email', 'Email'], ['phone', 'Phone'], ['location', 'Location'], ['headline', 'Headline']].map(([field, label]) => <label key={field} className="block text-xs font-bold text-slate-600">{label}<input value={analysis[field] || ''} onChange={(event) => updateField(field, event.target.value)} className="mt-1 w-full rounded-lg border border-blue-300 bg-white px-3 py-2 text-sm font-normal text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-200" /></label>)}<label className="block text-xs font-bold text-slate-600">Add skill<input onKeyDown={addSkill} placeholder="Type a skill and press Enter" className="mt-1 w-full rounded-lg border border-blue-300 bg-white px-3 py-2 text-sm font-normal text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-200" /></label><div className="flex flex-wrap gap-2">{visibleSkills.map((skill, index) => <button type="button" key={`${skillLabel(skill)}-${index}`} onClick={() => setSkills((current) => current.filter((_, itemIndex) => itemIndex !== index))} className="rounded-lg border border-blue-200 bg-white px-3 py-1 text-xs font-bold text-blue-700">{skillLabel(skill)} x</button>)}</div></div> : <><h2 className="text-2xl font-extrabold text-slate-900">{displayName}</h2><div className="grid gap-3 pt-2 text-sm text-slate-600 sm:grid-cols-2">{analysis.email && <div className="flex min-w-0 items-center gap-2"><Mail className="h-4 w-4 shrink-0 text-slate-400" /><span className="truncate">{analysis.email}</span></div>}{analysis.phone && <div className="flex items-center gap-2"><FileText className="h-4 w-4 shrink-0 text-slate-400" /><span>{analysis.phone}</span></div>}{analysis.location && <div className="flex items-center gap-2"><MapPin className="h-4 w-4 shrink-0 text-slate-400" /><span>{analysis.location}</span></div>}</div>{headline && <p className="border-t border-slate-200 pt-3 text-sm font-semibold text-slate-700">{headline}</p>}</>}
                 </section>

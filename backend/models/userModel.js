@@ -2,7 +2,7 @@ const db = require('../config/db');
 
 async function findByEmail(email) {
   const [rows] = await db.execute(
-    `SELECT id, full_name, email, password, role, is_verified,
+    `SELECT id, full_name, email, password, role, is_verified, cv_url, cv_status, is_profile_complete, onboarding_step_completed,
             EXISTS (
               SELECT 1 FROM cvs
               WHERE cvs.user_id = users.id AND cvs.is_active = TRUE
@@ -13,8 +13,10 @@ async function findByEmail(email) {
   if (!rows[0]) return null;
   return {
     ...rows[0],
-    has_cv: Boolean(rows[0].has_cv),
-    onboarding_step: rows[0].role === 'job_seeker' && !rows[0].has_cv ? 'cv_upload' : null,
+    has_cv: Boolean(rows[0].has_cv || rows[0].cv_status === 'uploaded'),
+    cv_status: rows[0].cv_status || (rows[0].has_cv ? 'uploaded' : 'none'),
+    onboarding_step_completed: rows[0].onboarding_step_completed || 'cv_upload',
+    onboarding_step: rows[0].role === 'job_seeker' && !rows[0].has_cv && rows[0].cv_status !== 'skipped' ? 'cv_upload' : null,
   };
 }
 
