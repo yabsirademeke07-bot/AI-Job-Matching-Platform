@@ -20,25 +20,39 @@ async function getMatchedJobs(req, res) {
   try {
     const profile = await getCandidateProfile(req.user.id);
     const [jobs] = await db.query(
-      `SELECT j.*, COALESCE(cp.company_name, u.full_name, 'Company') AS company_name,
-              sj.id AS saved_id, a.id AS application_id
+      `SELECT j.*, COALESCE(j.company_name, cp.company_name, u.full_name, 'Company') AS company_name
        FROM jobs j
        JOIN users u ON u.id = j.employer_id
        LEFT JOIN company_profiles cp ON cp.employer_id = j.employer_id
-       LEFT JOIN saved_jobs sj ON sj.job_id = j.id AND sj.user_id = ?
-       LEFT JOIN applications a ON a.job_id = j.id AND a.job_seeker_id = ?
-      WHERE LOWER(j.status) IN ('active', 'published')
+      WHERE LOWER(j.status) = 'active' AND j.is_approved = TRUE
        ORDER BY j.created_at DESC`,
-      [req.user.id, req.user.id]
+      []
     );
+    let savedIds = new Set();
+    let appliedIds = new Set();
+    try {
+      const [saved] = await db.query('SELECT job_id FROM saved_jobs WHERE user_id = ?', [req.user.id]);
+      savedIds = new Set(saved.map((item) => String(item.job_id)));
+    } catch (error) { console.warn('Saved jobs lookup skipped:', error.message); }
+    try {
+      const [applied] = await db.query('SELECT job_id FROM applications WHERE job_seeker_id = ?', [req.user.id]);
+      appliedIds = new Set(applied.map((item) => String(item.job_id)));
+    } catch (error) { console.warn('Application lookup skipped:', error.message); }
     const jobIds = jobs.map((job) => job.id);
     const skillsByJob = new Map();
     if (jobIds.length) {
-      const [requiredSkills] = await db.query('SELECT job_id, skill_name, skill_weight FROM job_required_skills WHERE job_id IN (?) ORDER BY id', [jobIds]);
-      requiredSkills.forEach((skill) => {
-        const skills = skillsByJob.get(skill.job_id) || [];
-        skills.push({ name: skill.skill_name, weight: skill.skill_weight });
-        skillsByJob.set(skill.job_id, skills);
+      try {
+        const [requiredSkills] = await db.query('SELECT job_id, skill_name, skill_weight FROM job_required_skills WHERE job_id IN (?) ORDER BY id', [jobIds]);
+        requiredSkills.forEach((skill) => {
+          const skills = skillsByJob.get(skill.job_id) || [];
+          skills.push({ name: skill.skill_name, weight: skill.skill_weight });
+          skillsByJob.set(skill.job_id, skills);
+        });
+      } catch (error) { console.warn('Structured job skills lookup skipped:', error.message); }
+      jobs.forEach((job) => {
+        if (skillsByJob.has(job.id)) return;
+        const legacySkills = String(job.required_skills || '').split(/[,;|]/).map((skill) => skill.trim()).filter(Boolean);
+        skillsByJob.set(job.id, legacySkills.map((name) => ({ name, weight: 1 })));
       });
     }
     const scoredJobs = calculateJobMatches(profile.cv, jobs.map((job) => ({
@@ -68,12 +82,12 @@ async function getMatchedJobs(req, res) {
 }
 
 async function createApplication(req, res) {
-  const { jobId, resumeSnapshot } = req.body || {};
+  const { jobId, coverLetter = '' } = req.body || {};
   if (!jobId) return res.status(400).json({ success: false, message: 'jobId is required.' });
   const connection = await db.getConnection();
   try {
     await connection.beginTransaction();
-    const [[job]] = await connection.query("SELECT id FROM jobs WHERE id = ? AND LOWER(status) IN ('active', 'published') LIMIT 1", [jobId]);
+    const [[job]] = await connection.query("SELECT * FROM jobs WHERE id = ? AND LOWER(status) = 'active' AND is_approved = TRUE LIMIT 1", [jobId]);
     if (!job) {
       await connection.rollback();
       return res.status(404).json({ success: false, message: 'This job is no longer available.' });
@@ -84,16 +98,54 @@ async function createApplication(req, res) {
       return res.status(409).json({ success: false, message: 'You have already applied for this job.', applicationId: existing.id });
     }
     const [[cv]] = await connection.query('SELECT id, file_name, ai_extracted_data FROM cvs WHERE user_id = ? AND is_active = TRUE ORDER BY is_primary DESC, upload_date DESC LIMIT 1', [req.user.id]);
-    const snapshot = resumeSnapshot || { cvId: cv?.id || null, fileName: cv?.file_name || null, extractedData: parseJson(cv?.ai_extracted_data, {}) };
-    const [result] = await connection.query("INSERT INTO applications (job_id, job_seeker_id, cv_id, status, resume_snapshot, applied_at) VALUES (?, ?, ?, 'under-review', ?, NOW())", [jobId, req.user.id, cv?.id || null, JSON.stringify(snapshot)]);
+    const snapshot = { cvId: cv?.id || null, fileName: cv?.file_name || null, extractedData: parseJson(cv?.ai_extracted_data, {}) };
+    const profile = await getCandidateProfile(req.user.id);
+    const [requiredSkills] = await connection.query('SELECT skill_name, skill_weight FROM job_required_skills WHERE job_id = ? ORDER BY id', [jobId]);
+    const normalizedRequiredSkills = requiredSkills.length
+      ? requiredSkills.map((skill) => ({ name: skill.skill_name, weight: skill.skill_weight }))
+      : String(job.required_skills || '').split(/[,;|]/).map((name) => ({ name: name.trim(), weight: 1 })).filter((skill) => skill.name);
+    const match = calculateMatchScore({ ...profile, cvStatus: profile.profile?.cv_status, cv: profile.cv }, { ...job, requiredSkills: normalizedRequiredSkills });
+    const [result] = await connection.query(
+      `INSERT INTO applications (
+         job_id, job_seeker_id, cv_id, status, resume_snapshot,
+         ai_match_score, skills_match_score, experience_match_score,
+         education_match_score, location_match_score, seeker_cover_letter, applied_at
+       ) VALUES (?, ?, ?, 'pending_review', ?, ?, ?, ?, ?, ?, ?, NOW())`,
+      [jobId, req.user.id, cv?.id || null, JSON.stringify(snapshot), match.score, match.breakdown.skills, match.breakdown.experience, match.breakdown.education, match.breakdown.location, String(coverLetter || '')]
+    );
     await connection.query('UPDATE jobs SET application_count = application_count + 1 WHERE id = ?', [jobId]);
     await connection.commit();
-    return res.status(201).json({ success: true, application: { id: result.insertId, jobId: Number(jobId), candidateId: req.user.id, appliedAt: new Date().toISOString(), status: 'Under Review', resumeSnapshot: snapshot } });
+    await createNotification({
+      userId: job.employer_id,
+      type: 'APPLICATION',
+      title: 'New Application',
+      message: `${profile.full_name || 'A candidate'} applied for ${job.title}.`,
+      referenceType: 'APPLICATION',
+      referenceId: result.insertId,
+      jobId,
+      applicationId: result.insertId,
+      relatedUserId: req.user.id,
+    });
+    return res.status(201).json({ success: true, application: { id: result.insertId, jobId: Number(jobId), seekerId: req.user.id, appliedAt: new Date().toISOString(), status: 'pending_review', hasCv: Boolean(cv?.id), resumeSnapshot: snapshot, matchScore: match.score, matchBreakdown: match.breakdown, skillsMatchScore: match.breakdown.skills, experienceMatchScore: match.breakdown.experience, educationMatchScore: match.breakdown.education, locationMatchScore: match.breakdown.location, coverLetter: String(coverLetter || '') } });
   } catch (error) {
     await connection.rollback();
     console.error('Application creation failed:', error.message);
     return res.status(500).json({ success: false, message: 'Unable to submit application.' });
   } finally { connection.release(); }
+}
+
+async function getApplicationMatchScore(req, res) {
+  try {
+    const [[job]] = await db.query("SELECT j.*, COALESCE(j.company_name, cp.company_name, u.full_name, 'Company') AS company_name FROM jobs j JOIN users u ON u.id = j.employer_id LEFT JOIN company_profiles cp ON cp.employer_id = j.employer_id WHERE j.id = ? LIMIT 1", [req.params.jobId]);
+    if (!job) return res.status(404).json({ success: false, message: 'Job not found.' });
+    const profile = await getCandidateProfile(req.user.id);
+    const [requiredSkills] = await db.query('SELECT skill_name, skill_weight FROM job_required_skills WHERE job_id = ? ORDER BY id', [req.params.jobId]);
+    const result = calculateMatchScore(profile, { ...job, requiredSkills: requiredSkills.length ? requiredSkills.map((skill) => ({ name: skill.skill_name, weight: skill.skill_weight })) : job.required_skills });
+    return res.json({ success: true, score: result.score, breakdown: result.breakdown, matchedSkills: result.matchedSkills, job });
+  } catch (error) {
+    console.error('Application match score failed:', error.message);
+    return res.status(500).json({ success: false, message: 'Unable to calculate match score.' });
+  }
 }
 
 async function saveJob(req, res) {
@@ -112,4 +164,4 @@ async function unsaveJob(req, res) {
   } catch (error) { return res.status(500).json({ success: false, message: 'Unable to remove saved job.' }); }
 }
 
-module.exports = { getMatchedJobs, createApplication, saveJob, unsaveJob };
+module.exports = { getMatchedJobs, createApplication, getApplicationMatchScore, saveJob, unsaveJob };

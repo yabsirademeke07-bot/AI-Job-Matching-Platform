@@ -1,17 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
-import officeImage from '../../pages/images/images3.jpg';
+import { useNavigate } from 'react-router-dom';
 import { useToast } from '../../hooks/useToast.js';
 import { scrollToFeedback } from '../../utils/scrollHelper.js';
 import { EmployerHeader } from '../layout/EmployerHeader';
-
-const ambientZoomStyles = `
-  @keyframes ambientSlowZoom {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.05); }
-  }
-  .animate-ambient-zoom { animation: ambientSlowZoom 24s ease-in-out infinite; }
-`;
 
 const hiringVolumeOptions = ['1-5 Hires', '6-20 Hires', '20+ Scaled Hiring', 'Continuous Talent Pool'];
 const companySizeOptions = ['1-10', '11-50', '51-200', '201-500', '1000+'];
@@ -83,20 +74,9 @@ const normalizePhoneNumber = (number = '') => {
 };
 
 export default function CompanyInfo({ user, onComplete }) {
+  const navigate = useNavigate();
   const { showSuccess, showError } = useToast();
   const currentUser = user || JSON.parse(localStorage.getItem('user') || '{}');
-  const slides = [
-    {
-      badge: '✨ AI-POWERED RECRUITMENT INTELLIGENCE',
-      heading: 'Build & Scale Your High-Performing Team.',
-      description: 'Connect with verified top-tier professionals matched precisely to your company culture and technical needs.',
-    },
-    {
-      badge: '⚡ 10X FASTER HIRING PIPELINE',
-      heading: 'Hire Top 1% AI-Matched Talent Faster.',
-      description: 'Eliminate manual CV screening with automated skill scoring and instant interview scheduling.',
-    },
-  ];
   const initialPhoneDigits = String(currentUser.phone || '').replace(/\D/g, '').replace(/^251/, '').replace(/^0/, '').slice(0, 9);
   const [phoneOperator, setPhoneOperator] = useState('Ethio Telecom');
   const [phoneNumber, setPhoneNumber] = useState(initialPhoneDigits);
@@ -128,7 +108,6 @@ export default function CompanyInfo({ user, onComplete }) {
   const attachSuccessTimerRef = useRef(null);
   const [attachSuccess, setAttachSuccess] = useState(false);
   const [success, setSuccess] = useState('');
-  const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
 
   useEffect(() => {
     if (!error) return undefined;
@@ -140,14 +119,6 @@ export default function CompanyInfo({ user, onComplete }) {
     if (validationTimerRef.current) window.clearTimeout(validationTimerRef.current);
     if (attachSuccessTimerRef.current) window.clearTimeout(attachSuccessTimerRef.current);
   }, []);
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentSlideIndex((previous) => (previous + 1) % slides.length);
-    }, 3500);
-
-    return () => clearInterval(timer);
-  }, [slides.length]);
 
   useEffect(() => {
     let cancelled = false;
@@ -237,7 +208,12 @@ export default function CompanyInfo({ user, onComplete }) {
       setErrors((current) => ({ ...current, tradeLicense: 'Trade License PDF must be 10MB or smaller.' }));
       return;
     }
-    setForm((current) => ({ ...current, trade_license_url: file.name, tradeLicenseFile: file, tradeLicenseName: file.name }));
+    setForm((current) => ({
+      ...current,
+      trade_license_url: '',
+      tradeLicenseFile: file,
+      tradeLicenseName: file.name,
+    }));
     setErrors((current) => ({ ...current, tradeLicense: '' }));
     setAttachSuccess(true);
     if (attachSuccessTimerRef.current) window.clearTimeout(attachSuccessTimerRef.current);
@@ -290,9 +266,10 @@ export default function CompanyInfo({ user, onComplete }) {
           phoneOperator,
           phoneNumber,
           tinNumber: employerType === 'individual' ? null : tinNumber,
-          tradeLicenseNumber: employerType === 'individual' ? null : (form.trade_license_number || form.trade_license_url || form.tradeLicenseName),
+          tradeLicenseNumber: employerType === 'individual' ? null : form.trade_license_number,
           trade_license_number: employerType === 'individual' ? null : form.trade_license_number,
-          trade_license_url: employerType === 'individual' ? null : (form.trade_license_url || form.tradeLicenseName),
+          trade_license_url: employerType === 'individual' ? null : form.trade_license_url,
+          tradeLicenseName: employerType === 'individual' ? null : form.tradeLicenseName,
           social_media_urls: { linkedin: form.linkedin },
         }),
       });
@@ -305,14 +282,22 @@ export default function CompanyInfo({ user, onComplete }) {
           ...form,
           employer_type: employerType,
           tin_number: employerType === 'individual' ? null : tinNumber,
-          trade_license_url: employerType === 'individual' ? null : (form.trade_license_url || form.tradeLicenseName),
+          trade_license_url: employerType === 'individual' ? null : form.trade_license_url,
+          tradeLicenseName: employerType === 'individual' ? null : form.tradeLicenseName,
         },
         isOnboardingComplete: true,
+      }));
+      localStorage.setItem('employerInfo', JSON.stringify({
+        ...form,
+        employer_type: employerType,
+        tin_number: employerType === 'individual' ? null : tinNumber,
+        trade_license_url: employerType === 'individual' ? null : form.trade_license_url,
+        tradeLicenseName: employerType === 'individual' ? null : form.tradeLicenseName,
       }));
       setSuccess('Company profile saved successfully!');
       await new Promise((resolve) => setTimeout(resolve, 700));
       if (onComplete) onComplete(form);
-      else window.location.assign('/employer/dashboard');
+      else navigate('/employer/jobs/new', { replace: true, state: { step: 1, fromOnboarding: true } });
       showSuccess('Company profile saved successfully.');
       scrollToFeedback('top');
     } catch (saveError) {
@@ -476,6 +461,9 @@ export default function CompanyInfo({ user, onComplete }) {
                   <Field id="companyName" label={employerType === 'individual' ? 'Household / Family Name *' : 'Company Name'} value={form.company_name} onChange={(value) => update('company_name', value)} required error={errors.companyName} placeholder={employerType === 'individual' ? "e.g. Yabsira's Residence" : ''} />
                   {employerType === 'company' && <Field id="tinNumber" label="Tax Identification Number (TIN) *" value={form.tin_number} onChange={(value) => update('tin_number', value)} placeholder="e.g. 0012345678 (10 digits)" maxLength={10} error={errors.tinNumber} />}
                   {employerType === 'company' && <div className="sm:col-span-2">
+                    <Field id="tradeLicenseNumber" label="Trade License Number (Optional)" value={form.trade_license_number} onChange={(value) => update('trade_license_number', value)} placeholder="Enter the registered trade license number" />
+                  </div>}
+                  {employerType === 'company' && <div className="sm:col-span-2">
                     <label className="mb-1 block text-xs font-semibold text-slate-800 sm:text-sm">
                       Trade License / Registration Document (PDF) <span className="font-bold text-rose-500">*</span>
                     </label>
@@ -536,17 +524,6 @@ export default function CompanyInfo({ user, onComplete }) {
                     <Field label={<><span>Website</span> <span className="ml-1 text-xs font-normal italic text-slate-400">(Optional)</span></>} type="url" value={form.website} onChange={(value) => update('website', value)} placeholder="https://example.com" />
                     <Field label={<><span>Social Media</span> <span className="ml-1 text-xs font-normal italic text-slate-400">(Optional)</span></>} type="url" value={form.linkedin} onChange={(value) => update('linkedin', value)} placeholder="https://linkedin.com/company/..." />
                   </>}
-                  <div className="sm:col-span-2">
-                    <label className={labelClass}>{employerType === 'individual' ? <><span>About Household & Expectations</span> <span className="ml-1 text-xs font-normal italic text-slate-400">(Optional)</span></> : 'About Company (Optional)'}
-                      <textarea
-                        rows={3}
-                        value={form.description}
-                        onChange={(event) => update('description', event.target.value)}
-                        className="mt-2 w-full resize-y rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-xs font-semibold text-slate-900 placeholder:italic placeholder:text-xs placeholder:text-slate-400 placeholder:font-normal outline-none transition-all hover:bg-slate-50 focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-500/10 sm:text-sm"
-                        placeholder={employerType === 'individual' ? 'Briefly describe your household or specific requirements for candidates...' : 'Briefly describe what your organization does...'}
-                      />
-                    </label>
-                  </div>
                 </div>
               </section>
 

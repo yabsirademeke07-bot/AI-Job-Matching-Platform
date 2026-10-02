@@ -24,29 +24,30 @@ import api from '../services/api';
 const contactInfo = [
   {
     title: 'Email Us',
-    value: 'support@jobmatching.ai',
-    description: 'Get help with your account, CV, profile, or AI matching questions.',
+    value: 'tekbaaweke32@gmail.com',
+    description: 'Tekeba Aweke · Get help with your account, CV, profile, or AI matching questions.',
     icon: Mail,
-    href: 'mailto:support@jobmatching.ai',
+    href: 'mailto:tekbaaweke32@gmail.com',
   },
   {
     title: 'Call Us',
-    value: '0952748973',
-    description: 'Available during business hours for urgent support.',
+    value: '0925684932 · 0952748973',
+    phoneNumbers: ['0925684932', '0952748973'],
+    description: 'Call either number for immediate support. We are available 24/7.',
     icon: Phone,
-    href: 'tel:0952748973',
+    href: 'tel:0925684932',
   },
   {
     title: 'Visit Us',
-    value: 'Addis Ababa, Ethiopia',
-    description: 'Supporting job seekers and employers across Ethiopia.',
+    value: 'Anywhere in Ethiopia',
+    description: 'Supporting job seekers and employers wherever they are in Ethiopia.',
     icon: MapPin,
-    href: 'https://www.google.com/maps/search/?api=1&query=Addis%20Ababa%2C%20Ethiopia',
+    href: 'https://www.google.com/maps/search/?api=1&query=Ethiopia',
   },
   {
     title: 'Business Hours',
-    value: 'Monday - Friday',
-    description: '8:00 AM - 5:00 PM',
+    value: 'Open 24/7',
+    description: 'Support is available every day, at any time.',
     icon: Clock3,
   },
 ];
@@ -74,7 +75,7 @@ const faqs = [
   ['How is the Match Score calculated?', 'The AI compares the job requirements with the job seeker\'s profile information and generates a matching score.'],
   ['Can employers post jobs?', 'Yes. Employers can create job postings and find suitable candidates through AI-powered matching.'],
   ['How can I update my profile or CV?', 'Open your profile section, update your information, and upload a current CV to improve your opportunities.'],
-  ['How can I contact support?', 'Use the form below or email support@jobmatching.ai and we will respond during business hours.'],
+  ['How can I contact support?', 'Use the form below or email tekbaaweke32@gmail.com and we will respond 24/7.'],
 ];
 
 const initialForm = { fullName: '', email: '', subject: '', message: '' };
@@ -117,6 +118,7 @@ export default function Contact() {
   const [isSending, setIsSending] = useState(false);
   const [isSent, setIsSent] = useState(false);
   const [openFaq, setOpenFaq] = useState(null);
+  const [emailCopied, setEmailCopied] = useState(false);
 
   const updateField = (name, value) => {
     setForm((current) => ({ ...current, [name]: value }));
@@ -147,6 +149,12 @@ export default function Contact() {
     setForm(initialForm);
     setErrors({});
     setIsSent(false);
+  };
+
+  const copyEmail = async () => {
+    await navigator.clipboard?.writeText('tekbaaweke32@gmail.com');
+    setEmailCopied(true);
+    window.setTimeout(() => setEmailCopied(false), 2200);
   };
 
   return (
@@ -188,21 +196,35 @@ export default function Contact() {
 
       <section className="px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
         <div className="mx-auto grid max-w-[1180px] gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {contactInfo.map(({ title, value, description, icon: Icon, href }) => {
+          {contactInfo.map(({ title, value, phoneNumbers, description, icon: Icon, href }) => {
             const cardContent = (
               <>
                 <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-transparent text-sky-700 ring-1 ring-sky-200">
                   <Icon className="h-4 w-4" />
                 </span>
                 <h2 className="mt-4 text-[1.25rem] font-black leading-tight tracking-[-0.02em] text-slate-950">{title}</h2>
-                <p className="mt-2 break-words text-sm font-black leading-relaxed text-sky-700">{value}</p>
+                {phoneNumbers ? (
+                  <p className="mt-2 flex flex-wrap gap-x-2 gap-y-1 text-sm font-black leading-relaxed text-sky-700">
+                    {phoneNumbers.map((phone, index) => (
+                      <span key={phone}>
+                        {index > 0 && <span className="mr-2 text-slate-300">·</span>}
+                        <a href={`tel:${phone}`} className="hover:underline">{phone}</a>
+                      </span>
+                    ))}
+                  </p>
+                ) : <p className="mt-2 break-words text-sm font-black leading-relaxed text-sky-700">{value}</p>}
                 <p className="mt-2 text-xs leading-5 text-slate-500">{description}</p>
+                {title === 'Email Us' && (
+                  <button type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); copyEmail(); }} className="mt-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-bold text-sky-700 transition hover:bg-sky-100">
+                    {emailCopied ? 'Email copied' : 'Copy email'}
+                  </button>
+                )}
               </>
             );
             const cardClassName = 'group rounded-xl border border-slate-200 bg-white p-3 shadow-sm transition hover:-translate-y-1 hover:border-[var(--brand-primary)] hover:shadow-lg';
 
             return href ? (
-              <a key={title} href={href} aria-label={title === 'Call Us' ? 'Call 0952748973' : title === 'Email Us' ? 'Email support@jobmatching.ai' : 'Open Addis Ababa location in Google Maps'} target={title === 'Visit Us' ? '_blank' : undefined} rel={title === 'Visit Us' ? 'noreferrer' : undefined} className={cardClassName}>
+              <a key={title} href={href} aria-label={title === 'Call Us' ? 'Call 0925684932' : title === 'Email Us' ? 'Email tekbaaweke32@gmail.com' : 'Open Ethiopia location in Google Maps'} target={title === 'Visit Us' ? '_blank' : undefined} rel={title === 'Visit Us' ? 'noreferrer' : undefined} className={cardClassName}>
                 {cardContent}
               </a>
             ) : (
@@ -326,7 +348,7 @@ export default function Contact() {
             <div className="space-y-4 border-t border-slate-200 bg-slate-50 p-5 text-sm text-slate-700">
               <div className="flex items-start gap-3">
                 <Mail className="mt-0.5 h-4 w-4 text-sky-700" />
-                <span>support@jobmatching.ai</span>
+                <span>tekbaaweke32@gmail.com</span>
               </div>
               <div className="flex items-start gap-3">
                 <Phone className="mt-0.5 h-4 w-4 text-sky-700" />

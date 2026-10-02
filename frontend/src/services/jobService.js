@@ -1,7 +1,22 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
-const USE_MOCKS = import.meta.env.VITE_USE_JOB_MOCKS !== 'false';
+const USE_MOCKS = import.meta.env.VITE_USE_JOB_MOCKS === 'true';
 const SAVED_JOBS_KEY = 'jobMatchingSavedJobs';
 const APPLICATIONS_KEY = 'mockApplications';
+
+export function sanitizeAndDeduplicateJobs(jobsList = []) {
+  const seen = new Set();
+  return (Array.isArray(jobsList) ? jobsList : []).filter((job) => {
+    const title = String(job?.title || job?.jobTitle || '').trim().toLowerCase();
+    const company = String(job?.company || job?.companyName || '').trim().toLowerCase();
+    const sector = String(job?.sector || job?.category || '').trim().toLowerCase();
+    const fingerprint = `${title}_${company}_${sector}`;
+
+    if (!fingerprint) return true;
+    if (seen.has(fingerprint)) return false;
+    seen.add(fingerprint);
+    return true;
+  });
+}
 
 const mockJobs = [
   {

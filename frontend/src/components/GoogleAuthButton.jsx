@@ -18,7 +18,7 @@ export const GoogleAuthButton = ({ label = 'Continue with Google' }) => {
       type="button"
       disabled={isLoading}
       onClick={handleGoogleAuth}
-      className="w-full h-12 bg-[#4285F4] hover:bg-[#3367D6] active:scale-[0.99] border-2 border-[#4285F4] rounded-2xl text-white text-xs sm:text-sm font-bold shadow-lg shadow-blue-500/20 transition-all flex items-center justify-center gap-3 cursor-pointer disabled:opacity-60 select-none"
+      className="w-full h-12 bg-white hover:bg-[#f8f9fa] active:bg-[#f1f3f4] border border-[#dadce0] rounded-lg text-[#3c4043] text-xs sm:text-sm font-semibold shadow-sm hover:shadow transition-all flex items-center justify-center gap-3 cursor-pointer disabled:opacity-60 select-none"
     >
       {isLoading ? (
         <Loader2 className="w-5 h-5 animate-spin text-blue-600" />

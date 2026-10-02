@@ -19,6 +19,7 @@ const upload = multer({
 
 router.use(authMiddleware);
 router.get('/profile', getProfile);
+router.get('/profile/full', getProfile);
 router.put('/profile', updateProfile);
 router.post('/profile', updateProfile);
 router.post('/profile/save', saveProfile);

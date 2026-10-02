@@ -61,9 +61,49 @@ async function uploadAndAnalyze(req, res) {
       await removeFile(req.file);
       return res.status(422).json({ success: false, is_cv: false, message: contentValidation.message || CV_CONTENT_ERROR, validation: contentValidation.sections });
     }
-    if (!extracted.is_cv) {
+    // The content validator is authoritative. The fallback classifier has an
+    // older, stricter heuristic and must not reject an already valid profile.
+    if (contentValidation.valid && extracted && !extracted.is_cv) {
+      extracted.is_cv = true;
+    }
+
+    const hasContact = Boolean(
+      (extracted.fullName || extracted.full_name) &&
+      (extracted.email || extracted.phone)
+    );
+    const hasLocation = Boolean(extracted.location || extracted.city || extracted.address);
+    const hasSkills = Array.isArray(extracted.skills) && extracted.skills.length > 0;
+    const hasExperience = Boolean(
+      (Array.isArray(extracted.experience) && extracted.experience.length > 0) ||
+      extracted.yearsOfExperience !== undefined ||
+      extracted.experienceLevel
+    );
+    const hasEducation = Boolean(
+      (Array.isArray(extracted.education) && extracted.education.length > 0) ||
+      extracted.degree ||
+      extracted.educationLevel
+    );
+    const hasQualification = hasExperience || hasEducation;
+    const isValidCv = hasContact && (hasQualification || hasSkills);
+
+    console.log('SERVER CV PARSER EVALUATION:', {
+      hasContact,
+      hasLocation,
+      hasSkills,
+      hasExperience,
+      hasEducation,
+      hasQualification,
+      isValidCv,
+    });
+
+    if (!isValidCv) {
       await removeFile(req.file);
-      return res.status(422).json({ success: false, is_cv: false, message: contentValidation.message || INVALID_CV_MESSAGE, validation: contentValidation.sections });
+      return res.status(422).json({
+        success: false,
+        is_cv: false,
+        message: 'The uploaded document must include your contact details (name and email or phone) and either work experience, education, or skills.',
+        validation: contentValidation.sections,
+      });
     }
 
     const scores = calculateScores(extracted, parsedText);
@@ -93,6 +133,7 @@ async function uploadAndAnalyze(req, res) {
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed', NOW())`,
         [cvId, JSON.stringify(extracted.skills), JSON.stringify(extracted.experience), JSON.stringify(extracted.education), JSON.stringify(extracted.languages), JSON.stringify(extracted.certifications), scores.cvScore, scores.readability, scores.keywordMatch, JSON.stringify(extracted.recommendations)]
       );
+      await syncExtractedProfile(connection, req.user.id, extracted, parsedText, fileUrl);
       await connection.commit();
     } catch (error) {
       await connection.rollback();
@@ -111,6 +152,48 @@ async function uploadAndAnalyze(req, res) {
       : status === 500 ? 'Unable to analyze your CV.' : error.message;
     console.error('CV upload and analysis failed:', error.code || status, error.message);
     return res.status(status).json({ success: false, message });
+  }
+}
+
+async function getCurrentCv(req, res) {
+  try {
+    const [rows] = await db.execute(
+      `SELECT c.id, c.file_name, c.file_url, c.file_size, c.mime_type, c.upload_date,
+              c.ai_extracted_data, a.cv_score, a.readability_score, a.keyword_match_score,
+              a.extracted_skills, a.extracted_experience, a.extracted_education,
+              a.extracted_languages, a.extracted_certifications, a.recommendations
+       FROM cvs c
+       LEFT JOIN cv_analysis a ON a.cv_id = c.id
+       WHERE c.user_id = ?
+       ORDER BY c.is_primary DESC, c.upload_date DESC
+       LIMIT 1`,
+      [req.user.id]
+    );
+    if (!rows[0]) return res.json({ success: true, cv: null });
+    const row = rows[0];
+    const extracted = parseJson(row.ai_extracted_data, {});
+    return res.json({
+      success: true,
+      cv: {
+        ...row,
+        fileName: row.file_name,
+        fileUrl: row.file_url,
+        fileSize: row.file_size,
+        cvScore: row.cv_score,
+        readability: row.readability_score,
+        keywordMatch: row.keyword_match_score,
+        ...extracted,
+        skills: parseJson(row.extracted_skills, extracted.skills || []),
+        experience: parseJson(row.extracted_experience, extracted.experience || []),
+        education: parseJson(row.extracted_education, extracted.education || []),
+        languages: parseJson(row.extracted_languages, extracted.languages || []),
+        certifications: parseJson(row.extracted_certifications, extracted.certifications || []),
+        recommendations: parseJson(row.recommendations, extracted.recommendations || []),
+      },
+    });
+  } catch (error) {
+    console.error('Get current CV failed:', error.message);
+    return res.status(500).json({ success: false, message: 'Unable to load your CV.' });
   }
 }
 
@@ -250,4 +333,4 @@ async function syncProfile(req, res) {
   } finally { connection.release(); }
 }
 
-module.exports = { uploadAndAnalyze, validateAndParse, getAnalysis, syncProfile };
+module.exports = { uploadAndAnalyze, validateAndParse, getAnalysis, syncProfile, getCurrentCv };

@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
-import { Sparkles, Mail, Phone, MapPin, Globe, Share2, MessageSquare } from 'lucide-react';
+import { Mail, Phone, MapPin, Globe, Share2, MessageSquare } from 'lucide-react';
+import logoImage from '../pages/images/logo1.png';
 
 function Footer() {
   return (
@@ -12,9 +13,7 @@ function Footer() {
           {/* Brand Info */}
           <div className="lg:col-span-2 space-y-4">
             <Link to="/" className="flex items-center gap-2.5 text-white transition-opacity hover:opacity-90">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-blue-300/30 bg-blue-500/20 text-blue-200 shadow-sm">
-                <Sparkles className="w-5 h-5" />
-              </div>
+              <img src={logoImage} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" />
               <span className="text-xl font-extrabold tracking-tight text-white">
                 job matching
               </span>

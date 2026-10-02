@@ -25,7 +25,7 @@ const Profile = ({ userData = {}, cvFile = null, onContinue, onNavigateNext }) =
   const pendingCv = location.state?.updatedProfile || (() => {
     try { return JSON.parse(localStorage.getItem('pending_cv_data') || 'null'); } catch { return null; }
   })();
-  const pendingSkills = Array.isArray(pendingCv?.skills) ? pendingCv.skills.map((skill) => typeof skill === 'string' ? skill : skill.skill_name).filter(Boolean).filter((skill) => !excludedSkills.has(skill.trim().toLowerCase())) : [];
+  const pendingSkills = Array.isArray(pendingCv?.skills) ? pendingCv.skills.map((skill) => typeof skill === 'string' ? skill : skill?.skill_name || skill?.name).filter(Boolean).filter((skill) => !excludedSkills.has(skill.trim().toLowerCase())) : [];
   const pendingEducation = Array.isArray(pendingCv?.education) ? pendingCv.education.map((item, index) => ({
     id: item.id || `cv-education-${index}`,
     university: item.school_name || item.institution || '',

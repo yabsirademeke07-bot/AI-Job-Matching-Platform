@@ -19,6 +19,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { getMockNotifications } from "../utils/interviewFlow";
+import api from "../services/api";
 
 const modules = {
   matches: {
@@ -455,7 +456,7 @@ const interviewScenarios = {
   },
 };
 
-function MatchCard({ job, featured = false, onViewDetails }) {
+function MatchCard({ job, featured = false, onViewDetails, onApply, applied }) {
   return (
     <article
       className={`flex flex-col rounded-2xl border bg-white p-5 shadow-sm ${featured ? "border-[var(--brand-primary)] ring-1 ring-[var(--brand-primary)]/20" : "border-slate-200"}`}
@@ -528,6 +529,14 @@ function MatchCard({ job, featured = false, onViewDetails }) {
       >
         View Details
       </button>
+      <button
+        type="button"
+        onClick={() => onApply(job)}
+        disabled={applied}
+        className="mt-2 min-h-11 rounded-xl border border-[var(--brand-primary)] px-4 py-3 text-sm font-black text-[var(--brand-deep)] hover:bg-[var(--brand-soft)] disabled:cursor-not-allowed disabled:border-emerald-200 disabled:bg-emerald-50 disabled:text-emerald-700"
+      >
+        {applied ? "Applied" : "Apply Now"}
+      </button>
     </article>
   );
 }
@@ -587,6 +596,39 @@ export default function SeekerModulePage({ module: moduleProp }) {
   const [resumeVisible, setResumeVisible] = useState(true);
   const [dataPreferences, setDataPreferences] = useState(true);
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
+  const [realMatches, setRealMatches] = useState([]);
+  const [appliedMatchIds, setAppliedMatchIds] = useState(new Set());
+  const [matchesLoading, setMatchesLoading] = useState(module === "matches");
+  const [matchesError, setMatchesError] = useState("");
+
+  useEffect(() => {
+    if (module !== "matches") return undefined;
+    let active = true;
+    setMatchesLoading(true);
+    api.get("/seeker/matched-jobs")
+      .then(({ data }) => {
+        if (!active) return;
+        const nextMatches = (data.jobs || []).map((job) => ({
+          ...job,
+          company: job.company || job.company_name || "Company",
+          location: job.location || job.city || "Location not specified",
+          score: Number(job.matchScore || job.score || 0),
+          matchScore: Number(job.matchScore || job.score || 0),
+          skillsMatch: Number(job.skillsMatch || job.skills_match_score || 0),
+          experienceMatch: Number(job.experienceMatch || job.experience_match_score || 0),
+          salaryMin: Number(job.salary_min || 0),
+          jobType: job.jobType || job.job_type || "Full-time",
+          matchingSkills: job.matchedSkills || job.matchingSkills || [],
+          skillsToImprove: job.missingSkills || job.skillsToImprove || [],
+          whyMatch: job.rationale || "This role matches your profile and current career direction.",
+        }));
+        setRealMatches(nextMatches);
+        setAppliedMatchIds(new Set(nextMatches.filter((job) => job.isApplied).map((job) => String(job.id))));
+      })
+      .catch((error) => active && setMatchesError(error?.response?.data?.message || "Unable to load recommended jobs."))
+      .finally(() => active && setMatchesLoading(false));
+    return () => { active = false; };
+  }, [module]);
 
   useEffect(() => {
     if (!savedJobToRemove) return undefined;
@@ -671,12 +713,19 @@ export default function SeekerModulePage({ module: moduleProp }) {
       items.map((item) => ({ ...item, isRead: true })),
     );
 
-  const filteredMatches = matches.filter(
-    (job) =>
-      job.score >= Number(scoreFilter) &&
-      job.salaryMin >= Number(salaryFilter) &&
-      (jobTypeFilter === "all" || job.jobType === jobTypeFilter),
+  const displayedMatches = realMatches.length ? realMatches : [];
+  const filteredMatches = displayedMatches.filter(
+    (job) => job.score >= Number(scoreFilter) && job.salaryMin >= Number(salaryFilter) && (jobTypeFilter === "all" || job.jobType === jobTypeFilter),
   );
+  const applyToMatch = async (job) => {
+    try {
+      await api.post("/applications", { jobId: job.id });
+      setAppliedMatchIds((current) => new Set([...current, String(job.id)]));
+      notify("Application submitted successfully.");
+    } catch (error) {
+      notify(error?.response?.data?.message || "Unable to submit application.");
+    }
+  };
 
   const interviewQuestions =
     interviewScenarios[interviewRole]?.[interviewCompany] ||
@@ -754,9 +803,9 @@ export default function SeekerModulePage({ module: moduleProp }) {
   };
 
   return (
-    <div className="seeker-module-page min-h-screen bg-slate-50 px-4 py-6 text-slate-800 sm:px-6 lg:px-8 lg:py-10">
-      <div className="mx-auto max-w-7xl">
-        <div className="mb-6 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+    <div className="seeker-module-page min-h-screen min-w-0 bg-slate-50 px-3 py-5 text-slate-800 sm:px-6 sm:py-6 lg:px-8 lg:py-10">
+      <div className="mx-auto min-w-0 max-w-7xl">
+        <div className="mb-6 flex min-w-0 flex-col gap-4 md:flex-row md:items-end md:justify-between md:gap-5">
           <div>
             <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-brand">
               <Sparkles className="h-4 w-4" /> {current.eyebrow}
@@ -778,7 +827,7 @@ export default function SeekerModulePage({ module: moduleProp }) {
 
         {module === "matches" && (
           <div className="space-y-5">
-            <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="flex flex-col items-stretch gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:flex-wrap sm:items-center sm:p-4">
               <div className="flex items-center gap-2 text-sm font-black text-slate-800">
                 <SlidersHorizontal className="h-4 w-4 text-brand" /> Filter
                 matches
@@ -812,7 +861,7 @@ export default function SeekerModulePage({ module: moduleProp }) {
                 <option value="Permanent">Permanent</option>
                 <option value="Contract">Contract</option>
               </select>
-              <span className="ml-auto text-xs font-bold text-slate-400">
+              <span className="text-xs font-bold text-slate-400 sm:ml-auto">
                 {filteredMatches.length} matches found
               </span>
             </div>
@@ -852,7 +901,11 @@ export default function SeekerModulePage({ module: moduleProp }) {
               </div>
             )}
 
-            {matches.length === 0 ? (
+            {matchesLoading ? (
+              <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-sm font-semibold text-slate-500">Loading real recommended jobs...</div>
+            ) : matchesError ? (
+              <div className="rounded-2xl border border-red-200 bg-red-50 p-10 text-center text-sm font-semibold text-red-700">{matchesError}</div>
+            ) : displayedMatches.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center">
                 <p className="text-sm font-semibold text-slate-500">
                   No Job Matches Available Yet
@@ -874,6 +927,8 @@ export default function SeekerModulePage({ module: moduleProp }) {
                 <MatchCard
                   job={filteredMatches[0]}
                   featured
+                  applied={appliedMatchIds.has(String(filteredMatches[0].id))}
+                  onApply={applyToMatch}
                   onViewDetails={(job) =>
                     navigate(
                       `/job-details/${encodeURIComponent(String(job.id))}`,
@@ -890,6 +945,8 @@ export default function SeekerModulePage({ module: moduleProp }) {
                       <MatchCard
                         key={job.id}
                         job={job}
+                        applied={appliedMatchIds.has(String(job.id))}
+                        onApply={applyToMatch}
                         onViewDetails={(selectedJob) =>
                           navigate(
                             `/job-details/${encodeURIComponent(String(selectedJob.id))}`,
@@ -1074,7 +1131,7 @@ export default function SeekerModulePage({ module: moduleProp }) {
                 {displayedApplications.length} applications
               </span>
             </div>
-            <div className="grid gap-4 overflow-x-auto pb-4 xl:grid-cols-5">
+            <div className="grid gap-4 pb-4 sm:grid-cols-2 xl:grid-cols-5">
               {applicationStatuses.map((status) => {
                 const columnApplications = displayedApplications.filter(
                   (item) =>
@@ -1084,7 +1141,7 @@ export default function SeekerModulePage({ module: moduleProp }) {
                 return (
                   <section
                     key={status.id}
-                    className="min-w-[240px] rounded-2xl border border-slate-200 bg-slate-100/70 p-3"
+                    className="min-w-0 rounded-2xl border border-slate-200 bg-slate-100/70 p-3"
                   >
                     <div className={`rounded-xl border p-3 ${status.color}`}>
                       <div className="flex items-center justify-between gap-2">

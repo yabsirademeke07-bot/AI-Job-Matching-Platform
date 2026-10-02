@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   LogIn,
   LogOut,
+  User,
   LayoutDashboard,
   Menu,
   UserPlus,
@@ -12,12 +13,11 @@ import {
   Repeat,
 } from 'lucide-react';
 
-// የፎቶ Path — use local asset fallback in project
-import siteLogo from '../pages/images/logo1.png';
 import { useAuth } from '../context/AuthContext';
 import LogoutFlowModals from './LogoutFlowModals';
 import { getNextOnboardingStep } from '../utils/applicationFlow';
 import API from '../services/api';
+import logoImage from '../pages/images/logo1.png';
 
 export default function Navbar() {
   const location = useLocation();
@@ -33,8 +33,32 @@ export default function Navbar() {
   // የ Role ዓይነቶች ማረጋገጫ
   const role = (user?.role || user?.userType || '').toString().trim().toLowerCase().replace(/[\s-]+/g, '_');
   const isEmployer = ['employer', 'company', 'recruiter'].includes(role);
-  const isAdmin = role === 'admin';
+  const isAdmin = ['admin', 'super_admin'].includes(role);
+  const isSeeker = ['job_seeker', 'seeker', 'jobseeker', 'user', 'employee'].includes(role);
   const isSeekerDashboardPage = ['/dashboard', '/seeker-dashboard', '/seekerDashboard'].includes(location.pathname);
+
+  const employerOnboardingPaths = ['/employer-info', '/employee-info', '/employer/onboarding', '/employer/setup'];
+  const isEmployerOnboardingPage = employerOnboardingPaths.includes(location.pathname)
+    || location.pathname.startsWith('/employer-info/')
+    || location.pathname.startsWith('/employee-info/')
+    || location.pathname.startsWith('/employer/onboarding/')
+    || location.pathname.startsWith('/employer/setup/');
+
+  const isEmployerDashboardRoute = location.pathname === '/employer-dashboard'
+    || location.pathname.startsWith('/employer-dashboard/')
+    || location.pathname === '/employer/workspace'
+    || location.pathname.startsWith('/employer/workspace/')
+    || location.pathname === '/employer/dashboard'
+    || location.pathname.startsWith('/employer/dashboard/');
+
+  const isInsideDashboard = isEmployerDashboardRoute
+    || location.pathname.startsWith('/seeker')
+    || location.pathname.startsWith('/admin')
+    || location.pathname.includes('dashboard');
+  const hasEnteredDashboard = isAuthenticated && (
+    localStorage.getItem('hasEnteredDashboard') === 'true'
+    || isInsideDashboard
+  );
   const displayName = user?.name || user?.full_name || user?.email || 'User';
   const avatarUrl = user?.avatarUrl || user?.avatar_url;
 
@@ -59,7 +83,7 @@ export default function Navbar() {
     }
 
     if (employerRoles.includes(role)) {
-      return !Boolean(storedUser.companyVerified || storedUser.companyProfileComplete);
+      return !(storedUser.companyVerified || storedUser.companyProfileComplete);
     }
 
     return false;
@@ -67,6 +91,7 @@ export default function Navbar() {
 
   const getRoleLabel = (roleName) => {
     const normalized = String(roleName || '').toLowerCase().replace(/[\s-]+/g, '_');
+    if (['admin', 'super_admin'].includes(normalized)) return 'Admin';
     if (['employer', 'company', 'recruiter'].includes(normalized)) return 'Employer';
     if (['job_seeker', 'seeker', 'jobseeker', 'user', 'employee'].includes(normalized)) return 'Job Seeker';
     return 'Job Seeker';
@@ -165,24 +190,43 @@ export default function Navbar() {
     return () => document.removeEventListener('mousedown', closeProfileMenu);
   }, []);
 
-  return (
-    <header className="fixed top-0 left-0 right-0 z-50 w-full bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-sm transition-all">
-      {/* Container: px-4 sm:px-6 lg:px-8 በመጠቀም ወደ ግራ እና ቀኝ ዳር እንዲጠጋ ተደርጓል */}
-      <div className="w-full px-4 sm:px-6 lg:px-8 h-20 sm:h-24 flex items-center justify-between gap-4">
+  useEffect(() => {
+    if (!isAuthenticated) return;
 
-        {/* BRAND LOGO - ሙሉ በሙሉ ወደ ግራ */}
-        <Link to="/" className="flex items-center gap-2.5 group shrink-0">
-          <div className="h-16 w-16 overflow-hidden rounded-full border border-slate-200 bg-slate-950 shadow-md shadow-blue-500/10 transition-transform duration-200 group-hover:scale-[1.02] sm:h-20 sm:w-20">
-            <img
-              src={siteLogo}
-              alt="AI Job Match"
-              className="h-full w-full object-contain object-center"
-            />
+    const dashboardPaths = [
+      '/employer/dashboard',
+      '/employer-dashboard',
+      '/dashboard',
+      '/seeker-dashboard',
+    ];
+
+    const hasReachedDashboard = dashboardPaths.includes(location.pathname)
+      || location.pathname.startsWith('/employer/dashboard/')
+      || location.pathname.startsWith('/employer-dashboard/')
+      || location.pathname.startsWith('/seeker-dashboard/')
+      || location.pathname.startsWith('/dashboard/');
+
+    if (hasReachedDashboard) {
+      localStorage.setItem('hasEnteredDashboard', 'true');
+    }
+  }, [isAuthenticated, location.pathname]);
+
+  return (
+    <header className="navbar sticky top-0 z-[9999] w-full border-b border-slate-200/80 bg-white/95 shadow-sm backdrop-blur-md">
+      {/* Container: px-4 sm:px-6 lg:px-8 በመጠቀም ወደ ግራ እና ቀኝ ዳር እንዲጠጋ ተደርጓል */}
+      <div className="w-full px-4 sm:px-6 lg:px-8 h-20 sm:h-24 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4">
+
+        {/* BRAND LOGO */}
+        <Link to="/" className="group flex shrink-0 items-center gap-3">
+          <img src={logoImage} alt="AI Job Matching" className="h-12 w-12 rounded-full object-cover transition-transform duration-200 group-hover:scale-[1.02] sm:h-14 sm:w-14" />
+          <div className="hidden text-left sm:block">
+            <div className="text-[0.55rem] font-black uppercase tracking-[0.25em] text-sky-600 sm:text-[0.7rem]">AI</div>
+            <div className="text-[0.68rem] font-black uppercase tracking-[0.18em] text-slate-800 sm:text-[0.82rem]">Job Matching</div>
           </div>
         </Link>
 
-        {/* DESKTOP NAVIGATION LINKS - mr-auto ml-6/ml-10 በመጠቀም ወደ ግራ ተጠግተዋል፣ text-lg በመጠቀም መጠናቸው ጨምሯል */}
-        <nav className="hidden lg:flex items-center gap-5 xl:gap-7 mr-auto ml-6 xl:ml-10">
+        {/* DESKTOP NAVIGATION LINKS */}
+        <nav className="hidden lg:flex items-center justify-center gap-5 xl:gap-7 min-w-0">
 
           <Link
             to="/"
@@ -235,22 +279,29 @@ export default function Navbar() {
           </Link>
 
           {/* ተጠቃሚው Login ካደረገ የሚታዩ Dashboard Links */}
-          {isAuthenticated && isEmployer && (
-            <Link to="/employer-dashboard" className="text-xs font-extrabold bg-indigo-50 text-indigo-600 px-3.5 py-1.5 rounded-full hover:bg-indigo-100 transition flex items-center gap-2 shrink-0">
+          {!isEmployerOnboardingPage && isAuthenticated && isEmployer && hasEnteredDashboard && (
+            <Link to="/employer/dashboard" className="text-xs font-extrabold bg-indigo-50 text-indigo-600 px-3.5 py-1.5 rounded-full hover:bg-indigo-100 transition flex items-center gap-2 shrink-0">
               <LayoutDashboard className="w-4 h-4" />
               <span>Employer dashboard</span>
             </Link>
           )}
 
-          {isAuthenticated && isAdmin && (
+          {isAuthenticated && isAdmin && hasEnteredDashboard && (
             <Link to="/admin-dashboard" className="text-xs font-extrabold bg-purple-50 text-purple-600 px-3.5 py-1.5 rounded-full hover:bg-purple-100 transition flex items-center gap-2 shrink-0">
               <LayoutDashboard className="w-4 h-4" />
               <span>Admin dashbord</span>
             </Link>
           )}
+
+          {isAuthenticated && isSeeker && hasEnteredDashboard && (
+            <Link to="/seeker-dashboard" className="text-xs font-extrabold bg-blue-50 text-blue-600 px-3.5 py-1.5 rounded-full hover:bg-blue-100 transition flex items-center gap-2 shrink-0">
+              <LayoutDashboard className="w-4 h-4" />
+              <span>Seeker Dashboard</span>
+            </Link>
+          )}
         </nav>
 
-        <div className="hidden lg:flex items-center gap-3 shrink-0 ml-auto">
+        <div className="hidden lg:flex items-center justify-end gap-3 shrink-0">
           {isAuthenticated && (
             <div ref={profileMenuRef} className="relative">
               <div className="flex min-h-11 items-center gap-2 rounded-xl px-2 py-1.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100">
@@ -280,6 +331,10 @@ export default function Navbar() {
                     <Play className="h-4 w-4" />
                     <span>Continue Profile Setup</span>
                   </button>
+                  <button type="button" onClick={() => { setProfileMenuOpen(false); navigate('/profile/me'); }} className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-bold text-slate-700 transition hover:bg-blue-50 hover:text-blue-700" role="menuitem">
+                    <User className="h-4 w-4" />
+                    <span>My Profile</span>
+                  </button>
                   <button type="button" onClick={handleSwitchRole} className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-bold text-slate-700 transition hover:bg-slate-100" role="menuitem">
                     <Repeat className="h-4 w-4" />
                     <span>Switch Role</span>
@@ -294,8 +349,8 @@ export default function Navbar() {
           )}
           {!isAuthenticated && !isSeekerDashboardPage && (
             <>
-              <Link to="/login" className="brand-button text-base px-5 xl:px-6 py-2.5"><LogIn className="w-5 h-5 text-blue-600" /><span>Log In</span></Link>
-              <Link to="/register" className="brand-button text-base px-6 xl:px-7 py-2.5"><UserPlus className="w-5 h-5" /><span>Sign Up</span></Link>
+              <Link to="/login" className="brand-button h-12 min-w-[150px] text-base xl:text-lg shadow-[0_10px_18px_rgba(78,150,214,0.25)]"><span>Log In</span></Link>
+              <Link to="/register" className="brand-button h-12 min-w-[160px] text-base xl:text-lg shadow-[0_10px_18px_rgba(78,150,214,0.25)]"><span>Sign Up</span></Link>
             </>
           )}
         </div>
@@ -369,9 +424,9 @@ export default function Navbar() {
             </Link>
 
             {/* Mobile User Consoles */}
-            {isAuthenticated && isEmployer && (
+            {!isEmployerOnboardingPage && isAuthenticated && isEmployer && hasEnteredDashboard && (
               <Link
-                to="/employer-dashboard"
+                to="/employer/dashboard"
                 onClick={() => setIsMobileMenuOpen(false)}
                 className="mx-2 my-1 px-4 py-3 rounded-xl text-sm font-extrabold bg-indigo-50 text-indigo-600 flex items-center gap-2"
               >
@@ -380,7 +435,7 @@ export default function Navbar() {
               </Link>
             )}
 
-            {isAuthenticated && isAdmin && (
+            {isAuthenticated && isAdmin && hasEnteredDashboard && (
               <Link
                 to="/admin-dashboard"
                 onClick={() => setIsMobileMenuOpen(false)}
@@ -402,8 +457,8 @@ export default function Navbar() {
             )}
             {!isAuthenticated && !isSeekerDashboardPage && (
               <div className="pt-3 mt-2 border-t border-slate-100 flex flex-col gap-2.5">
-                <Link to="/login" onClick={() => setIsMobileMenuOpen(false)} className="brand-button w-full text-base"><LogIn className="w-5 h-5 text-blue-600" /><span>Log In</span></Link>
-                <Link to="/register" onClick={() => setIsMobileMenuOpen(false)} className="brand-button w-full text-base"><UserPlus className="w-5 h-5" /><span>Sign Up</span></Link>
+                <Link to="/login" onClick={() => setIsMobileMenuOpen(false)} className="brand-button h-12 w-full text-base shadow-[0_10px_18px_rgba(78,150,214,0.25)]"><span>Log In</span></Link>
+                <Link to="/register" onClick={() => setIsMobileMenuOpen(false)} className="brand-button h-12 w-full text-base shadow-[0_10px_18px_rgba(78,150,214,0.25)]"><span>Sign Up</span></Link>
               </div>
             )}
 

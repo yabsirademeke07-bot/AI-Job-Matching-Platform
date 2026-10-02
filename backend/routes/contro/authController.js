@@ -4,7 +4,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your_super_secret_key_here';
+const JWT_SECRET = process.env.JWT_SECRET || 'your_secret_key';
 const JWT_EXPIRY = '7d';
 
 // create transporter (preferred: port 465 secure)

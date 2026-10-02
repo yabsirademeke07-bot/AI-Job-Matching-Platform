@@ -11,7 +11,10 @@ async function getProfile(req, res) {
     const userId = await resolveAuthenticatedUserId(req);
     return res.json({ success: true, ...(await seekerModel.getProfile(userId)) });
   }
-  catch (error) { return res.status(500).json({ success: false, message: 'Unable to load job seeker profile.' }); }
+  catch (error) {
+    console.error('Get seeker profile failed:', error.code || '', error.message);
+    return res.status(500).json({ success: false, message: 'Unable to load job seeker profile.' });
+  }
 }
 
 async function resolveAuthenticatedUserId(req) {

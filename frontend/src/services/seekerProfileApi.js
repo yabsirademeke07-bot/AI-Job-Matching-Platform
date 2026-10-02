@@ -1,5 +1,5 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
-const USE_MOCKS = import.meta.env.VITE_USE_PROFILE_MOCKS !== 'false';
+const USE_MOCKS = import.meta.env.VITE_USE_PROFILE_MOCKS === 'true';
 import { notifyProfileUpdated } from '../utils/profileUpdateEvent';
 
 const emptyProfile = {
@@ -53,7 +53,21 @@ async function request(path, options, fallback) {
 }
 
 export async function getProfile() {
-  return request('/seeker/profile/full', undefined, getStoredProfile);
+  const response = await request('/seeker/profile/full', undefined, getStoredProfile);
+  if (!response?.profile) return response;
+  const profile = response.profile;
+  return {
+    ...profile,
+    id: profile.id || profile.user_id,
+    name: profile.full_name || profile.name || '',
+    email: profile.email || '',
+    phone: profile.phone || '',
+    location: profile.location || profile.city || '',
+    education: response.education || [],
+    skills: response.skills || {},
+    experience: response.experience || [],
+    languages: response.languages || [],
+  };
 }
 
 export async function updateProfile(data) {

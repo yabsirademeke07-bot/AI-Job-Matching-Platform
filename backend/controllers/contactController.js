@@ -22,6 +22,12 @@ async function createContactMessage(req, res) {
   if (error) return res.status(400).json({ success: false, message: error });
 
   try {
+    const rateLimitUserId = req.user?.id || req.user?.userId || req.user?.sub || data.email;
+    const rateLimit = await contactModel.consumeMessageRateLimit(rateLimitUserId);
+    if (!rateLimit.allowed) {
+      return res.status(429).json({ success: false, restricted: true, message: rateLimit.message });
+    }
+
     const savedMessage = await contactModel.createContactMessage(data);
     return res.status(201).json({
       success: true,

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { AlertCircle, CheckCircle2, Download, Eye, FileText, Loader2, X } from "lucide-react";
+import { AlertCircle, CheckCircle2, Download, Eye, FileText, Loader2, RefreshCw, Trash2, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
   deleteResume,
@@ -150,6 +150,8 @@ export default function MyResume() {
     navigate('/upload-cv', { state: { replaceMode: true } });
   };
 
+  const openUpload = () => setModal('upload');
+
   const handleContinue = () => {
     const pending = getPendingApplication();
     if (pending?.jobId) {
@@ -207,7 +209,7 @@ export default function MyResume() {
                 <button
                   type="button"
                   onClick={handleViewResume}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50"
+                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-5 py-3 text-base font-extrabold text-blue-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-blue-100 hover:shadow-md"
                 >
                   <Eye className="h-4 w-4" />
                   View Resume
@@ -215,7 +217,7 @@ export default function MyResume() {
                 <button
                   type="button"
                   onClick={handleDownload}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50"
+                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-5 py-3 text-base font-extrabold text-indigo-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-indigo-100 hover:shadow-md"
                 >
                   <Download className="h-4 w-4" />
                   Download Resume
@@ -223,15 +225,17 @@ export default function MyResume() {
                 <button
                   type="button"
                   onClick={handleReplaceCv}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50"
+                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-5 py-3 text-base font-extrabold text-amber-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-amber-100 hover:shadow-md"
                 >
+                  <RefreshCw className="h-5 w-5" />
                   Replace CV
                 </button>
                 <button
                   type="button"
                   onClick={() => setModal('delete')}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-bold text-red-600 hover:bg-red-100"
+                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-5 py-3 text-base font-extrabold text-red-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-red-100 hover:shadow-md"
                 >
+                  <Trash2 className="h-5 w-5" />
                   Delete Resume
                 </button>
               </div>
@@ -242,6 +246,9 @@ export default function MyResume() {
               <p className="mt-2 text-sm text-slate-600">
                 Your CV is not uploaded yet. Upload it during the profile setup flow to continue.
               </p>
+              <button type="button" onClick={openUpload} className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--brand-primary)] px-5 text-sm font-bold text-white hover:bg-[var(--brand-primary-hover)]">
+                <FileText className="h-4 w-4" /> Upload Resume
+              </button>
             </div>
           )}
         </div>
@@ -252,6 +259,14 @@ export default function MyResume() {
           onClose={() => setModal(null)}
           onConfirm={handleDelete}
           isDeleting={saving}
+        />
+      )}
+
+      {modal === 'upload' && (
+        <UploadResumeModal
+          onClose={() => setModal(null)}
+          onSubmit={(formData) => submitFile(formData, uploadResume)}
+          isSaving={saving}
         />
       )}
 

@@ -18,6 +18,7 @@ import {
   getJobById,
   withdrawApplication,
 } from "../services/jobService";
+import api from "../services/api";
 
 const stages = [
   "Applied",
@@ -44,17 +45,23 @@ const formatDate = (value) => {
 const normalizeStatus = (value) => {
   const status = String(value || "Under Review")
     .toLowerCase()
-    .replace(/_/g, " ");
-  if (status === "submitted" || status === "applied") return "Pending";
-  if (
-    status === "review" ||
-    status === "in review" ||
-    status === "employer reviewed"
-  )
+    .replace(/_/g, " ")
+    .trim();
+
+  if (["submitted", "applied", "pending", "new"].includes(status)) return "Pending";
+  if (["review", "in review", "under review", "under-review", "employer reviewed"].includes(status))
     return "Under Review";
-  if (status === "interview scheduled") return "Interview";
-  if (status === "offer") return "Hired";
-  return status.replace(/\b\w/g, (letter) => letter.toUpperCase());
+  if (["shortlisted", "shortlist"].includes(status)) return "Shortlisted";
+  if (["interview", "interview scheduled", "interview-scheduled"].includes(status))
+    return "Interview";
+  if (["hired", "offer", "accepted"].includes(status)) return "Hired";
+  if (["rejected", "declined"].includes(status)) return "Rejected";
+  if (status === "withdrawn") return "Withdrawn";
+
+  return status
+    .split(" ")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
 };
 
 const statusTone = (status) =>
@@ -101,22 +108,21 @@ export default function ApplicationDetails() {
         routedApplication && String(routedApplication.id) === String(id)
           ? routedApplication
           : getApplicationById(id);
-      if (!stored) {
-        if (active) {
-          setError("This application could not be found.");
-          setLoading(false);
-        }
-        return;
-      }
-      if (active) setApplication(stored);
       try {
-        const jobId = stored.jobId || stored.job_id;
+        const { data: applicationsData } = await api.get('/seeker/applications');
+        const liveApplication = (applicationsData.applications || []).find((item) => String(item.id) === String(id));
+        const resolvedApplication = liveApplication || stored;
+        if (!resolvedApplication) throw new Error('Application not found');
+        if (active) setApplication(resolvedApplication);
+        const jobId = resolvedApplication.jobId || resolvedApplication.job_id;
         if (jobId) {
           const jobData = await getJobById(jobId);
           if (active) setJob(jobData);
         }
       } catch (loadError) {
-        console.error("Unable to load original job post", loadError);
+        console.error("Unable to load application details", loadError);
+        if (stored && active) setApplication(stored);
+        else if (active) setError("This application could not be found.");
       } finally {
         if (active) setLoading(false);
       }
@@ -202,26 +208,34 @@ export default function ApplicationDetails() {
       </main>
     );
 
-  const resume = application.submittedResume || {};
+  const storedResume = (() => {
+    try { return JSON.parse(localStorage.getItem("seekerResume") || "null") || {}; } catch { return {}; }
+  })();
+  const resume = application.submittedResume || storedResume;
   const resumeName =
     resume.fileName ||
     resume.name ||
     application.submittedResumeName ||
     application.resumeName ||
     application.resumeId ||
+    storedResume.fileName ||
     "Submitted resume";
   const resumeUrl =
     application.submittedResumeUrl ||
     resume.url ||
     resume.fileUrl ||
-    application.resumeUrl;
+    application.resumeUrl ||
+    storedResume.fileUrl ||
+    storedResume.url;
   const appliedDate = formatDate(
     application.createdAt || application.appliedAt,
   );
   const matchScore =
     application.aiMatchScore ??
     application.matchScore ??
+    application.matchBreakdown?.overall ??
     job?.matchBreakdown?.overall;
+  const matchBreakdown = application.matchBreakdown || {};
   const activeStage =
     statusLabel === "Withdrawn"
       ? -1
@@ -341,9 +355,9 @@ export default function ApplicationDetails() {
             </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-3">
               {[
-                ["Skills Match", application.skillsMatch],
-                ["Experience Match", application.experienceMatch],
-                ["Education Match", application.educationMatch],
+                ["Skills Match", application.skillsMatch ?? matchBreakdown.skills],
+                ["Experience Match", application.experienceMatch ?? matchBreakdown.experience],
+                ["Education Match", application.educationMatch ?? matchBreakdown.education],
               ].map(([label, value]) => (
                 <div key={label} className="rounded-xl bg-slate-50 p-3">
                   <p className="text-xs text-slate-500">{label}</p>

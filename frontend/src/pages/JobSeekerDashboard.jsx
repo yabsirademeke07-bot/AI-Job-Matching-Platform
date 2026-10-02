@@ -3,7 +3,6 @@ import {
   AlertCircle,
   RefreshCw,
   LayoutDashboard,
-  User,
   FileText,
   Target,
   Search,
@@ -12,12 +11,10 @@ import {
   MessageSquare,
   Bell,
   Settings,
-  LogOut,
 } from "lucide-react";
 import MatchedJobsPanel from "../components/dashboard/MatchedJobsPanel";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import LogoutFlowModals from "../components/LogoutFlowModals";
 import {
   getDashboardSummary,
   getJobMatches,
@@ -58,7 +55,7 @@ function useResource(loader) {
 
 export default function JobSeekerDashboard() {
   const navigate = useNavigate();
-  const { user, token, setSession, logout } = useAuth();
+  const { user } = useAuth();
   const location = useLocation();
   const summary = useResource(useCallback(() => getDashboardSummary(), []));
   const matches = useResource(useCallback(() => getJobMatches(), []));
@@ -75,8 +72,6 @@ export default function JobSeekerDashboard() {
     window.addEventListener("profileUpdated", refreshMatches);
     return () => window.removeEventListener("profileUpdated", refreshMatches);
   }, [matchedJobs.retry]);
-  const [logoutOpen, setLogoutOpen] = useState(false);
-  const [logoutSession, setLogoutSession] = useState(null);
   const [activeTab, setActiveTab] = useState("matched");
   const profile = summary.data?.profile || {
     name: user?.name || user?.full_name || "User",
@@ -135,7 +130,6 @@ export default function JobSeekerDashboard() {
           : null;
   const navItems = [
     ["Dashboard", "/dashboard", LayoutDashboard],
-    ["My Profile", "/profile", User],
     ["View Resume", "/resume", FileText],
     ["Find Jobs", "/explore-jobs", Search],
     ["AI Job Matches", "/ai-matches", Target],
@@ -144,10 +138,6 @@ export default function JobSeekerDashboard() {
     ["Messages", "/chat", MessageSquare],
     ["Notifications", "/notifications", Bell],
   ];
-  const handleLogout = () => {
-    setLogoutSession({ token, user });
-    setLogoutOpen(true);
-  };
   return (
     <div className="information-page min-h-screen bg-slate-50 lg:flex">
       <aside className="hidden w-64 shrink-0 border-r border-slate-200 bg-white lg:block">
@@ -156,7 +146,7 @@ export default function JobSeekerDashboard() {
             <p className="text-lg font-black lowercase text-slate-900">
               job <span className="text-[var(--brand-deep)]">matching</span>
             </p>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+            <p className="text-xs font-bold uppercase tracking-widest text-slate-400">
               AI Platform
             </p>
           </div>
@@ -169,7 +159,7 @@ export default function JobSeekerDashboard() {
                 key={path}
                 type="button"
                 onClick={() => navigate(path)}
-                className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-semibold transition ${location.pathname === path || (path === "/dashboard" && location.pathname === "/seeker-dashboard") ? "bg-[var(--brand-primary)] text-white shadow-sm" : "text-slate-600 hover:bg-[var(--brand-soft)] hover:text-[var(--brand-deep)]"}`}
+                className={`flex min-h-12 w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-base font-bold transition ${location.pathname === path || (path === "/dashboard" && location.pathname === "/seeker-dashboard") ? "bg-[var(--brand-primary)] text-white shadow-sm" : "text-slate-600 hover:bg-[var(--brand-soft)] hover:text-[var(--brand-deep)]"}`}
               >
                 <Icon className="h-4 w-4" /> {label}
               </button>
@@ -177,16 +167,9 @@ export default function JobSeekerDashboard() {
             <button
               type="button"
               onClick={() => navigate("/settings")}
-              className="mt-2 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-[var(--brand-soft)] hover:text-[var(--brand-deep)]"
+              className="mt-2 flex min-h-11 w-full items-center gap-3 rounded-lg px-4 py-2 text-sm font-bold text-slate-600 hover:bg-[var(--brand-soft)] hover:text-[var(--brand-deep)]"
             >
               <Settings className="h-3.5 w-3.5" /> Settings
-            </button>
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-xs font-semibold text-red-500 hover:bg-red-50"
-            >
-              <LogOut className="h-3.5 w-3.5" /> Logout
             </button>
             <div className="mt-2 flex items-center justify-between gap-2 border-t border-slate-100 px-3 pt-3">
               {avatarUrl ? (
@@ -196,35 +179,35 @@ export default function JobSeekerDashboard() {
                   {displayName.charAt(0).toUpperCase()}
                 </div>
               )}
-              <span className="min-w-0 flex-1 truncate text-xs font-semibold text-slate-600">{displayName}</span>
+              <span className="min-w-0 flex-1 truncate text-sm font-bold text-slate-600">{displayName}</span>
             </div>
           </nav>
         </div>
       </aside>
-      <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">
+      <main className="seeker-dashboard-main min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-6xl space-y-7">
           <section
-            className="relative isolate overflow-hidden rounded-2xl bg-slate-900 px-6 py-10 shadow-sm sm:px-10 sm:py-14"
+            className="relative isolate min-h-80 overflow-hidden rounded-2xl bg-slate-900 px-6 py-10 shadow-sm sm:min-h-96 sm:px-10 sm:py-14"
             style={{ backgroundImage: `url(${seekerImage})`, backgroundPosition: "center" }}
             aria-labelledby="seeker-dashboard-title"
           >
             <div className="absolute inset-0 -z-10 bg-slate-950/65" aria-hidden="true" />
             <div className="relative max-w-2xl text-white">
-              <p className="text-sm font-bold uppercase tracking-[0.2em] text-cyan-200">
+              <p className="text-base font-bold uppercase tracking-[0.2em] text-cyan-200">
                 Job seeker dashboard
               </p>
               <h1 id="seeker-dashboard-title" className="mt-3 text-3xl font-black sm:text-4xl">
                 Find the right opportunity for your next chapter
               </h1>
-              <p className="mt-4 max-w-xl text-sm leading-6 text-slate-100 sm:text-base">
-                Welcome back, {profile.name || user?.name || user?.full_name || "Job Seeker"}. Track your applications, explore AI-matched jobs, and move your career forward.
+              <p className="mt-4 whitespace-nowrap text-base font-semibold leading-7 text-slate-100 sm:text-lg">
+                Welcome back, {profile.name || user?.name || user?.full_name || "Job Seeker"}.
               </p>
             </div>
             <div className="relative mt-7 flex flex-col gap-3 sm:absolute sm:right-8 sm:top-8 sm:mt-0 sm:flex-row sm:items-center">
               <button
                 type="button"
                 onClick={refreshAll}
-                className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-white/30 bg-white/15 px-3 py-2 text-sm font-bold text-white backdrop-blur-sm transition hover:bg-white/25"
+                className="inline-flex min-h-12 items-center gap-2 rounded-xl border border-white/30 bg-white/15 px-5 py-3 text-base font-bold text-white backdrop-blur-sm transition hover:bg-white/25"
               >
                 <RefreshCw className="h-4 w-4" /> Refresh
               </button>
@@ -254,7 +237,7 @@ export default function JobSeekerDashboard() {
           <section aria-labelledby="application-overview-heading">
             <h2
               id="application-overview-heading"
-              className="mb-3 text-lg font-black text-slate-900"
+              className="mb-4 text-2xl font-black text-slate-900"
             >
               Application Overview
             </h2>
@@ -275,10 +258,10 @@ export default function JobSeekerDashboard() {
                       `/applications${filter ? `?status=${filter}` : ""}`,
                     )
                   }
-                  className="rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-[var(--brand-primary)]"
+                  className="rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-[var(--brand-primary)]"
                 >
-                  <p className="text-xs font-bold text-slate-500">{label}</p>
-                  <p className="mt-1 text-2xl font-black text-slate-900">
+                  <p className="text-sm font-bold text-slate-500">{label}</p>
+                  <p className="mt-2 text-3xl font-black text-slate-900">
                     {value}
                   </p>
                 </button>
@@ -287,7 +270,7 @@ export default function JobSeekerDashboard() {
           </section>
           <nav className="flex flex-wrap gap-2 border-b border-slate-200 pb-2" aria-label="Seeker dashboard sections">
             {[["matched", "Matched Jobs (AI)"], ["explore", "Explore Jobs"], ["applications", "My Applications"]].map(([tab, label]) => (
-              <button key={tab} type="button" onClick={() => setActiveTab(tab)} className={`rounded-xl px-4 py-2.5 text-sm font-black transition ${activeTab === tab ? "bg-[var(--brand-primary)] text-white shadow-sm" : "bg-white text-slate-600 hover:bg-[var(--brand-soft)]"}`}>
+              <button key={tab} type="button" onClick={() => setActiveTab(tab)} className={`rounded-xl px-5 py-3 text-base font-black transition ${activeTab === tab ? "bg-[var(--brand-primary)] text-white shadow-sm" : "bg-white text-slate-600 hover:bg-[var(--brand-soft)]"}`}>
                 {label}{tab === "applications" && ` (${applicationSummary.total})`}
               </button>
             ))}
@@ -327,14 +310,6 @@ export default function JobSeekerDashboard() {
           )}
         </div>
       </main>
-      {logoutOpen && <LogoutFlowModals
-        user={logoutSession?.user}
-        token={logoutSession?.token}
-        logout={logout}
-        setSession={setSession}
-        navigate={navigate}
-        onClose={() => setLogoutOpen(false)}
-      />}
     </div>
   );
 }

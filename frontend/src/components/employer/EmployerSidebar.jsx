@@ -1,9 +1,8 @@
-import { Bell, BriefcaseBusiness, Building2, ClipboardList, LayoutDashboard, LogOut, MessageCircle, Plus, Settings, Sparkles, Target, UserCheck, Users, X } from 'lucide-react';
+import { Bell, BriefcaseBusiness, Building2, ClipboardList, LayoutDashboard, LogOut, MessageCircle, Settings, Sparkles, Target, UserCheck, Users, X } from 'lucide-react';
 
 const menuItems = [
   ['overview', 'Dashboard', LayoutDashboard],
   ['profile', 'Company & Legal', Building2],
-  ['post', 'Post Job', Plus],
   ['jobs', 'My Jobs', BriefcaseBusiness],
   ['applications', 'Applications', ClipboardList],
   ['matching', 'AI Candidate Matching', Target],

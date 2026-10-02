@@ -3,6 +3,7 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { ArrowLeft, LogIn, Send, Sparkles, Loader2, Bookmark } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { beginApplication, getApplicationForJob, getApplyButtonState, getApplicationRequirements } from "../utils/applicationFlow";
+import api from "../services/api";
 
 const getReadableDescription = (description) => {
   if (!description) return "ምንም መግለጫ አልተካተተም።";
@@ -56,8 +57,9 @@ const JobDetails = () => {
         // The route preview is external browser state, so sync it into the page model.
         // eslint-disable-next-line react-hooks/set-state-in-effect
         setJob(previewJob);
+        api.get(`/jobs/${id}`).then(({ data }) => setJob((current) => ({ ...current, ...(data.job || {}) }))).catch(() => {});
       } else {
-        setError("Open this job from Explore Jobs to view its details.");
+        api.get(`/jobs/${id}`).then(({ data }) => setJob(data.job)).catch(() => setError("The job details could not be loaded."));
       }
     } catch {
       setError("The job details could not be loaded.");

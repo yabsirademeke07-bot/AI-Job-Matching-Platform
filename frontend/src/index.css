@@ -67,6 +67,7 @@ body,
 html,
 body {
   overflow-x: hidden;
+  overflow-y: auto;
 }
 
 html {
@@ -86,6 +87,12 @@ body {
 
 * {
   box-sizing: border-box;
+}
+
+.navbar {
+  position: sticky;
+  top: 0;
+  z-index: 9999;
 }
 
 .admin-shell {
@@ -341,6 +348,10 @@ select:focus-visible {
     background-image: linear-gradient(135deg, var(--brand-primary), var(--brand-deep));
   }
 
+  .auth-brand-gradient {
+    background-image: linear-gradient(135deg, #4b8bac, #2b648a);
+  }
+
   .brand-gradient-soft {
     background-image: linear-gradient(135deg, #f0f7fc, #eaf4fb);
   }
@@ -387,8 +398,10 @@ select:focus-visible {
   }
 
   .brand-button {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 font-bold text-white shadow-sm transition-all duration-200;
+    @apply inline-flex items-center justify-center gap-2 rounded-[22px] px-5 py-3 font-extrabold text-white shadow-sm transition-all duration-200;
     background-color: var(--brand-primary);
+    min-width: 8rem;
+    border: 1px solid rgba(123, 193, 242, 0.85);
   }
 
   .brand-button:hover {

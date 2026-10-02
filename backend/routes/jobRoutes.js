@@ -2,11 +2,12 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
 const authMiddleware = require('../middleware/authMiddleware');
-const { getJobs, getJob, createJob } = require('../controllers/jobController');
+const { getJobs, getJob } = require('../controllers/jobController');
+const { createJob: createEmployerJob } = require('../controllers/employerController');
 const { getMatchedJobs } = require('../controllers/seekerMatchingController');
 
 router.get('/', getJobs);
-router.post('/', authMiddleware, createJob);
+router.post('/', authMiddleware, createEmployerJob);
 router.get('/match', authMiddleware, getMatchedJobs);
 
 // Dynamic Skill Matching Algorithm

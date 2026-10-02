@@ -121,6 +121,10 @@ const ensureDatabaseSchema = async () => {
 
   try {
     await db.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_step ENUM('role_selection', 'cv_upload', 'personal_info', 'company_profile', 'company_legal') NULL DEFAULT 'role_selection'");
+    await db.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS cv_url VARCHAR(255) NULL");
+    await db.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS cv_status ENUM('uploaded', 'skipped', 'none') NOT NULL DEFAULT 'none'");
+    await db.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_profile_complete BOOLEAN NOT NULL DEFAULT FALSE");
+    await db.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_step_completed ENUM('cv_upload', 'manual_profile', 'completed') NOT NULL DEFAULT 'cv_upload'");
     await db.query("ALTER TABLE job_seeker_profiles ADD COLUMN IF NOT EXISTS onboarding_step ENUM('role_selection', 'cv_upload', 'personal_info', 'company_profile', 'company_legal') NULL DEFAULT 'role_selection'");
     await db.query("ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS onboarding_step ENUM('role_selection', 'cv_upload', 'personal_info', 'company_profile', 'company_legal') NULL DEFAULT 'role_selection'");
     await db.query('ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS representative_name VARCHAR(255) NULL');
@@ -130,11 +134,13 @@ const ensureDatabaseSchema = async () => {
     await db.query('ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS trade_license_number VARCHAR(100) NULL');
     await db.query('ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS trade_license_url VARCHAR(255) NULL');
     await db.query('ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS onboarding_completed BOOLEAN NOT NULL DEFAULT FALSE');
+    await db.query('ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS work_email VARCHAR(255) NULL');
     await db.query('ALTER TABLE company_profiles MODIFY COLUMN website VARCHAR(255) NULL DEFAULT NULL');
     await db.query('ALTER TABLE company_profiles MODIFY COLUMN logo_url VARCHAR(255) NULL DEFAULT NULL');
     await db.query('ALTER TABLE company_profiles MODIFY COLUMN description TEXT NULL DEFAULT NULL');
     await db.query('ALTER TABLE company_profiles MODIFY COLUMN company_size VARCHAR(50) NULL DEFAULT NULL');
     await db.query('ALTER TABLE company_profiles MODIFY COLUMN company_registration_number VARCHAR(100) NULL DEFAULT NULL');
+    await db.query('ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS phone VARCHAR(50) NULL');
     await db.query('ALTER TABLE company_profiles MODIFY COLUMN phone VARCHAR(50) NULL DEFAULT NULL');
     await db.query('ALTER TABLE company_profiles MODIFY COLUMN work_email VARCHAR(255) NULL DEFAULT NULL');
     await db.query('ALTER TABLE company_profiles MODIFY COLUMN industry VARCHAR(100) NULL DEFAULT NULL');
@@ -169,11 +175,53 @@ const ensureDatabaseSchema = async () => {
   }
 
   try {
+    await db.query('ALTER TABLE job_seeker_profiles ADD COLUMN IF NOT EXISTS job_category VARCHAR(80) NULL');
+    await db.query('ALTER TABLE job_seeker_profiles ADD COLUMN IF NOT EXISTS experience_level VARCHAR(30) NULL');
+    await db.query('ALTER TABLE job_seeker_profiles ADD COLUMN IF NOT EXISTS education_level VARCHAR(80) NULL');
+    await db.query('ALTER TABLE job_seeker_profiles ADD COLUMN IF NOT EXISTS graduation_year VARCHAR(10) NULL');
+    await db.query('ALTER TABLE job_seeker_profiles ADD COLUMN IF NOT EXISTS education JSON NULL');
+    await db.query('ALTER TABLE job_seeker_profiles ADD COLUMN IF NOT EXISTS skills JSON NULL');
+    await db.query('ALTER TABLE job_seeker_profiles ADD COLUMN IF NOT EXISTS languages JSON NULL');
+    await db.query('ALTER TABLE job_seeker_profiles ADD COLUMN IF NOT EXISTS job_preferences JSON NULL');
+    await db.query('ALTER TABLE job_seeker_profiles ADD COLUMN IF NOT EXISTS job_type VARCHAR(40) NULL');
+    await db.query('ALTER TABLE job_seeker_profiles ADD COLUMN IF NOT EXISTS expected_salary INT NULL');
+    await db.query('ALTER TABLE job_seeker_profiles ADD COLUMN IF NOT EXISTS work_setup VARCHAR(30) NULL');
+    await db.query('ALTER TABLE job_seeker_profiles ADD COLUMN IF NOT EXISTS raw_cv_text LONGTEXT NULL');
+    await db.query('ALTER TABLE job_seeker_profiles ADD COLUMN IF NOT EXISTS parsed_json_payload JSON NULL');
+    await db.query('ALTER TABLE job_seeker_profiles ADD COLUMN IF NOT EXISTS preferred_job_type VARCHAR(40) NULL');
+    await db.query('ALTER TABLE job_seeker_profiles ADD COLUMN IF NOT EXISTS preferred_work_mode VARCHAR(30) NULL');
+    await db.query('ALTER TABLE job_seeker_profiles ADD COLUMN IF NOT EXISTS salary_expectation_min INT NULL');
+    await db.query('ALTER TABLE job_seeker_profiles ADD COLUMN IF NOT EXISTS salary_expectation_max INT NULL');
+    await db.query('ALTER TABLE job_seeker_profiles ADD COLUMN IF NOT EXISTS currency VARCHAR(5) DEFAULT \'ETB\'');
+    await db.query('ALTER TABLE job_seeker_profiles ADD COLUMN IF NOT EXISTS profile_completion_percentage INT DEFAULT 0');
+    await db.query('ALTER TABLE job_seeker_profiles ADD COLUMN IF NOT EXISTS is_available BOOLEAN DEFAULT TRUE');
+    await db.query('ALTER TABLE job_seeker_profiles ADD COLUMN IF NOT EXISTS is_open_to_opportunities BOOLEAN DEFAULT TRUE');
+  } catch (error) {
+    console.warn('Job seeker profile data columns skipped:', error.message);
+  }
+
+  try {
     await db.query('ALTER TABLE job_seeker_profiles ADD COLUMN IF NOT EXISTS cv_skipped BOOLEAN NOT NULL DEFAULT FALSE');
+    await db.query('ALTER TABLE job_seeker_profiles ADD COLUMN IF NOT EXISTS cv_url VARCHAR(255) NULL');
+    await db.query("ALTER TABLE job_seeker_profiles ADD COLUMN IF NOT EXISTS cv_status ENUM('uploaded', 'skipped', 'none') NOT NULL DEFAULT 'none'");
+    await db.query('ALTER TABLE job_seeker_profiles ADD COLUMN IF NOT EXISTS is_profile_complete BOOLEAN NOT NULL DEFAULT FALSE');
+    await db.query("ALTER TABLE job_seeker_profiles ADD COLUMN IF NOT EXISTS onboarding_step_completed ENUM('cv_upload', 'manual_profile', 'completed') NOT NULL DEFAULT 'cv_upload'");
     await db.query('ALTER TABLE job_seeker_profiles ADD COLUMN IF NOT EXISTS onboarding_cv_uploaded BOOLEAN NOT NULL DEFAULT FALSE');
     await db.query('ALTER TABLE job_seeker_profiles ADD COLUMN IF NOT EXISTS profile_completed BOOLEAN NOT NULL DEFAULT FALSE');
   } catch (error) {
     console.warn('Job seeker profile compatibility columns skipped:', error.message);
+  }
+
+  try {
+    await db.query('ALTER TABLE job_seeker_profiles ADD COLUMN IF NOT EXISTS country VARCHAR(100) NULL');
+    await db.query('ALTER TABLE job_seeker_profiles ADD COLUMN IF NOT EXISTS preferred_job_type VARCHAR(40) NULL');
+    await db.query('ALTER TABLE job_seeker_profiles ADD COLUMN IF NOT EXISTS preferred_work_mode VARCHAR(30) NULL');
+    await db.query('ALTER TABLE job_seeker_profiles ADD COLUMN IF NOT EXISTS salary_expectation_min INT NULL');
+    await db.query('ALTER TABLE job_seeker_profiles ADD COLUMN IF NOT EXISTS salary_expectation_max INT NULL');
+    await db.query('ALTER TABLE job_seeker_profiles ADD COLUMN IF NOT EXISTS currency VARCHAR(5) NULL');
+    await db.query('ALTER TABLE job_seeker_profiles ADD COLUMN IF NOT EXISTS profile_completion_percentage INT DEFAULT 0');
+  } catch (error) {
+    console.warn('Job seeker profile save schema update skipped:', error.message);
   }
 
   try {
@@ -328,6 +376,13 @@ const ensureDatabaseSchema = async () => {
   }
 
   try {
+    await db.query('ALTER TABLE notifications ADD COLUMN IF NOT EXISTS reference_type VARCHAR(40) NULL');
+    await db.query('ALTER TABLE notifications ADD COLUMN IF NOT EXISTS reference_id INT NULL');
+  } catch (error) {
+    console.warn('Notification reference compatibility check skipped:', error.message);
+  }
+
+  try {
     await db.query('ALTER TABLE employers ADD COLUMN IF NOT EXISTS phoneNumber VARCHAR(20) NULL');
     await db.query('ALTER TABLE employers ADD COLUMN IF NOT EXISTS phoneOperator VARCHAR(30) NULL');
     await db.query('ALTER TABLE employers ADD COLUMN IF NOT EXISTS representative_name VARCHAR(255) NULL');
@@ -343,10 +398,29 @@ const ensureDatabaseSchema = async () => {
   }
 
   try {
+    const ensureJobColumn = async (columnName, definition) => {
+      const [columns] = await db.query(
+        `SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'jobs' AND COLUMN_NAME = ? LIMIT 1`,
+        [columnName]
+      );
+      if (!columns.length) await db.query(`ALTER TABLE jobs ADD COLUMN ${columnName} ${definition}`);
+    };
+
+    await ensureJobColumn('is_approved', 'BOOLEAN NOT NULL DEFAULT FALSE');
+    await ensureJobColumn('reviewed_by', 'INT NULL');
+    await ensureJobColumn('reviewed_at', 'TIMESTAMP NULL DEFAULT NULL');
+    await ensureJobColumn('rejection_reason', 'TEXT NULL');
+    await ensureJobColumn('approved_by', 'INT NULL');
+    await ensureJobColumn('approved_at', 'TIMESTAMP NULL DEFAULT NULL');
+    await db.query("UPDATE jobs SET status = 'active', is_approved = TRUE WHERE LOWER(status) = 'published'");
+    await db.query("UPDATE jobs SET is_approved = TRUE WHERE LOWER(status) = 'active' AND is_approved = FALSE");
+  } catch (error) {
+    console.warn('Job approval columns migration skipped:', error.message);
+  }
+
+  try {
     await db.query("ALTER TABLE jobs MODIFY COLUMN status VARCHAR(30) NOT NULL DEFAULT 'draft'");
-    await db.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS rejection_reason TEXT NULL');
-    await db.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS approved_by INT NULL');
-    await db.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP NULL DEFAULT NULL');
     await db.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS company_name VARCHAR(255) NULL');
     await db.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS sector VARCHAR(150) NULL');
     await db.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS vacancy_level VARCHAR(100) NULL');
@@ -521,21 +595,27 @@ app.get('/api/seeker/profile-status', authenticateUser, async (req, res) => {
 
   try {
     const [rows] = await db.query(
-      `SELECT cv_skipped, onboarding_step, profile_completed
+      `SELECT cv_url, cv_status, cv_skipped, onboarding_step, onboarding_step_completed, profile_completed, is_profile_complete
        FROM job_seeker_profiles
        WHERE user_id = ? LIMIT 1`,
       [userId]
     );
 
     const profile = rows[0] || {};
-    const cvSkipped = Boolean(Number(profile.cv_skipped) === 1 || profile.cv_skipped === true || profile.cv_skipped === '1');
+    const cvStatus = ['uploaded', 'skipped', 'none'].includes(profile.cv_status)
+      ? profile.cv_status
+      : (profile.cv_url ? 'uploaded' : (Boolean(Number(profile.cv_skipped)) ? 'skipped' : 'none'));
+    const cvSkipped = cvStatus === 'skipped';
     const onboardingStep = String(profile.onboarding_step || 'cv_upload').trim();
-    const profileCompleted = Boolean(profile.profile_completed || Number(profile.profile_completed) === 1);
+    const profileCompleted = Boolean(profile.is_profile_complete || profile.profile_completed || Number(profile.is_profile_complete) === 1 || Number(profile.profile_completed) === 1);
 
     return res.json({
       success: true,
+      cv_url: profile.cv_url || null,
+      cv_status: cvStatus,
       cv_skipped: cvSkipped,
       onboarding_step: onboardingStep,
+      onboarding_step_completed: profile.onboarding_step_completed || (profileCompleted ? 'completed' : (cvSkipped ? 'manual_profile' : 'cv_upload')),
       profile_completed: profileCompleted,
     });
   } catch (error) {
@@ -552,19 +632,27 @@ app.put('/api/seeker/onboarding-step', authenticateUser, async (req, res) => {
   const payload = req.body || {};
   const onboardingStep = String(payload.onboarding_step || 'personal_info').trim();
   const cvSkipped = payload.cv_skipped === true || payload.cv_skipped === 'true' || payload.cv_skipped === 1 || payload.cv_skipped === '1';
+  const cvStatus = cvSkipped ? 'skipped' : (payload.cv_status === 'uploaded' ? 'uploaded' : 'none');
+  const onboardingStepCompleted = cvSkipped ? 'manual_profile' : (payload.onboarding_step_completed || (onboardingStep === 'completed' ? 'completed' : 'cv_upload'));
 
   try {
     await db.query(
-      `UPDATE job_seeker_profiles
-       SET cv_skipped = ?, onboarding_step = ?
-       WHERE user_id = ?`,
-      [cvSkipped ? 1 : 0, onboardingStep, userId]
+      `INSERT INTO job_seeker_profiles (user_id, cv_status, cv_skipped, onboarding_step, onboarding_step_completed)
+       VALUES (?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE cv_status = VALUES(cv_status), cv_skipped = VALUES(cv_skipped), onboarding_step = VALUES(onboarding_step), onboarding_step_completed = VALUES(onboarding_step_completed)`,
+      [userId, cvStatus, cvSkipped ? 1 : 0, onboardingStep, onboardingStepCompleted]
+    );
+    await db.query(
+      `UPDATE users SET cv_status = ?, onboarding_step_completed = ?, onboarding_step = ? WHERE id = ?`,
+      [cvStatus, onboardingStepCompleted, onboardingStep, userId]
     );
 
     return res.json({
       success: true,
+      cv_status: cvStatus,
       cv_skipped: cvSkipped,
       onboarding_step: onboardingStep,
+      onboarding_step_completed: onboardingStepCompleted,
       message: 'Onboarding step saved.',
     });
   } catch (error) {
@@ -592,9 +680,9 @@ app.put('/api/seeker/profile', authenticateUser, async (req, res) => {
 
   try {
     await db.query(
-      `INSERT INTO job_seeker_profiles (user_id, headline, bio, location, country, city, preferred_work_mode, salary_expectation_min, profile_completion_percentage)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE headline = VALUES(headline), bio = VALUES(bio), location = VALUES(location), country = VALUES(country), city = VALUES(city), preferred_work_mode = VALUES(preferred_work_mode), salary_expectation_min = VALUES(salary_expectation_min), profile_completion_percentage = VALUES(profile_completion_percentage)`,
+      `INSERT INTO job_seeker_profiles (user_id, headline, bio, location, country, city, preferred_work_mode, salary_expectation_min, profile_completion_percentage, profile_completed, is_profile_complete, cv_status, onboarding_step, onboarding_step_completed)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'none', 'personal_info', ?)
+      ON DUPLICATE KEY UPDATE headline = VALUES(headline), bio = VALUES(bio), location = VALUES(location), country = VALUES(country), city = VALUES(city), preferred_work_mode = VALUES(preferred_work_mode), salary_expectation_min = VALUES(salary_expectation_min), profile_completion_percentage = VALUES(profile_completion_percentage), profile_completed = VALUES(profile_completed), is_profile_complete = VALUES(is_profile_complete), onboarding_step = 'personal_info', onboarding_step_completed = VALUES(onboarding_step_completed)`,
       [
         userId,
         profile.preferredJob || null,
@@ -605,7 +693,14 @@ app.put('/api/seeker/profile', authenticateUser, async (req, res) => {
         normalizeWorkSetup(profile.preferredWorkSetup || profile.workSetup),
         Number.parseInt(String(profile.salaryExpectation || '').replace(/[^0-9]/g, ''), 10) || null,
         completion,
+        completion === 100,
+        completion === 100,
+        completion === 100 ? 'completed' : 'manual_profile',
       ]
+    );
+    await db.query(
+      `UPDATE users SET is_profile_complete = ?, onboarding_step_completed = ?, onboarding_step = ? WHERE id = ?`,
+      [completion === 100, completion === 100 ? 'completed' : 'manual_profile', 'personal_info', userId]
     );
     return res.json({ success: true, profileCompletionPercentage: completion });
   } catch (error) {
@@ -629,6 +724,16 @@ app.post(['/api/cvs', '/api/seeker/upload-cv'], authenticateUser, upload.single(
     const [result] = await db.query(
       'INSERT INTO cvs (user_id, file_name, file_url, file_size, mime_type, is_primary, is_active) VALUES (?, ?, ?, ?, ?, TRUE, TRUE)',
       [req.user.id, req.file.originalname, fileUrl, req.file.size, req.file.mimetype]
+    );
+    await db.query(
+      `INSERT INTO job_seeker_profiles (user_id, cv_url, cv_status, cv_skipped, onboarding_step, onboarding_step_completed)
+       VALUES (?, ?, 'uploaded', FALSE, 'personal_info', 'manual_profile')
+       ON DUPLICATE KEY UPDATE cv_url = VALUES(cv_url), cv_status = 'uploaded', cv_skipped = FALSE, onboarding_step = 'personal_info', onboarding_step_completed = 'manual_profile'`,
+      [req.user.id, fileUrl]
+    );
+    await db.query(
+      `UPDATE users SET cv_url = ?, cv_status = 'uploaded', onboarding_step = 'personal_info', onboarding_step_completed = 'manual_profile' WHERE id = ?`,
+      [fileUrl, req.user.id]
     );
 
     return res.status(201).json({
@@ -975,7 +1080,7 @@ app.post('/api/jobs', authenticateUser, async (req, res) => {
       : normalizeNullableText(requiredSkillsRaw);
 
     const description = normalizeNullableText(data.description || data.jobDescription || data.fullDescription) || null;
-    const status = normalizeNullableText(data.status) || 'draft';
+    const status = 'pending_approval';
     const viewsCount = normalizeOptionalNumber(data.views_count ?? data.viewsCount) ?? 0;
 
     const insertSql = `
@@ -999,6 +1104,7 @@ app.post('/api/jobs', authenticateUser, async (req, res) => {
         required_skills,
         description,
         status,
+        is_approved,
         views_count,
         created_at,
         updated_at
@@ -1025,6 +1131,7 @@ app.post('/api/jobs', authenticateUser, async (req, res) => {
       requiredSkills,
       description,
       status,
+      false,
       viewsCount,
     ];
 
@@ -1035,7 +1142,8 @@ app.post('/api/jobs', authenticateUser, async (req, res) => {
     return res.status(201).json({
       success: true,
       jobId: insertResult.insertId,
-      message: status === 'draft' ? 'Job saved as draft.' : 'Job published successfully!'
+      status,
+      message: 'Job submitted for admin approval.'
     });
   } catch (error) {
     const sqlMessage = error?.sqlMessage || error?.message || 'Unknown database error';
@@ -1064,10 +1172,16 @@ const handleJobStatusUpdate = async (req, res) => {
     return res.status(400).json({ success: false, error: 'Status field is required.' });
   }
 
-  const allowedStatuses = ['active', 'paused', 'closed', 'draft', 'published', 'scheduled'];
+  const allowedStatuses = ['active', 'paused', 'closed', 'draft', 'published', 'scheduled', 'pending_approval', 'rejected'];
   if (!allowedStatuses.includes(cleanStatus)) {
     return res.status(400).json({ success: false, error: `Invalid status: ${rawStatus}` });
   }
+
+  const canonicalStatus = ['active', 'published'].includes(cleanStatus)
+    ? 'pending_approval'
+    : cleanStatus === 'rejected'
+      ? 'rejected'
+      : cleanStatus;
 
   try {
     const [result] = await db.query(
@@ -1080,7 +1194,7 @@ const handleJobStatusUpdate = async (req, res) => {
            END,
            updated_at = NOW()
        WHERE id = ? AND employer_id = ?`,
-      [cleanStatus, cleanStatus, cleanStatus, jobId, employerId]
+      [canonicalStatus, cleanStatus, cleanStatus, jobId, employerId]
     );
 
     if (result.affectedRows === 0) {
@@ -1100,14 +1214,14 @@ const handleJobStatusUpdate = async (req, res) => {
              END,
              updated_at = NOW()
          WHERE id = ?`,
-        [cleanStatus, cleanStatus, cleanStatus, jobId]
+        [canonicalStatus, cleanStatus, cleanStatus, jobId]
       );
     }
 
-    console.log(`--> [SUCCESS] Job ID ${jobId} status successfully updated to "${cleanStatus}"!`);
+    console.log(`--> [SUCCESS] Job ID ${jobId} status successfully updated to "${canonicalStatus}"!`);
     return res.json({
       success: true,
-      message: `Job status updated to ${cleanStatus} successfully.`
+      message: `Job status updated to ${canonicalStatus} successfully.`
     });
   } catch (error) {
     console.error('--> [FATAL ERROR UPDATING JOB STATUS]:', error.message);
@@ -1204,11 +1318,45 @@ app.get('/api/jobs/my-jobs', authenticateUser, handleGetEmployerMyJobs);
 // ==========================================
 app.get('/api/jobs', async (req, res) => {
   try {
-    const [jobs] = await db.query('SELECT jobs.*, users.full_name as employer_name FROM jobs JOIN users ON jobs.employer_id = users.id ORDER BY created_at DESC');
+    const [jobs] = await db.query(`
+      SELECT
+        jobs.*,
+        COALESCE(
+          jobs.company_name,
+          (SELECT e.company_name FROM employers e WHERE e.user_id = jobs.employer_id OR e.id = jobs.employer_id LIMIT 1),
+          (SELECT cp.company_name FROM company_profiles cp WHERE cp.employer_id = jobs.employer_id OR cp.id = jobs.employer_id LIMIT 1),
+          (SELECT he.household_name FROM household_employers he WHERE he.user_id = jobs.employer_id LIMIT 1),
+          users.full_name,
+          'Employer company'
+        ) AS company_name,
+        COALESCE(users.full_name, jobs.company_name, 'Employer') AS employer_name
+      FROM jobs
+      LEFT JOIN users ON jobs.employer_id = users.id
+      WHERE LOWER(jobs.status) = 'active' AND jobs.is_approved = TRUE
+      ORDER BY jobs.created_at DESC
+    `);
     res.status(200).json(jobs);
   } catch (error) {
     console.error('Get Jobs Error:', error);
     res.status(500).json({ message: 'Server error / የሰርቨር ስህተት አጋጥሟል' });
+  }
+});
+
+app.get('/api/jobs/:id', async (req, res) => {
+  try {
+    const [[job]] = await db.query(`
+      SELECT jobs.*, COALESCE(jobs.company_name, users.full_name, 'Employer company') AS company_name,
+             users.full_name AS employer_name
+      FROM jobs
+      LEFT JOIN users ON users.id = jobs.employer_id
+      WHERE jobs.id = ? AND LOWER(jobs.status) = 'active' AND jobs.is_approved = TRUE
+      LIMIT 1
+    `, [req.params.id]);
+    if (!job) return res.status(404).json({ success: false, message: 'Published job not found.' });
+    return res.json({ success: true, job });
+  } catch (error) {
+    console.error('Get Job Details Error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to load job details.' });
   }
 });
 
@@ -1351,11 +1499,41 @@ async function ensureAuthColumns() {
        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'applications'`
     );
     const applicationColumnNames = new Set(applicationColumns.map(({ COLUMN_NAME: name }) => name));
+    if (!applicationColumnNames.has('candidate_id')) {
+      await db.query('ALTER TABLE applications ADD COLUMN candidate_id INT NULL AFTER job_seeker_id');
+    }
+    if (!applicationColumnNames.has('employer_id')) {
+      await db.query('ALTER TABLE applications ADD COLUMN employer_id INT NULL AFTER candidate_id');
+    }
     if (!applicationColumnNames.has('cv_id')) {
       await db.query('ALTER TABLE applications ADD COLUMN cv_id INT NULL');
     }
     if (!applicationColumnNames.has('resume_snapshot')) {
       await db.query('ALTER TABLE applications ADD COLUMN resume_snapshot JSON NULL');
+    }
+    const [applicationStatusColumns] = await db.query(
+      `SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'applications' AND COLUMN_NAME = 'status'`
+    );
+    if (applicationStatusColumns[0] && applicationStatusColumns[0].COLUMN_TYPE.startsWith('enum')) {
+      const acceptedStatusSet = [
+        'pending',
+        'review',
+        'shortlisted',
+        'interviewed',
+        'hired',
+        'rejected',
+        'applied',
+        'under-review',
+        'interview',
+        'interview-scheduled',
+        'withdrawn',
+      ];
+      const columnType = applicationStatusColumns[0].COLUMN_TYPE;
+      const isLegacyOnly = acceptedStatusSet.every((status) => !columnType.includes(`'${status}'`));
+      if (isLegacyOnly || !columnType.includes("'pending'")) {
+        await db.query("ALTER TABLE applications MODIFY COLUMN status ENUM('pending', 'review', 'shortlisted', 'interviewed', 'hired', 'rejected', 'applied', 'under-review', 'interview', 'interview-scheduled', 'withdrawn') DEFAULT 'pending'");
+      }
     }
 
     const [jobStatusColumns] = await db.query(

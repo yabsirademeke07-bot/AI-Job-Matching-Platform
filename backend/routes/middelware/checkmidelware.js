@@ -1,7 +1,7 @@
 const jwt = require('jsonwebtoken');
 
 // ከ authController.js ጋር ተመሳሳይ የሆነ Secret Key መጠቀም አለብን
-const JWT_SECRET = process.env.JWT_SECRET || 'your_super_secret_key_here';
+const JWT_SECRET = process.env.JWT_SECRET || 'your_secret_key';
 
 // 1. Authentication Check (Token መኖሩን እና ትክክለኛነቱን ማረጋገጫ)
 const protect = async (req, res, next) => {

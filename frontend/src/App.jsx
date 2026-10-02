@@ -9,6 +9,9 @@ import Footer from './components/Footer';
 import Login from './pages/login';
 import Register from './pages/Register';
 import OtpVerification from './components/OtpVerification';
+import ForgotPassword from './pages/ForgotPassword';
+import VerifyResetOtp from './pages/VerifyResetOtp';
+import ResetPassword from './pages/ResetPassword';
 import RoleSelection from './components/RoleSelection';
 import GoogleCallback from './pages/GoogleCallback';
 
@@ -111,6 +114,9 @@ function AppLayout() {
           {/* 2. AUTHENTICATION & ONBOARDING ROUTES      */}
           {/* ========================================== */}
           <Route path="/login" element={<GuestOnlyRoute><Login /></GuestOnlyRoute>} />
+          <Route path="/forgot-password" element={<GuestOnlyRoute><ForgotPassword /></GuestOnlyRoute>} />
+          <Route path="/verify-reset-otp" element={<GuestOnlyRoute><VerifyResetOtp /></GuestOnlyRoute>} />
+          <Route path="/reset-password" element={<GuestOnlyRoute><ResetPassword /></GuestOnlyRoute>} />
           <Route path="/register" element={<Register />} />
           <Route path="/verify-otp" element={<OtpVerification />} />
 
@@ -127,6 +133,14 @@ function AppLayout() {
           {/* አዲስ የተጨመሩት የ Employee Routes */}
           <Route
             path="/employee-info"
+            element={
+              <ProtectedRoute allowedRoles={["employer", "company", "recruiter"]}>
+                <CompanyInfo />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/employer-info"
             element={
               <ProtectedRoute allowedRoles={["employer", "company", "recruiter"]}>
                 <CompanyInfo />
@@ -301,7 +315,7 @@ function AppLayout() {
             }
           />
           <Route
-            path="/employer/post-job"
+            path="/employer/jobs"
             element={
               <ProtectedRoute allowedRoles={["employer", "company", "recruiter"]}>
                 <EmployerWorkspace />
@@ -309,10 +323,42 @@ function AppLayout() {
             }
           />
           <Route
-            path="/employer/jobs/new"
+            path="/employer/jobs/:id"
             element={
               <ProtectedRoute allowedRoles={["employer", "company", "recruiter"]}>
                 <EmployerWorkspace />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/employer/applications"
+            element={
+              <ProtectedRoute allowedRoles={["employer", "company", "recruiter"]}>
+                <EmployerWorkspace />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/employer/messages"
+            element={
+              <ProtectedRoute allowedRoles={["employer", "company", "recruiter"]}>
+                <EmployerWorkspace />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/employer/post-job"
+            element={
+              <ProtectedRoute allowedRoles={["employer", "company", "recruiter"]}>
+                <EmployerWorkspace standalonePostJob />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/employer/jobs/new"
+            element={
+              <ProtectedRoute allowedRoles={["employer", "company", "recruiter"]}>
+                <EmployerWorkspace standalonePostJob />
               </ProtectedRoute>
             }
           />
@@ -351,6 +397,7 @@ function AppLayout() {
           <Route path="/admin/applications" element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminDashboard /></ProtectedRoute>} />
           <Route path="/admin/ai-matching" element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminDashboard /></ProtectedRoute>} />
           <Route path="/admin/analytics" element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminDashboard /></ProtectedRoute>} />
+          <Route path="/admin/activity-log" element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminDashboard /></ProtectedRoute>} />
           <Route path="/admin/reports" element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminDashboard /></ProtectedRoute>} />
           <Route path="/admin/notifications" element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminDashboard /></ProtectedRoute>} />
           <Route path="/admin/settings" element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminDashboard /></ProtectedRoute>} />

@@ -1,16 +1,9 @@
 const express = require('express');
-const jwt = require('jsonwebtoken');
 const controller = require('../controllers/employerController');
 const db = require('../connection');
+const authenticate = require('../middleware/authMiddleware');
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'your_secret_key';
-const authenticate = (req, res, next) => {
-  const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
-  if (!token) return res.status(401).json({ success: false, message: 'Authentication required.' });
-  try { req.user = jwt.verify(token, JWT_SECRET); return next(); }
-  catch { return res.status(401).json({ success: false, message: 'Invalid or expired token.' }); }
-};
 const employerOnly = async (req, res, next) => {
   const employerRoles = ['employer', 'company', 'recruiter'];
   if (employerRoles.includes(String(req.user.role || '').toLowerCase())) return next();
@@ -71,7 +64,7 @@ router.delete('/employer/jobs/:jobId', controller.deleteJob);
 router.post('/jobs', controller.createJob);
 router.put('/jobs/:jobId', controller.updateJob);
 router.patch('/jobs/:jobId/publish', (req, res) => { req.body.status = 'published'; return controller.setJobStatus(req, res); });
-router.patch('/jobs/:jobId/schedule', (req, res) => { req.body.status = 'published'; return controller.setJobStatus(req, res); });
+router.patch('/jobs/:jobId/schedule', (req, res) => { req.body.status = 'scheduled'; return controller.setJobStatus(req, res); });
 router.patch('/applications/:applicationId/shortlist', (req, res) => { req.body.status = 'shortlisted'; return controller.updateApplicationStatus(req, res); });
 router.patch('/applications/:applicationId/hire', (req, res) => { req.body.status = 'hired'; return controller.updateApplicationStatus(req, res); });
 router.patch('/applications/:applicationId/reject', (req, res) => { req.body.status = 'rejected'; return controller.updateApplicationStatus(req, res); });
@@ -80,8 +73,18 @@ router.post('/employer/interviews', controller.scheduleInterview);
 router.get('/employer/interviews', controller.getUpcomingInterviews);
 router.get('/employer/messages', controller.getEmployerMessages);
 router.post('/employer/messages', controller.sendEmployerMessage);
+router.get('/employer/messages/conversations', controller.getEmployerConversations);
+router.get('/employer/messages/conversations/unread-count', controller.getEmployerUnreadMessageCount);
+router.get('/employer/messages/conversations/:conversationId', controller.getEmployerConversation);
+router.post('/employer/messages/conversations/:conversationId/messages', controller.sendConversationMessage);
+router.patch('/employer/messages/conversations/:conversationId/read', controller.markEmployerConversationRead);
+router.delete('/employer/messages/conversations/:conversationId', controller.deleteEmployerConversation);
 router.get('/employer/notifications', controller.getEmployerNotifications);
+router.get('/employer/notifications/unread-count', controller.getEmployerUnreadNotificationCount);
 router.patch('/employer/notifications/:id/read', controller.markEmployerNotificationRead);
+router.patch('/employer/notifications/read-all', controller.markAllEmployerNotificationsRead);
+router.delete('/employer/notifications/read', controller.deleteReadEmployerNotifications);
+router.delete('/employer/notifications/:id', controller.deleteEmployerNotification);
 router.get('/employer/settings', controller.getEmployerSettings);
 router.put('/employer/settings', controller.updateEmployerSettings);
 router.post('/employer/settings', controller.updateEmployerSettings);

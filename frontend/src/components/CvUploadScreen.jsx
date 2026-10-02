@@ -70,7 +70,7 @@ const validateFile = (file) => {
 
 const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
   const navigate = useNavigate();
-  const { showSuccess, showError } = useToast();
+  const { showSuccess } = useToast();
   const scrollCvFeedback = (type) => {
     window.setTimeout(() => {
       if (type === 'success') {
@@ -85,7 +85,6 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [validationNotice, setValidationNotice] = useState('');
   const [toastError, setToastError] = useState('');
   const [isInvalidFile, setIsInvalidFile] = useState(false);
 
@@ -100,7 +99,6 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
 
   const resetUploadState = () => {
     setFile(null);
-    setValidationNotice('');
     setToastError('');
     setIsInvalidFile(false);
     setUploadProgress(0);
@@ -111,15 +109,14 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
   const runCVAnalysis = async (selectedFile) => {
     const token = localStorage.getItem('token');
     if (!token) {
-      setValidationNotice('Please sign in again before uploading your CV.');
-      showError('Please sign in again before uploading your CV.');
       scrollToFeedback('error');
       return;
     }
 
     setIsUploading(true);
     setUploadProgress(0);
-    setValidationNotice('');
+    setToastError('');
+    setIsInvalidFile(false);
 
     try {
       const formData = new FormData();
@@ -142,7 +139,12 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
         xhr.onerror = () => reject(new Error('CV upload failed.'));
         xhr.send(formData);
       });
-      const data = JSON.parse(uploadResult.body || '{}');
+      let data = {};
+      try {
+        data = JSON.parse(uploadResult.body || '{}');
+      } catch {
+        throw new Error(`CV upload failed (HTTP ${uploadResult.status || 'unknown'}). Please make sure the backend is running.`);
+      }
       if (!uploadResult.ok) {
         const uploadError = new Error(data.message || 'CV upload failed.');
         uploadError.status = uploadResult.status;
@@ -174,7 +176,6 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
   };
 
   const handleFileSelect = (selectedFile) => {
-    setValidationNotice('');
     setToastError('');
     setIsInvalidFile(false);
     if (!selectedFile) return;
@@ -188,7 +189,6 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
     }
 
     setFile(selectedFile);
-    runCVAnalysis(selectedFile);
   };
 
   const showInvalidFileToast = (message) => {
@@ -230,8 +230,9 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
 
   const handleSkipAction = async () => {
     const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
-    const updatedUser = { ...currentUser, onboardingCvUploaded: true, cvSkipped: true, profileCompleted: false };
+    const updatedUser = { ...currentUser, onboardingCvUploaded: false, cvSkipped: true, cv_status: 'skipped', onboarding_step: 'personal_info', onboarding_step_completed: 'manual_profile', profileCompleted: false };
     localStorage.setItem('user', JSON.stringify(updatedUser));
+    localStorage.setItem('activeSeekerProfile', JSON.stringify({ ...(JSON.parse(localStorage.getItem('activeSeekerProfile') || '{}')), verified: false, cvStatus: 'skipped', cv_status: 'skipped' }));
     localStorage.setItem('cv_skipped', 'true');
     localStorage.setItem('onboarding_step', 'personal_info');
     localStorage.removeItem('pending_cv_data');
@@ -246,8 +247,11 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ cv_skipped: true, onboarding_step: 'personal_info' }),
+        body: JSON.stringify({ cv_skipped: true, cv_status: 'skipped', onboarding_step: 'personal_info', onboarding_step_completed: 'manual_profile' }),
       });
+      const status = await fetch('/api/seeker/profile-status', { headers: { Authorization: `Bearer ${token}` } });
+      const persisted = await status.json().catch(() => ({}));
+      localStorage.setItem('user', JSON.stringify({ ...updatedUser, ...persisted }));
     } catch (err) {
       console.error('Failed to sync step to db:', err);
     }
@@ -286,13 +290,6 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
         <p className="mx-auto mt-4 max-w-xl text-sm leading-7 text-slate-600 sm:text-base">
           Our AI analyzes your CV in seconds and helps match you with the most relevant job opportunities. If you do not have a CV ready yet, you can skip this step for now and continue to the next stage.
         </p>
-
-        {validationNotice && !isInvalidFile && (
-          <div className="mt-6 flex items-start gap-3 rounded-2xl border-2 border-amber-300 bg-amber-50 p-4 text-left text-xs font-bold text-amber-800 shadow-sm animate-[fadeIn_0.2s_ease-out] sm:text-sm" role="alert">
-            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
-            <span className="leading-relaxed">{validationNotice}</span>
-          </div>
-        )}
 
         <input
           ref={fileInputRef}

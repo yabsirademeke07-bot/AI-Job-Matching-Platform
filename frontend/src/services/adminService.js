@@ -37,7 +37,7 @@ export const getAdminOverview = async () => {
 
 export const updateUserStatus = (userId, status) => api.patch(`/admin/users/${userId}/status`, { status });
 export const updateCompanyVerification = (companyId, status) => api.patch(`/admin/company/${companyId}/verify`, { status });
-export const updateJobStatus = (jobId, status) => api.patch(`/admin/jobs/${jobId}/moderate`, { status: status === 'active' ? 'published' : status });
+export const updateJobStatus = (jobId, status, reason = '') => api.patch(`/admin/jobs/${jobId}/moderate`, { status, reason });
 export const moderateJob = (jobId, action, reason = '') => api.post(`/admin/jobs/${jobId}/moderate`, { action, reason });
 export const updateReportStatus = (reportId, status) => api.patch(`/admin/reports/${reportId}/status`, { status });
 export const getJobPreview = (jobId) => api.get(`/admin/jobs/${jobId}/preview`);
