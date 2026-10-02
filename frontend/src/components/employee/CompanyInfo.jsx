@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import officeImage from '../../pages/images/images3.jpg';
 import { useToast } from '../../hooks/useToast.js';
 import { scrollToFeedback } from '../../utils/scrollHelper.js';
+import { EmployerHeader } from '../layout/EmployerHeader';
 
 const ambientZoomStyles = `
   @keyframes ambientSlowZoom {
@@ -325,6 +326,12 @@ export default function CompanyInfo({ user, onComplete }) {
 
   return (
     <div className="w-full max-w-full overflow-x-hidden bg-slate-50/50 pt-2">
+      <EmployerHeader
+        currentTabTitle="Employer Information"
+        breadcrumb="Home / Company & Legal"
+        onOpenNotifications={() => window.location.assign('/employer/dashboard?view=notifications')}
+        onOpenMessages={() => window.location.assign('/employer/dashboard?view=messages')}
+      />
       <style>{ambientZoomStyles}</style>
       <div className="grid min-h-[calc(100vh-88px)] w-full min-w-0 grid-cols-1 lg:grid-cols-12 sm:min-h-[calc(100vh-104px)]">
         <aside className="relative hidden h-[calc(100vh-104px)] min-w-0 overflow-hidden bg-slate-100 lg:sticky lg:top-24 lg:col-span-5 lg:block">

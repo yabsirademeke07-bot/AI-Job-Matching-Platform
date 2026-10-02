@@ -22,10 +22,17 @@ const normalizeOptionalDate = (value) => {
   return text && text.length >= 8 ? text : null;
 };
 
+const normalizeScheduledDate = (value) => {
+  const text = normalizeNullableText(value);
+  if (!text) return null;
+  const date = new Date(text);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 19).replace('T', ' ');
+};
+
 const normalizeJobPayload = (body = {}) => ({
   title: normalizeNullableText(body.title || body.jobTitle) || '',
   description: normalizeNullableText(body.description) || 'No description provided.',
-  status: normalizeNullableText(body.status) || 'draft',
+  status: body.isScheduled === true || body.isScheduled === 'true' ? 'scheduled' : normalizeNullableText(body.status) || 'draft',
   category: normalizeNullableText(body.category || body.department || body.sector || body.categoryName) || 'General',
   job_type: normalizeNullableText(body.job_type || body.jobType || body.job_type_name) || 'full-time',
   experience_level: normalizeNullableText(body.experience_level || body.experienceLevel || body.experience_level_name) || 'mid-level',
@@ -51,6 +58,7 @@ const normalizeJobPayload = (body = {}) => ({
   years_of_experience_min: normalizeOptionalNumber(body.years_of_experience_min ?? body.yearsOfExperienceMin) ?? 0,
   years_of_experience_max: normalizeOptionalNumber(body.years_of_experience_max ?? body.yearsOfExperienceMax) ?? 20,
   application_deadline: normalizeOptionalDate(body.application_deadline ?? body.applicationDeadline ?? body.deadline),
+  scheduled_date: normalizeScheduledDate(body.scheduledAt ?? body.scheduledDate ?? body.scheduled_date),
   is_urgent: Boolean(body.is_urgent || body.isUrgent),
   required_skills: normalizeList(body.required_skills ?? body.requiredSkills ?? body.skills).map((skill) => typeof skill === 'string' ? { skill_name: skill } : skill),
   required_languages: normalizeList(body.required_languages || body.requiredLanguages).map((language) => typeof language === 'string' ? { language_name: language } : language),
@@ -227,16 +235,17 @@ exports.createJob = async (req, res) => {
   try {
     const job = normalizeJobPayload(req.body);
     if (!job.title || !job.description || !job.application_deadline) return res.status(400).json({ success: false, message: 'Title, description, and application deadline are required.' });
+    if (job.status === 'scheduled' && !job.scheduled_date) return res.status(400).json({ success: false, message: 'A valid scheduledAt ISO timestamp is required for scheduled jobs.' });
     await connection.beginTransaction();
     const slug = `${job.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}-${Date.now()}`;
-    const [result] = await connection.execute(`INSERT INTO jobs (employer_id, title, slug, description, category, job_type, experience_level, location, country, city, work_mode, gender_preference, salary_min, salary_max, currency, salary_period, is_salary_negotiable, benefits, required_education, years_of_experience_min, years_of_experience_max, application_deadline, is_urgent, status, published_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [req.user.id, job.title, slug, job.description, job.category, job.job_type, job.experience_level, job.location, job.country, job.city, job.work_mode, job.gender_preference, job.salary_min, job.salary_max, job.currency, job.salary_period, job.is_salary_negotiable, job.benefits, job.required_education, job.years_of_experience_min, job.years_of_experience_max, job.application_deadline, job.is_urgent, job.status || 'draft', job.status === 'published' ? new Date() : null]);
+    const [result] = await connection.execute(`INSERT INTO jobs (employer_id, title, slug, description, category, job_type, experience_level, location, country, city, work_mode, gender_preference, salary_min, salary_max, currency, salary_period, is_salary_negotiable, benefits, required_education, years_of_experience_min, years_of_experience_max, application_deadline, scheduled_date, is_urgent, status, published_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [req.user.id, job.title, slug, job.description, job.category, job.job_type, job.experience_level, job.location, job.country, job.city, job.work_mode, job.gender_preference, job.salary_min, job.salary_max, job.currency, job.salary_period, job.is_salary_negotiable, job.benefits, job.required_education, job.years_of_experience_min, job.years_of_experience_max, job.application_deadline, job.scheduled_date, job.is_urgent, job.status || 'draft', job.status === 'published' ? new Date() : null]);
     const jobId = result.insertId;
     for (const skill of job.required_skills) if (skill.skill_name) await connection.execute('INSERT INTO job_required_skills (job_id, skill_name, proficiency_level, is_must_have) VALUES (?, ?, ?, ?)', [jobId, String(skill.skill_name).trim(), skill.proficiency_level || 'intermediate', Boolean(skill.is_must_have)]);
     for (const language of job.required_languages) if (language.language_name) await connection.execute('INSERT INTO job_required_languages (job_id, language_name, proficiency, is_must_have) VALUES (?, ?, ?, ?)', [jobId, String(language.language_name).trim(), language.proficiency || 'professional-working', Boolean(language.is_must_have)]);
     await connection.execute('INSERT INTO job_analytics (job_id) VALUES (?)', [jobId]);
     await connection.commit();
-    const [rows] = await connection.execute('SELECT * FROM jobs WHERE id = ?', [jobId]);
-    return res.status(201).json({ success: true, ...rows[0], jobId, id: jobId, slug });
+    const [rows] = await connection.execute("SELECT *, DATE_FORMAT(scheduled_date, '%Y-%m-%dT%H:%i:%sZ') AS scheduledAt FROM jobs WHERE id = ?", [jobId]);
+    return res.status(201).json({ success: true, ...rows[0], isScheduled: job.status === 'scheduled', jobId, id: jobId, slug });
   } catch (error) {
     await connection.rollback();
     const sqlError = error?.sqlMessage || error?.message || 'Unknown database error';
@@ -248,18 +257,19 @@ exports.createJob = async (req, res) => {
 
 exports.getEmployerJobs = async (req, res) => {
   try {
-    const [jobs] = await db.execute(`SELECT j.*, COUNT(a.id) applicantsCount, SUM(a.status = 'shortlisted') shortlisted FROM jobs j LEFT JOIN applications a ON a.job_id = j.id WHERE j.employer_id = ? GROUP BY j.id ORDER BY j.created_at DESC`, [req.user.id]);
-    return res.json({ success: true, jobs });
+    const [jobs] = await db.execute(`SELECT j.*, DATE_FORMAT(j.scheduled_date, '%Y-%m-%dT%H:%i:%sZ') AS scheduledAt, COUNT(a.id) applicantsCount, SUM(a.status = 'shortlisted') shortlisted FROM jobs j LEFT JOIN applications a ON a.job_id = j.id WHERE j.employer_id = ? GROUP BY j.id ORDER BY j.created_at DESC`, [req.user.id]);
+    return res.json({ success: true, jobs: jobs.map((job) => ({ ...job, isScheduled: String(job.status).toLowerCase() === 'scheduled' && Boolean(job.scheduledAt) })) });
   } catch (error) { return res.status(500).json({ success: false, message: 'Failed to retrieve jobs.' }); }
 };
 
 exports.updateJob = async (req, res) => {
   const job = normalizeJobPayload(req.body);
+  if (job.status === 'scheduled' && !job.scheduled_date) return res.status(400).json({ success: false, message: 'A valid scheduledAt ISO timestamp is required for scheduled jobs.' });
   try {
-    const [result] = await db.execute(`UPDATE jobs SET title = ?, description = ?, category = ?, job_type = ?, experience_level = ?, location = ?, work_mode = ?, gender_preference = ?, salary_min = ?, salary_max = ?, currency = ?, application_deadline = ? WHERE id = ? AND employer_id = ?`, [job.title, job.description, job.category, job.job_type, job.experience_level, job.location, job.work_mode, job.gender_preference, job.salary_min, job.salary_max, job.currency, job.application_deadline, req.params.jobId, req.user.id]);
+    const [result] = await db.execute(`UPDATE jobs SET title = ?, description = ?, category = ?, job_type = ?, experience_level = ?, location = ?, work_mode = ?, gender_preference = ?, salary_min = ?, salary_max = ?, currency = ?, application_deadline = ?, scheduled_date = ? WHERE id = ? AND employer_id = ?`, [job.title, job.description, job.category, job.job_type, job.experience_level, job.location, job.work_mode, job.gender_preference, job.salary_min, job.salary_max, job.currency, job.application_deadline, job.scheduled_date, req.params.jobId, req.user.id]);
     if (!result.affectedRows) return res.status(404).json({ success: false, message: 'Job not found.' });
-    const [rows] = await db.execute('SELECT * FROM jobs WHERE id = ?', [req.params.jobId]);
-    return res.json({ success: true, ...rows[0] });
+    const [rows] = await db.execute("SELECT *, DATE_FORMAT(scheduled_date, '%Y-%m-%dT%H:%i:%sZ') AS scheduledAt FROM jobs WHERE id = ?", [req.params.jobId]);
+    return res.json({ success: true, ...rows[0], isScheduled: String(rows[0]?.status).toLowerCase() === 'scheduled' && Boolean(rows[0]?.scheduledAt) });
   } catch (error) { return res.status(500).json({ success: false, message: 'Failed to update job.' }); }
 };
 

@@ -157,344 +157,6 @@ export const DATE_POSTED_OPTIONS = [
 ];
 
 // =========================================================================
-// 2. REALISTIC EMPLOYER JOB POSTINGS DATASET
-// =========================================================================
-const initialJobs = [
-  {
-    id: 1,
-    title: "Admin Supervisor Transport & Logistics",
-    company: "Private Client",
-    companyAbout:
-      "Private Client is an established enterprise managing modern commercial fleet operations and logistics supply lines throughout Ethiopia.",
-    location: "Addis Ababa, Ethiopia",
-    locationValue: "Addis Ababa",
-    type: "Full-time",
-    workplace: "On-site",
-    experienceLevel: "Intermediate (3-5 yrs)",
-    education: "Bachelor’s Degree in Logistics or Business Administration",
-    gender: "Any Gender",
-    vacancies: 1,
-    deadline: "August 30, 2026",
-    deadlineDate: "2026-08-30",
-    priorityRank: 1,
-    postedAt: "Posted 2 hours ago",
-    postedHoursAgo: 2,
-    sector: "Logistics & Supply Chain",
-    currency: "ETB",
-    salary: "ETB 35,000 - 55,000 / mo",
-    salaryValue: 45000,
-    aiMatchScore: 98,
-    matchReason:
-      "Direct match for fleet supervision, dispatch tracking, and administrative workflows.",
-    tags: [
-      "Fleet Management",
-      "Logistics Dispatch",
-      "Office Administration",
-      "Reporting",
-    ],
-    shortDescription:
-      "Are you an organized multi-tasker with a knack for keeping fleet operations, administrative workflows, and driver records running seamlessly? We are looking for an Admin Supervisor to lead and streamline our transport administration function!",
-    fullDescription:
-      "As an Admin Supervisor in Transport & Logistics, you will serve as the operational backbone for our transportation division. You will oversee daily logistics schedules, maintain detailed driver dispatch records, coordinate routine vehicle maintenance, and ensure strict compliance with Ethiopian road transport safety standards.",
-    responsibilities: [
-      "Manage daily vehicle dispatch schedules, driver assignments, and fuel consumption logs",
-      "Supervise routine mechanical inspections, maintenance cycles, and insurance renewals",
-      "Prepare weekly operational and administrative performance reports for senior management",
-      "Coordinate with cross-functional departments to fulfill urgent transport and supply requests",
-    ],
-    requirements: [
-      "BA degree in Business Administration, Logistics, Supply Chain Management, or related field",
-      "3+ years of proven supervisory experience in transport coordination or office logistics",
-      "Proficient in Microsoft Excel, fleet management systems, and inventory tracking tools",
-      "Strong leadership and interpersonal communication abilities in both Amharic and English",
-    ],
-    benefits: [
-      "Transport & Mobile Phone Allowance",
-      "Comprehensive Medical Coverage",
-      "Annual Performance Bonus & Paid Leave",
-    ],
-  },
-  {
-    id: 2,
-    title: "Senior Full Stack Software Engineer",
-    company: "EthioFinTech Labs",
-    companyAbout:
-      "EthioFinTech Labs is a licensed financial technology provider pioneering next-generation digital payment platforms and financial inclusion across East Africa.",
-    location: "Addis Ababa, Ethiopia",
-    locationValue: "Addis Ababa",
-    type: "Full-time",
-    workplace: "Hybrid",
-    experienceLevel: "Senior (5+ yrs)",
-    education: "Bachelor’s Degree in Computer Science or Software Engineering",
-    gender: "Any Gender",
-    vacancies: 2,
-    deadline: "September 15, 2026",
-    deadlineDate: "2026-09-15",
-    priorityRank: 2,
-    postedAt: "Posted 5 hours ago",
-    postedHoursAgo: 5,
-    sector: "Software Design & Development",
-    currency: "ETB",
-    salary: "ETB 65,000 - 95,000 / mo",
-    salaryValue: 80000,
-    aiMatchScore: 96,
-    matchReason:
-      "High relevance for React, Node.js, RESTful microservices, and PostgreSQL systems.",
-    tags: [
-      "React",
-      "Node.js",
-      "TypeScript",
-      "Tailwind CSS",
-      "PostgreSQL",
-      "Docker",
-    ],
-    shortDescription:
-      "Design and deploy scalable next-generation digital payment rails and modern web interfaces. Collaborate with engineering leadership to deliver mission-critical FinTech products.",
-    fullDescription:
-      "You will lead end-to-end full stack architecture for our flagship digital financial ecosystem. Working alongside product managers and UI designers, you will write resilient backend services, implement clean interactive frontend experiences, and guarantee bank-grade security protocols.",
-    responsibilities: [
-      "Architect and maintain high-throughput RESTful and GraphQL APIs using Node.js and TypeScript",
-      "Build modular, responsive web client components using React, Tailwind CSS, and state management",
-      "Optimize PostgreSQL database queries, transactional integrity, and Redis caching layers",
-      "Perform code reviews, mentor junior engineers, and contribute to automated CI/CD pipelines",
-    ],
-    requirements: [
-      "4+ years of professional full-stack development experience in production environments",
-      "Deep practical expertise in modern JavaScript/TypeScript, React, Node.js, and SQL databases",
-      "Solid foundation in software design patterns, cloud deployments, and web application security",
-      "Strong analytical mindset and enthusiasm for solving complex technological challenges",
-    ],
-    benefits: [
-      "Competitive Salary + Performance Bonuses",
-      "Hybrid Workplace (2 days Remote / week)",
-      "Comprehensive Family Health Insurance",
-      "Annual Professional Learning & Development Stipend",
-    ],
-  },
-  {
-    id: 3,
-    title: "AI / LLM Research & Modeling Engineer",
-    company: "NeuralCore Global",
-    companyAbout:
-      "NeuralCore Global is an international artificial intelligence laboratory developing specialized machine intelligence and natural language processing infrastructure for emerging markets.",
-    location: "Remote, Ethiopia",
-    locationValue: "Remote",
-    type: "Full-time",
-    workplace: "Remote",
-    experienceLevel: "Expert (8+ yrs)",
-    education: "Master’s Degree in Artificial Intelligence or Computer Science",
-    gender: "Any Gender",
-    vacancies: 1,
-    deadline: "September 20, 2026",
-    deadlineDate: "2026-09-20",
-    priorityRank: 3,
-    postedAt: "Posted 8 hours ago",
-    postedHoursAgo: 8,
-    sector: "Data Science & Analytics",
-    currency: "USD",
-    salary: "$3,500 - $5,200 / mo",
-    salaryValue: 430000,
-    aiMatchScore: 95,
-    matchReason:
-      "Strong fit for Python, Transformer architectures, and vector embeddings.",
-    tags: [
-      "Python",
-      "Generative AI",
-      "PyTorch",
-      "Transformers",
-      "Vector DB",
-      "FastAPI",
-    ],
-    shortDescription:
-      "Lead experimental research in semantic job parsing and real-time candidate matchmaking models at continental scale.",
-    fullDescription:
-      "Join an elite research and engineering unit developing cutting-edge AI matchmaking infrastructure. You will fine-tune open-source LLMs, create semantic vector embeddings for cross-lingual African job markets, and deploy scalable inference engines.",
-    responsibilities: [
-      "Train, fine-tune, and evaluate large language models and semantic retrieval systems",
-      "Construct robust ETL pipelines for multilingual job parsing and candidate profile extraction",
-      "Optimize model inference throughput and memory footprints for low-latency production APIs",
-      "Collaborate with product teams to integrate AI-driven intelligence into user-facing platforms",
-    ],
-    requirements: [
-      "Master's or PhD degree in Computer Science, Artificial Intelligence, or quantitative field",
-      "Demonstrated track record with deep learning frameworks (PyTorch, Hugging Face, LangChain)",
-      "Hands-on experience with vector search engines (Pinecone, Qdrant, Milvus) and embeddings",
-      "Published research or proven production track record with LLM-powered applications",
-    ],
-    benefits: [
-      "100% Remote Global Flexibility",
-      "USD-denominated Compensation",
-      "Latest Apple M-Series Hardware Provided",
-      "Annual Global AI Conference Attendance Budget",
-    ],
-  },
-  {
-    id: 4,
-    title: "Agri-Tech Supply Chain & Logistics Officer",
-    company: "GreenValley Agro Hub",
-    companyAbout:
-      "GreenValley Agro Hub connects regional farming cooperatives directly with commercial markets and cold-chain logistics across Southern Ethiopia.",
-    location: "Hawassa, Ethiopia",
-    locationValue: "Hawassa",
-    type: "Full-time",
-    workplace: "On-site",
-    experienceLevel: "Intermediate (3-5 yrs)",
-    education: "Bachelor’s Degree in Agribusiness or Supply Chain",
-    gender: "Any Gender",
-    vacancies: 1,
-    deadline: "September 02, 2026",
-    deadlineDate: "2026-09-02",
-    priorityRank: 2,
-    postedAt: "Posted 18 hours ago",
-    postedHoursAgo: 18,
-    sector: "Agriculture",
-    currency: "ETB",
-    salary: "ETB 38,000 - 55,000 / mo",
-    salaryValue: 46000,
-    aiMatchScore: 91,
-    matchReason:
-      "High relevance in agricultural logistics and farm-to-market dispatch.",
-    tags: [
-      "Supply Chain",
-      "Logistics",
-      "Cold Chain",
-      "Inventory Control",
-      "Agribusiness",
-    ],
-    shortDescription:
-      "Supervise daily distribution schedules, digital traceability platforms, and cooperative vendor operations across Southern Ethiopia.",
-    fullDescription:
-      "GreenValley Agro Hub connects regional farming cooperatives directly with commercial markets. In this role, you will coordinate cold-chain transportation, manage warehouse intake schedules, and utilize digital tracking systems to eliminate post-harvest losses.",
-    responsibilities: [
-      "Supervise daily produce intake, grading standards, and cold-storage warehouse inventory",
-      "Plan efficient regional trucking routes to transport perishables to major urban markets",
-      "Ensure compliance with food quality certifications and sanitary transport standards",
-      "Maintain active relationships with local smallholder cooperative leaders and freight vendors",
-    ],
-    requirements: [
-      "Degree in Agribusiness, Supply Chain Management, Logistics, or related field",
-      "3+ years managing agricultural freight, temperature-controlled logistics, or warehouse ops",
-      "Proficient in warehouse management software (WMS) and spreadsheet analytics",
-      "Excellent local communication skills and willingness to travel regionally when needed",
-    ],
-    benefits: [
-      "Housing & Field Travel Allowance",
-      "Performance-based Quarterly Incentives",
-      "Full Health Insurance Package",
-    ],
-  },
-  {
-    id: 5,
-    title: "Senior Financial Risk & Compliance Analyst",
-    company: "Abyssinia Capital",
-    companyAbout:
-      "Abyssinia Capital is an institutional investment and advisory firm offering asset portfolio management and enterprise financial audit solutions.",
-    location: "Addis Ababa, Ethiopia",
-    locationValue: "Addis Ababa",
-    type: "Full-time",
-    workplace: "On-site",
-    experienceLevel: "Senior (5+ yrs)",
-    education: "Master’s Degree in Finance, Accounting, or Economics",
-    gender: "Any Gender",
-    vacancies: 1,
-    deadline: "August 28, 2026",
-    deadlineDate: "2026-08-28",
-    priorityRank: 1,
-    postedAt: "Posted 1 day ago",
-    postedHoursAgo: 24,
-    sector: "Accounting & Finance",
-    currency: "ETB",
-    salary: "ETB 70,000 - 110,000 / mo",
-    salaryValue: 90000,
-    aiMatchScore: 94,
-    matchReason:
-      "Deep regulatory expertise in Ethiopian banking directives and risk modeling.",
-    tags: [
-      "Risk Assessment",
-      "IFRS Standards",
-      "Financial Modeling",
-      "Corporate Compliance",
-    ],
-    shortDescription:
-      "Guide compliance reviews, capital adequacy modeling, and institutional audit workflows for enterprise clients.",
-    fullDescription:
-      "Abyssinia Capital is an institutional investment and advisory firm. As Senior Risk & Compliance Analyst, you will evaluate asset portfolios, conduct rigorous financial audits, and ensure all operations adhere to National Bank of Ethiopia regulations and IFRS guidelines.",
-    responsibilities: [
-      "Conduct quarterly financial risk assessments and build stress-testing econometric models",
-      "Formulate compliance guidelines to safeguard institutional investments against market volatility",
-      "Draft comprehensive regulatory reports for submission to state regulatory authorities",
-      "Advise executive leadership on liquidity requirements, credit risks, and operational exposures",
-    ],
-    requirements: [
-      "Master's Degree in Finance, Accounting, or Economics; ACCA / CFA qualification is a strong plus",
-      "5+ years of senior risk assessment or auditing experience within banking or advisory firms",
-      "Thorough command of National Bank directives, IFRS compliance, and financial analysis tools",
-      "Superior analytical acumen and impeccable professional integrity",
-    ],
-    benefits: [
-      "Executive Tier Compensation & Stock Options",
-      "Full Comprehensive Health & Life Coverage",
-      "Professional Certification Sponsorship (CFA/ACCA)",
-    ],
-  },
-  {
-    id: 6,
-    title: "Healthcare Clinical Support Specialist",
-    company: "BioHealth Diagnostics",
-    companyAbout:
-      "BioHealth Diagnostics operates modern medical laboratory and automated clinical testing centers across Northwest Ethiopia.",
-    location: "Bahir Dar, Ethiopia",
-    locationValue: "Bahir Dar",
-    type: "Full-time",
-    workplace: "On-site",
-    experienceLevel: "Intermediate (3-5 yrs)",
-    education: "Bachelor’s Degree in Medical Laboratory Science",
-    gender: "Female",
-    vacancies: 1,
-    deadline: "September 10, 2026",
-    deadlineDate: "2026-09-10",
-    priorityRank: 3,
-    postedAt: "Posted 2 days ago",
-    postedHoursAgo: 48,
-    sector: "Healthcare",
-    currency: "ETB",
-    salary: "ETB 32,000 - 48,000 / mo",
-    salaryValue: 40000,
-    aiMatchScore: 89,
-    matchReason:
-      "Laboratory diagnostics protocols and patient data management skills.",
-    tags: [
-      "Clinical Lab",
-      "Diagnostics",
-      "Patient Care",
-      "Hygiene Standards",
-      "Healthcare",
-    ],
-    shortDescription:
-      "Support daily clinical testing, automated diagnostic equipment maintenance, and laboratory quality control.",
-    fullDescription:
-      "BioHealth Diagnostics operates modern laboratory centers across Northwest Ethiopia. You will handle specialized medical testing, operate digital hematology and biochemistry analyzers, maintain quality assurance records, and provide clear diagnostic reports to attending physicians.",
-    responsibilities: [
-      "Perform diagnostic sample analyses in hematology, clinical chemistry, and microbiology",
-      "Calibrate and sanitize automated diagnostic machinery according to international safety standards",
-      "Maintain meticulous quality control logs and manage laboratory reagent inventories",
-      "Ensure prompt delivery of confidential diagnostic findings to healthcare practitioners",
-    ],
-    requirements: [
-      "BSc in Medical Laboratory Science, Biomedical Technology, or Clinical Nursing",
-      "Active professional practicing license with 2+ years of hospital or diagnostic center experience",
-      "Demonstrated familiarity with modern digital clinical testing instruments",
-      "Compassionate, detail-oriented approach with strict adherence to patient privacy",
-    ],
-    benefits: [
-      "Duty & Professional License Allowance",
-      "Annual Health Checkup & Family Coverage",
-      "Continuous Medical Education (CME) Credits",
-    ],
-  },
-];
-
-// =========================================================================
 // 3. AUTH MODAL (LOGIN / SIGN UP POPUP)
 // =========================================================================
 function AuthModal({
@@ -672,6 +334,11 @@ function CleanJobCard({ job, saved, onToggleSave, onShare, onViewDetails }) {
             <span className="font-black text-slate-900">{job.company}</span>
             <span className="text-slate-500">•</span>
             <span className="font-semibold text-slate-700">{job.location}</span>
+            {job.aiMatchScore !== null && (
+              <span className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-black text-emerald-700">
+                {job.aiMatchScore}% CV skills match
+              </span>
+            )}
           </div>
         </div>
 
@@ -874,17 +541,6 @@ function JobDetailModal({
                 </div>
               </div>
 
-              <div className="bg-[#F0F7FC] border border-[#D0E5F5] rounded-2xl p-5 flex items-center gap-3.5 shrink-0 self-start lg:self-center">
-                <Sparkles className="w-6 h-6 text-[#56A2D8]" />
-                <div>
-                  <span className="block text-xs font-bold uppercase tracking-wider text-slate-700">
-                    AI Match Confidence
-                  </span>
-                  <span className="text-xl font-black text-[#2B73A4]">
-                    {job.aiMatchScore}% Match Score
-                  </span>
-                </div>
-              </div>
             </div>
           </div>
 
@@ -893,15 +549,22 @@ function JobDetailModal({
               <div className="flex items-center justify-between">
                 <span className="text-sm font-black text-[#2B73A4] uppercase tracking-wider flex items-center gap-2">
                   <Sparkles className="w-5 h-5 text-[#56A2D8]" />
-                  AI Match Assessment
+                  CV Skill Match
                 </span>
-                <span className="px-3.5 py-1.5 rounded-full bg-white text-[#2B73A4] text-xs sm:text-sm font-black border border-[#D0E5F5] shadow-2xs">
-                  {job.aiMatchScore}% Match
-                </span>
+                {job.aiMatchScore !== null && (
+                  <span className="px-3.5 py-1.5 rounded-full bg-white text-[#2B73A4] text-xs sm:text-sm font-black border border-[#D0E5F5] shadow-2xs">
+                    {job.aiMatchScore}%
+                  </span>
+                )}
               </div>
               <p className="text-base font-semibold leading-relaxed text-slate-800 sm:text-lg">
-                ✨ {job.matchReason}
+                {job.matchReason}
               </p>
+              {job.aiMatchScore !== null && job.requiredSkills.length > 0 && (
+                <p className="text-sm text-slate-600">
+                  Matched: {job.matchedSkills.join(", ") || "none"}. Missing: {job.missingSkills.join(", ") || "none"}.
+                </p>
+              )}
             </div>
 
             <div className="space-y-4">
@@ -1518,14 +1181,17 @@ export default function ExploreJobsPage() {
   const [searchParams] = useSearchParams();
   const fromDashboard = location.state?.fromDashboard === true || searchParams.get('from') === 'dashboard';
   const normalizeApiJob = (job) => {
-    const rawTags = Array.isArray(job.tags)
-      ? job.tags
-      : Array.isArray(job.required_skills)
-        ? job.required_skills
-        : String(job.required_skills || "")
-            .split(",")
-            .map((skill) => skill.trim())
-            .filter(Boolean);
+    const skillSource = job.tags ?? job.requiredSkills ?? job.required_skills;
+    let rawTags = Array.isArray(skillSource) ? skillSource : [];
+    if (typeof skillSource === "string") {
+      try {
+        const parsedSkills = JSON.parse(skillSource);
+        rawTags = Array.isArray(parsedSkills) ? parsedSkills : skillSource.split(",");
+      } catch {
+        rawTags = skillSource.split(",");
+      }
+    }
+    rawTags = rawTags.map((skill) => typeof skill === "string" ? skill : skill.skill_name || skill.name || "").filter(Boolean);
 
     const normalizedSalaryMin = Number(job.salary_min ?? job.salaryMin ?? 0);
     const normalizedSalaryMax = Number(job.salary_max ?? job.salaryMax ?? 0);
@@ -1562,10 +1228,11 @@ export default function ExploreJobsPage() {
       priorityRank: Number(job.priorityRank) || 1,
       salaryValue: Number(job.salaryValue ?? normalizedSalaryMin ?? 0),
       salary: priceText,
-      aiMatchScore: Number(job.aiMatchScore || 0),
-      matchReason:
-        job.matchReason ||
-        "Published by an employer on the Job Matching platform.",
+      aiMatchScore: job.matchScore ?? job.match_score ?? job.aiMatchScore ?? null,
+      matchedSkills: job.matchedSkills || job.matched_skills || [],
+      missingSkills: job.missingSkills || job.missing_skills || [],
+      requiredSkills: rawTags,
+      matchReason: job.rationale || job.matchReason || "Sign in and upload a CV to compare its skills with this job.",
       tags: rawTags,
       shortDescription: job.shortDescription || job.description || "",
       fullDescription: job.fullDescription || job.description || "",
@@ -1579,22 +1246,29 @@ export default function ExploreJobsPage() {
     };
   };
   const [jobs, setJobs] = useState([]);
+  const [jobsLoading, setJobsLoading] = useState(true);
+  const [jobsLoadError, setJobsLoadError] = useState("");
   const [search, setSearch] = useState("");
   useEffect(() => {
     let mounted = true;
 
     const loadJobs = async () => {
       try {
-        const { data } = await api.get('/jobs');
+        const token = localStorage.getItem("token") || sessionStorage.getItem("token");
+        const { data } = await api.get(token ? "/jobs/match?all=true" : "/jobs");
         if (!mounted) return;
 
         const rawJobs = Array.isArray(data) ? data : data.jobs || [];
         setJobs(rawJobs.map(normalizeApiJob));
+        setJobsLoadError("");
       } catch (error) {
         console.error("Unable to load jobs from API:", error);
         if (mounted) {
-          setJobs(initialJobs);
+          setJobs([]);
+          setJobsLoadError("Unable to load published jobs. Check your connection and try again.");
         }
+      } finally {
+        if (mounted) setJobsLoading(false);
       }
     };
 
@@ -1832,7 +1506,7 @@ export default function ExploreJobsPage() {
     } else if (sortBy === "priority") {
       sorted.sort((a, b) => a.priorityRank - b.priorityRank);
     } else if (sortBy === "match") {
-      sorted.sort((a, b) => b.aiMatchScore - a.aiMatchScore);
+      sorted.sort((a, b) => (b.aiMatchScore ?? -1) - (a.aiMatchScore ?? -1));
     } else if (sortBy === "salary") {
       sorted.sort((a, b) => b.salaryValue - a.salaryValue);
     } else if (sortBy === "deadline") {
@@ -2410,7 +2084,7 @@ export default function ExploreJobsPage() {
                 >
                   <option value="newest">Most Recent (Newest)</option>
                   <option value="priority">Top Priority & Urgent</option>
-                  <option value="match">Highest AI Match</option>
+                  <option value="match">Highest CV Skills Match</option>
                   <option value="salary">Highest Compensation</option>
                   <option value="deadline">
                     Closing Soon (Nearest Deadline)
@@ -2419,7 +2093,24 @@ export default function ExploreJobsPage() {
               </div>
             </div>
 
-            {filteredJobs.length === 0 ? (
+            {jobsLoading ? (
+              <div className="rounded-2xl border border-slate-200 bg-white p-14 text-center text-sm font-semibold text-slate-600">
+                Loading published jobs...
+              </div>
+            ) : jobsLoadError ? (
+              <div className="rounded-2xl border border-rose-200 bg-rose-50 p-10 text-center">
+                <p className="font-bold text-rose-800">{jobsLoadError}</p>
+                <button type="button" onClick={() => window.location.reload()} className="mt-4 rounded-xl bg-white px-4 py-2 text-sm font-bold text-rose-700 shadow-sm">
+                  Retry
+                </button>
+              </div>
+            ) : jobs.length === 0 ? (
+              <div className="rounded-2xl border border-slate-200 bg-white p-14 text-center">
+                <Search className="mx-auto h-10 w-10 text-slate-300" />
+                <h3 className="mt-4 text-lg font-bold text-slate-900">No published jobs yet</h3>
+                <p className="mt-2 text-sm font-medium text-slate-500">Employer-posted jobs will appear here when they are published.</p>
+              </div>
+            ) : filteredJobs.length === 0 ? (
               <div className="jobs-empty-state rounded-2xl border border-slate-200/90 bg-white p-14 text-center shadow-2xs space-y-4">
                 <Search className="mx-auto h-10 w-10 text-slate-300" />
                 <h3 className="text-lg font-bold text-slate-900">

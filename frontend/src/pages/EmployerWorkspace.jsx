@@ -14,6 +14,7 @@ import {
   ChevronRight,
   CircleDollarSign,
   ClipboardList,
+  Clock3,
   FileText,
   Globe2,
   LayoutDashboard,
@@ -222,6 +223,59 @@ function inputClass(dark) {
   return `min-h-11 w-full min-w-0 rounded-xl border px-3.5 py-3 text-sm font-medium text-slate-900 outline-none transition placeholder:font-medium placeholder:text-slate-500 focus:border-blue-600 focus:ring-4 focus:ring-blue-500/10 ${dark ? "border-slate-700 bg-slate-900 text-white placeholder:text-slate-400" : "border-slate-300 bg-white shadow-sm hover:border-slate-400"}`;
 }
 
+function getAddisAbabaDate() {
+  const parts = new Intl.DateTimeFormat("en", {
+    timeZone: "Africa/Addis_Ababa",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const value = (type) => parts.find((part) => part.type === type)?.value || "";
+  return `${value("year")}-${value("month")}-${value("day")}`;
+}
+
+function formatScheduleDate(isoDate) {
+  const [year, month, day] = String(isoDate || "").split("-");
+  return year && month && day ? `${day}/${month}/${year}` : "";
+}
+
+function parseScheduleDate(displayDate) {
+  const match = String(displayDate || "").trim().match(/^(\d{1,2})[,/ -](\d{1,2})[,/ -](\d{4})$/);
+  if (!match) return "";
+
+  const [, day, month, year] = match;
+  const isoDate = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+  const parsedDate = new Date(`${isoDate}T00:00:00Z`);
+  return !Number.isNaN(parsedDate.getTime()) && parsedDate.toISOString().slice(0, 10) === isoDate
+    ? isoDate
+    : "";
+}
+
+const ETHIOPIAN_TIME_PERIODS = {
+  morning: { label: "ጠዋት", hours: [1, 2, 3, 4, 5] },
+  afternoon: { label: "ቀን / ከሰዓት", hours: [6, 7, 8, 9, 10, 11] },
+  evening: { label: "ማታ", hours: [12, 1, 2, 3, 4, 5] },
+  night: { label: "ሌሊት", hours: [6, 7, 8, 9, 10, 11] },
+};
+
+function getEthiopianScheduleTime({ hour, minute, period }) {
+  const ethiopianHour = Number(hour);
+  const twentyFourHour = period === "evening"
+    ? ethiopianHour === 12 ? 18 : ethiopianHour + 18
+    : period === "night"
+      ? ethiopianHour - 6
+      : ethiopianHour + 6;
+  const eatHour = ((twentyFourHour % 24) + 24) % 24;
+  const meridiem = eatHour < 12 ? "AM" : "PM";
+  const displayHour = eatHour % 12 || 12;
+
+  return {
+    hour: String(eatHour).padStart(2, "0"),
+    isoTime: `${String(eatHour).padStart(2, "0")}:${minute}:00+03:00`,
+    preview: `${displayHour}:${minute} ${meridiem}`,
+  };
+}
+
 export default function EmployerWorkspace() {
   const { user, token, setSession, logout } = useAuth();
   const location = useLocation();
@@ -255,6 +309,7 @@ export default function EmployerWorkspace() {
     verification_status: "Under Review",
   });
   const [job, setJob] = useState(blankJob);
+  const [step1Errors, setStep1Errors] = useState({});
   const [editingJobId, setEditingJobId] = useState(null);
   const [wizard, setWizard] = useState(1);
   const [selected, setSelected] = useState(null);
@@ -274,8 +329,26 @@ export default function EmployerWorkspace() {
   const [showSchedule, setShowSchedule] = useState(false);
   const [scheduleDraft, setScheduleDraft] = useState({
     date: "",
-    time: "",
+    hour: "3",
+    minute: "00",
+    period: "morning",
   });
+  const [scheduleDateInput, setScheduleDateInput] = useState("");
+  const [showPublishSchedule, setShowPublishSchedule] = useState(false);
+  const [publishScheduleError, setPublishScheduleError] = useState("");
+  const publishScheduleDatePickerRef = useRef(null);
+  const resetPublishScheduleForm = (defaultToToday = false) => {
+    const today = getAddisAbabaDate();
+    const nextDate = defaultToToday ? today : "";
+    setScheduleDraft({
+      date: nextDate,
+      hour: "3",
+      minute: "00",
+      period: "morning",
+    });
+    setScheduleDateInput(defaultToToday ? formatScheduleDate(today) : "");
+    setPublishScheduleError("");
+  };
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [logoutSession, setLogoutSession] = useState(null);
   const [schedule, setSchedule] = useState({
@@ -305,6 +378,38 @@ export default function EmployerWorkspace() {
     setToast({ message, type });
     toastTimeoutRef.current = window.setTimeout(() => setToast(null), 5000);
   };
+  const validateStep1 = () => {
+    const errors = {};
+    if (!String(job.title || "").trim()) errors.title = "Job title is required";
+    if (!String(job.location || "").trim()) errors.location = "Location is required";
+    if (!String(job.application_deadline || "").trim()) errors.application_deadline = "Application deadline is required";
+    if (!String(job.required_skills || "").trim()) errors.required_skills = "Please enter at least one required skill";
+    if (!String(job.description || "").trim()) errors.description = "Job description is required";
+    setStep1Errors(errors);
+    return errors;
+  };
+  const handleContinueToPreview = (event) => {
+    event.preventDefault();
+    const errors = validateStep1();
+    const firstInvalidField = ["title", "location", "application_deadline", "required_skills", "description"]
+      .find((field) => errors[field]);
+    if (firstInvalidField) {
+      const input = document.getElementById(firstInvalidField);
+      input?.focus({ preventScroll: true });
+      input?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+    setStep1Errors({});
+    setWizard(2);
+  };
+  const clearStep1Error = (field) => {
+    setStep1Errors((current) => {
+      if (!current[field]) return current;
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+  };
   const validateJob = () => {
     const missing = [
       ["Job title", job.title],
@@ -331,15 +436,7 @@ export default function EmployerWorkspace() {
         event.stopImmediatePropagation();
         if (!loading && validateJob())
           saveJob(buttonLabel === "Publish Job Now" ? "published" : "draft");
-        return;
       }
-      if (buttonLabel !== "Schedule Post") return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      const selectedDate = window.prompt(
-        "Enter the publication date and time (YYYY-MM-DDTHH:MM):",
-      );
-      if (selectedDate) saveJob("scheduled", selectedDate);
     };
     document.addEventListener("click", handleScheduleClick, true);
     return () =>
@@ -599,12 +696,10 @@ export default function EmployerWorkspace() {
     }
     notify(`Candidate moved to ${getPipelineStatusLabel(normalizedStatus)}`);
   };
-  const handleSendOffer = async (application) => {
-    const offeredSalary = window.prompt(
-      `Enter initial offer salary for ${application.name || "candidate"}:`,
-      application.offeredSalary || "75000",
-    );
-    if (offeredSalary === null) return;
+  const handleSendOffer = async (
+    application,
+    offeredSalary = application.offeredSalary || "75000",
+  ) => {
     try {
       await api.post("/employer/offers", {
         applicationId: application.id,
@@ -682,25 +777,29 @@ export default function EmployerWorkspace() {
       salaryMax: job.salary_max,
       applicationDeadline: job.application_deadline,
       requiredSkills: job.required_skills,
-      scheduledDate:
-        scheduledAt || scheduleDraft.date || scheduleDraft.time
-          ? `${scheduleDraft.date || scheduledAt?.slice(0, 10) || ""}${scheduleDraft.time ? `T${scheduleDraft.time}` : scheduledAt?.slice(11) || ""}`
-          : null,
+      isScheduled: nextStatus === "scheduled",
+      scheduledAt: scheduledAt || null,
+      scheduledDate: scheduledAt || null,
     };
     setLoading(true);
     try {
       const response = editingJobId
         ? await api.put(`/employer/jobs/${editingJobId}`, payload)
-        : await api.post("/jobs", payload);
+        : await api.post("/employer/jobs", payload);
       let savedJob = response.data;
       const savedId = savedJob.id || savedJob.jobId;
-      if (nextStatus === "published" || nextStatus === "scheduled")
-        savedJob = (
-          await api.patch(`/employer/jobs/${savedId}/status`, {
+      if (nextStatus === "published" || nextStatus === "scheduled") {
+        const statusResponse = await api.patch(`/employer/jobs/${savedId}/status`, {
             status: nextStatus === "scheduled" ? "scheduled" : "published",
-          })
-        ).data;
-      savedJob = { ...savedJob, id: savedJob.id || savedId };
+        });
+        savedJob = { ...savedJob, ...statusResponse.data };
+      }
+      savedJob = {
+        ...savedJob,
+        id: savedJob.id || savedId,
+        isScheduled: nextStatus === "scheduled",
+        scheduledAt: nextStatus === "scheduled" ? savedJob.scheduledAt || scheduledAt : null,
+      };
       setJobs((current) => [
         savedJob,
         ...current.filter((item) => String(item.id) !== String(savedJob.id)),
@@ -718,6 +817,7 @@ export default function EmployerWorkspace() {
       );
       if (nextStatus === "published")
         confetti({ particleCount: 120, spread: 70, origin: { y: 0.65 } });
+      return true;
     } catch (error) {
       const serverMessage =
         error?.response?.data?.error ||
@@ -725,8 +825,56 @@ export default function EmployerWorkspace() {
         error?.message ||
         "Unable to save job.";
       notify(serverMessage, "error");
+      return false;
     } finally {
       setLoading(false);
+    }
+  };
+  const handleConfirmPublishSchedule = async () => {
+    setPublishScheduleError("");
+    const { hour, minute, period } = scheduleDraft;
+    const date = parseScheduleDate(scheduleDateInput);
+    if (!scheduleDateInput.trim()) {
+      setPublishScheduleError("Please choose a publication date and time.");
+      return;
+    }
+    if (!date) {
+      setPublishScheduleError("Enter a valid date in DD/MM/YYYY format.");
+      return;
+    }
+    if (!hour || !minute || !period) {
+      setPublishScheduleError("Please choose a publication date and time.");
+      return;
+    }
+
+    const parsedDate = new Date(`${date}T00:00:00Z`);
+    if (Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== date) {
+      setPublishScheduleError("Enter a valid date in DD/MM/YYYY format.");
+      return;
+    }
+    if (date < getAddisAbabaDate()) {
+      setPublishScheduleError("The scheduled date must be today or later in East Africa Time.");
+      return;
+    }
+
+    if (!ETHIOPIAN_TIME_PERIODS[period]?.hours.includes(Number(hour)) || !/^\d{2}$/.test(minute) || Number(minute) > 59) {
+      setPublishScheduleError("Choose a valid Ethiopian hour and minute.");
+      return;
+    }
+
+    const { isoTime } = getEthiopianScheduleTime(scheduleDraft);
+    const eatDateTime = `${date}T${isoTime}`;
+    if (new Date(eatDateTime) <= new Date()) {
+      setPublishScheduleError("The scheduled time must be in the future.");
+      return;
+    }
+
+    const scheduledAt = new Date(eatDateTime).toISOString();
+    const saved = await saveJob("scheduled", scheduledAt);
+    if (saved) {
+      setShowPublishSchedule(false);
+      setScheduleDraft({ date: "", hour: "3", minute: "00", period: "morning" });
+      setScheduleDateInput("");
     }
   };
   const toggleJob = async (item) => {
@@ -864,10 +1012,10 @@ export default function EmployerWorkspace() {
       : stages.find(([id]) => id === active)?.[1] || "Dashboard";
   const companyName = company.company_name || user?.full_name || "Your Company";
 
-  const normalizeJobStatus = (statusValue) => {
+  function normalizeJobStatus(statusValue) {
     const value = String(statusValue || "draft").trim().toLowerCase();
     return value === "published" ? "active" : value;
-  };
+  }
 
   const getJobStatusClasses = (statusValue) => {
     const normalized = normalizeJobStatus(statusValue);
@@ -1455,12 +1603,16 @@ export default function EmployerWorkspace() {
                       <div className="grid gap-5 md:grid-cols-2">
                         <Field label="Job Title">
                           <input
-                            className={inputClass(dark)}
+                            id="title"
+                            aria-invalid={Boolean(step1Errors.title)}
+                            className={`${inputClass(dark)} ${step1Errors.title ? "border-red-500 focus:border-red-600 focus:ring-red-500/10" : ""}`}
                             value={job.title}
-                            onChange={(e) =>
-                              setJob({ ...job, title: e.target.value })
-                            }
+                            onChange={(e) => {
+                              setJob({ ...job, title: e.target.value });
+                              clearStep1Error("title");
+                            }}
                           />
+                          {step1Errors.title && <p className="mt-1.5 text-xs font-semibold text-red-600">{step1Errors.title}</p>}
                         </Field>
                         <Field label="Sector">
                           <select
@@ -1524,12 +1676,16 @@ export default function EmployerWorkspace() {
                         </Field>
                         <Field label="Location">
                           <input
-                            className={inputClass(dark)}
+                            id="location"
+                            aria-invalid={Boolean(step1Errors.location)}
+                            className={`${inputClass(dark)} ${step1Errors.location ? "border-red-500 focus:border-red-600 focus:ring-red-500/10" : ""}`}
                             value={job.location}
-                            onChange={(e) =>
-                              setJob({ ...job, location: e.target.value })
-                            }
+                            onChange={(e) => {
+                              setJob({ ...job, location: e.target.value });
+                              clearStep1Error("location");
+                            }}
                           />
+                          {step1Errors.location && <p className="mt-1.5 text-xs font-semibold text-red-600">{step1Errors.location}</p>}
                         </Field>
                         <Field label="Gender Preference">
                           <select
@@ -1578,40 +1734,52 @@ export default function EmployerWorkspace() {
                         </Field>
                         <Field label="Deadline">
                           <input
+                            id="application_deadline"
                             type="date"
-                            className={inputClass(dark)}
+                            aria-invalid={Boolean(step1Errors.application_deadline)}
+                            className={`${inputClass(dark)} ${step1Errors.application_deadline ? "border-red-500 focus:border-red-600 focus:ring-red-500/10" : ""}`}
                             value={job.application_deadline}
-                            onChange={(e) =>
+                            onChange={(e) => {
                               setJob({
                                 ...job,
                                 application_deadline: e.target.value,
-                              })
-                            }
+                              });
+                              clearStep1Error("application_deadline");
+                            }}
                           />
+                          {step1Errors.application_deadline && <p className="mt-1.5 text-xs font-semibold text-red-600">{step1Errors.application_deadline}</p>}
                         </Field>
                         <Field label="Required Skills (comma separated)">
                           <input
-                            className={inputClass(dark)}
+                            id="required_skills"
+                            aria-invalid={Boolean(step1Errors.required_skills)}
+                            className={`${inputClass(dark)} ${step1Errors.required_skills ? "border-red-500 focus:border-red-600 focus:ring-red-500/10" : ""}`}
                             value={job.required_skills}
-                            onChange={(e) =>
+                            onChange={(e) => {
                               setJob({
                                 ...job,
                                 required_skills: e.target.value,
-                              })
-                            }
+                              });
+                              clearStep1Error("required_skills");
+                            }}
                             placeholder="React, Node.js, SQL"
                           />
+                          {step1Errors.required_skills && <p className="mt-1.5 text-xs font-semibold text-red-600">{step1Errors.required_skills}</p>}
                         </Field>
                         <div className="md:col-span-2">
                           <Field label="Description">
                             <textarea
+                              id="description"
                               rows="8"
-                              className={inputClass(dark)}
+                              aria-invalid={Boolean(step1Errors.description)}
+                              className={`${inputClass(dark)} ${step1Errors.description ? "border-red-500 focus:border-red-600 focus:ring-red-500/10" : ""}`}
                               value={job.description}
-                              onChange={(e) =>
-                                setJob({ ...job, description: e.target.value })
-                              }
+                              onChange={(e) => {
+                                setJob({ ...job, description: e.target.value });
+                                clearStep1Error("description");
+                              }}
                             />
+                            {step1Errors.description && <p className="mt-1.5 text-xs font-semibold text-red-600">{step1Errors.description}</p>}
                             <button
                               type="button"
                               onClick={enhanceJob}
@@ -1653,41 +1821,6 @@ export default function EmployerWorkspace() {
                           Choose whether this role should be saved as a draft, scheduled for a future launch, or published immediately.
                         </p>
 
-                        <div className="mt-6 grid gap-4 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-xs md:grid-cols-[1fr_auto] md:items-center">
-                          <div>
-                            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
-                              Schedule publication
-                            </p>
-                            <p className="mt-2 text-sm font-semibold text-slate-700">
-                              Select a date and time for a future post.
-                            </p>
-                          </div>
-                          <div className="flex flex-col gap-2 sm:flex-row md:flex-col xl:flex-row">
-                            <input
-                              type="date"
-                              value={scheduleDraft.date}
-                              onChange={(event) =>
-                                setScheduleDraft((current) => ({
-                                  ...current,
-                                  date: event.target.value,
-                                }))
-                              }
-                              className={inputClass(dark)}
-                            />
-                            <input
-                              type="time"
-                              value={scheduleDraft.time}
-                              onChange={(event) =>
-                                setScheduleDraft((current) => ({
-                                  ...current,
-                                  time: event.target.value,
-                                }))
-                              }
-                              className={inputClass(dark)}
-                            />
-                          </div>
-                        </div>
-
                         <div className="mt-6 flex flex-wrap justify-center gap-3">
                           <button
                             onClick={() => saveJob("draft")}
@@ -1697,13 +1830,10 @@ export default function EmployerWorkspace() {
                           </button>
                           <button
                             onClick={() => {
-                              if (!scheduleDraft.date && !scheduleDraft.time) {
-                                notify("Please select a schedule date and time to publish later.", "error");
-                                return;
-                              }
-                              const scheduledDate = `${scheduleDraft.date}T${scheduleDraft.time || "00:00"}`;
-                              saveJob("scheduled", scheduledDate);
+                              resetPublishScheduleForm(true);
+                              setShowPublishSchedule(true);
                             }}
+                            disabled={loading}
                             className="rounded-xl bg-amber-500 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-amber-500/20 transition-all hover:bg-amber-600"
                           >
                             Schedule Post
@@ -1727,7 +1857,7 @@ export default function EmployerWorkspace() {
                       </button>
                       {wizard < 3 && (
                         <button
-                          onClick={() => setWizard((value) => value + 1)}
+                          onClick={wizard === 1 ? handleContinueToPreview : () => setWizard((value) => value + 1)}
                           className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white"
                         >
                           Continue <ChevronRight className="h-4 w-4" />
@@ -2719,6 +2849,141 @@ export default function EmployerWorkspace() {
                 Confirm & Schedule
               </button>
             </form>
+          </div>
+        )}
+        {showPublishSchedule && (
+          <div className="fixed inset-0 z-[90] flex items-center justify-center overflow-y-auto bg-slate-950/55 p-3 backdrop-blur-sm sm:p-4" onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              resetPublishScheduleForm(false);
+              setShowPublishSchedule(false);
+            }
+          }}>
+            <section role="dialog" aria-modal="true" aria-labelledby="publish-schedule-title" className={`my-auto max-h-[calc(100dvh-1.5rem)] w-full max-w-xl overflow-y-auto rounded-3xl border p-5 shadow-2xl sm:max-h-[calc(100dvh-2rem)] sm:p-8 lg:max-w-2xl ${card}`}>
+              <div className="mb-5 flex items-start justify-between gap-4 sm:mb-6">
+                <div>
+                  <h2 id="publish-schedule-title" className="text-xl font-black sm:text-2xl">Schedule Job Publication</h2>
+                  <p className="mt-1 text-xs font-semibold text-blue-700">የኢትዮጵያ ሰዓት · Addis Ababa (UTC+3)</p>
+                </div>
+                <button type="button" onClick={() => {
+                  resetPublishScheduleForm(false);
+                  setShowPublishSchedule(false);
+                }} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Close schedule dialog">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <p className="mb-6 max-w-2xl text-sm leading-6 text-slate-500">Choose when this job should become available to candidates.</p>
+              <div className="space-y-5">
+                <Field label="Publication date (EAT)">
+                  <div className="flex min-w-0 gap-2">
+                    <input
+                      autoFocus
+                      type="text"
+                      inputMode="text"
+                      autoComplete="off"
+                      spellCheck={false}
+                      maxLength={10}
+                      placeholder="DD/MM/YYYY"
+                      aria-label="Publication date in DD/MM/YYYY format"
+                      value={scheduleDateInput}
+                      onChange={(event) => {
+                        const displayDate = event.target.value;
+                        setScheduleDateInput(displayDate);
+                        setScheduleDraft((current) => ({ ...current, date: parseScheduleDate(displayDate) }));
+                      }}
+                      className={`${inputClass(dark)} min-w-0 flex-1`}
+                    />
+                    <input
+                      ref={publishScheduleDatePickerRef}
+                      type="date"
+                      min={getAddisAbabaDate()}
+                      value={scheduleDraft.date}
+                      onChange={(event) => {
+                        const isoDate = event.target.value;
+                        setScheduleDateInput(formatScheduleDate(isoDate));
+                        setScheduleDraft((current) => ({ ...current, date: isoDate }));
+                      }}
+                      className="pointer-events-none absolute h-px w-px opacity-0"
+                      tabIndex={-1}
+                      aria-hidden="true"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const picker = publishScheduleDatePickerRef.current;
+                        try {
+                          if (picker?.showPicker) picker.showPicker();
+                          else picker?.click();
+                        } catch {
+                          picker?.click();
+                        }
+                      }}
+                      className="flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                      aria-label="Open calendar picker"
+                    >
+                      <CalendarDays className="h-4 w-4" />
+                      <span className="hidden sm:inline">Calendar</span>
+                    </button>
+                  </div>
+                  <p className="mt-1.5 text-xs text-slate-500">Enter DD/MM/YYYY or choose a date from the calendar.</p>
+                </Field>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
+                  <Field label="Period · የቀን ክፍለ-ጊዜ">
+                    <select
+                      value={scheduleDraft.period}
+                      onChange={(event) => {
+                        const period = event.target.value;
+                        setScheduleDraft((current) => ({
+                          ...current,
+                          period,
+                          hour: ETHIOPIAN_TIME_PERIODS[period].hours.includes(Number(current.hour))
+                            ? current.hour
+                            : String(ETHIOPIAN_TIME_PERIODS[period].hours[0]),
+                        }));
+                      }}
+                      className={inputClass(dark)}
+                    >
+                      {Object.entries(ETHIOPIAN_TIME_PERIODS).map(([value, option]) => (
+                        <option key={value} value={value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Hour · ሰዓት">
+                    <select
+                      value={scheduleDraft.hour}
+                      onChange={(event) => setScheduleDraft((current) => ({ ...current, hour: event.target.value }))}
+                      className={inputClass(dark)}
+                    >
+                      {ETHIOPIAN_TIME_PERIODS[scheduleDraft.period].hours.map((hour) => (
+                        <option key={hour} value={hour}>{hour}</option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Minute · ደቂቃ">
+                    <select
+                      value={scheduleDraft.minute}
+                      onChange={(event) => setScheduleDraft((current) => ({ ...current, minute: event.target.value }))}
+                      className={inputClass(dark)}
+                    >
+                      {Array.from({ length: 60 }, (_, minute) => String(minute).padStart(2, "0")).map((minute) => (
+                        <option key={minute} value={minute}>{minute}</option>
+                      ))}
+                    </select>
+                  </Field>
+                </div>
+                <div className="flex items-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2.5 text-sm font-semibold text-blue-800" aria-live="polite">
+                  <Clock3 className="h-4 w-4 shrink-0" />
+                  <span>{scheduleDraft.hour}:{scheduleDraft.minute} {ETHIOPIAN_TIME_PERIODS[scheduleDraft.period].label} (EAT {getEthiopianScheduleTime(scheduleDraft).preview} / UTC+3)</span>
+                </div>
+              </div>
+              {publishScheduleError && <p role="alert" className="mt-3 text-sm font-semibold text-red-600">{publishScheduleError}</p>}
+              <div className="mt-6 flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:justify-end sm:gap-3">
+                <button type="button" onClick={() => {
+                  resetPublishScheduleForm(false);
+                  setShowPublishSchedule(false);
+                }} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
+                <button type="button" onClick={handleConfirmPublishSchedule} disabled={loading} className="rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60">{loading ? "Scheduling..." : "Confirm & Schedule"}</button>
+              </div>
+            </section>
           </div>
         )}
       </div>

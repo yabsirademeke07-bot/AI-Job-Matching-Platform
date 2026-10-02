@@ -1,13 +1,46 @@
 const fs = require('fs/promises');
 const path = require('path');
 const db = require('../config/db');
-const { extractText, classifyAndExtract, calculateScores, calculateRealJobMatch, calculateJobMatches, validateCvContent, CV_CONTENT_ERROR } = require('../services/cvAnalysisService');
+const { extractText, classifyAndExtract, calculateScores, calculateJobMatches, validateCvContent, CV_CONTENT_ERROR } = require('../services/cvAnalysisService');
 
 const INVALID_CV_MESSAGE = 'We could not identify enough CV content. Please upload a readable resume with your name or contact details and work history, projects, internships, or education.';
 const SUCCESS_MESSAGE = 'Your CV was analyzed successfully.';
 
 async function removeFile(file) {
   if (file?.path) await fs.unlink(file.path).catch(() => {});
+}
+
+async function getPublishedJobMatches(candidate) {
+  const [jobs] = await db.execute(
+    `SELECT j.id, j.title, j.company_name,
+            COALESCE(cp.company_name, j.company_name, u.full_name, 'Company') AS employer_name,
+            j.description, j.category, j.job_type, j.experience_level, j.location,
+            j.work_mode, j.salary_min, j.salary_max, j.currency, j.required_skills,
+            j.required_education, j.application_deadline, j.created_at
+     FROM jobs j
+     JOIN users u ON u.id = j.employer_id
+     LEFT JOIN company_profiles cp ON cp.employer_id = j.employer_id
+     WHERE LOWER(j.status) IN ('published', 'active')
+     ORDER BY j.created_at DESC`
+  );
+  if (!jobs.length) return [];
+
+  const [requiredSkills] = await db.query(
+    'SELECT job_id, skill_name FROM job_required_skills WHERE job_id IN (?) ORDER BY id',
+    [jobs.map((job) => job.id)]
+  );
+  const skillsByJob = new Map();
+  requiredSkills.forEach(({ job_id, skill_name }) => {
+    const skills = skillsByJob.get(job_id) || [];
+    skills.push(skill_name);
+    skillsByJob.set(job_id, skills);
+  });
+
+  return calculateJobMatches(candidate, jobs.map((job) => ({
+    ...job,
+    company_name: job.employer_name,
+    additional_required_skills: skillsByJob.get(job.id) || [],
+  })));
 }
 
 async function uploadAndAnalyze(req, res) {
@@ -33,20 +66,16 @@ async function uploadAndAnalyze(req, res) {
       return res.status(422).json({ success: false, is_cv: false, message: contentValidation.message || INVALID_CV_MESSAGE, validation: contentValidation.sections });
     }
 
-    const [activeJobs] = await db.execute(
-      `SELECT j.id, GROUP_CONCAT(jrs.skill_name) AS required_skills
-       FROM jobs j
-       JOIN job_required_skills jrs ON jrs.job_id = j.id
-       WHERE j.status = 'published'
-       GROUP BY j.id`
-    );
     const scores = calculateScores(extracted, parsedText);
-    const matchScore = calculateRealJobMatch(extracted.skills, activeJobs.map((job) => ({
-      ...job,
-      required_skills: job.required_skills ? job.required_skills.split(',') : [],
-    })));
-    scores.matchScore = matchScore;
-    scores.keywordMatch = matchScore;
+    const jobMatches = await getPublishedJobMatches(extracted);
+    const bestMatch = jobMatches.find((job) => job.match_score !== null);
+    scores.matchScore = bestMatch?.match_score ?? null;
+    scores.bestMatchJob = bestMatch ? {
+      id: bestMatch.id,
+      title: bestMatch.title,
+      company_name: bestMatch.company_name,
+    } : null;
+    const analyzedData = { ...extracted, ...scores, jobMatches };
     const fileUrl = `/uploads/cvs/${path.basename(req.file.filename)}`;
     const connection = await db.getConnection();
     let cvId;
@@ -56,7 +85,7 @@ async function uploadAndAnalyze(req, res) {
       const [cvResult] = await connection.execute(
         `INSERT INTO cvs (user_id, file_name, file_url, file_size, mime_type, is_primary, is_active, parsed_text, ai_analysis_score, ai_extracted_data)
          VALUES (?, ?, ?, ?, ?, TRUE, TRUE, ?, ?, ?)`,
-        [req.user.id, req.file.originalname, fileUrl, req.file.size, req.file.mimetype, parsedText, scores.cvScore, JSON.stringify({ ...extracted, ...scores })]
+        [req.user.id, req.file.originalname, fileUrl, req.file.size, req.file.mimetype, parsedText, scores.cvScore, JSON.stringify(analyzedData)]
       );
       cvId = cvResult.insertId;
       await connection.execute(
@@ -72,11 +101,16 @@ async function uploadAndAnalyze(req, res) {
       connection.release();
     }
 
-    return res.status(201).json({ success: true, is_cv: true, reviewRequired: true, message: SUCCESS_MESSAGE, data: { id: cvId, file_name: req.file.originalname, file_url: fileUrl, ...extracted, ...scores } });
+    return res.status(201).json({ success: true, is_cv: true, reviewRequired: true, message: SUCCESS_MESSAGE, data: { id: cvId, file_name: req.file.originalname, file_url: fileUrl, ...analyzedData } });
   } catch (error) {
     await removeFile(req.file);
-    const status = error.statusCode || 500;
-    return res.status(status).json({ success: false, message: status === 500 ? 'Unable to analyze your CV.' : error.message });
+    const databaseUnavailable = ['ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND'].includes(error.code);
+    const status = error.statusCode || (databaseUnavailable ? 503 : 500);
+    const message = databaseUnavailable
+      ? 'The database is unavailable. Start the configured MySQL server and try again.'
+      : status === 500 ? 'Unable to analyze your CV.' : error.message;
+    console.error('CV upload and analysis failed:', error.code || status, error.message);
+    return res.status(status).json({ success: false, message });
   }
 }
 
@@ -139,7 +173,29 @@ async function getAnalysis(req, res) {
     if (!rows[0]) return res.status(404).json({ success: false, message: 'CV analysis not found.' });
     const row = rows[0];
     const extracted = parseJson(row.ai_extracted_data, {});
-    return res.json({ success: true, is_cv: true, data: { ...row, parsed_text: undefined, ...extracted, cvScore: row.cv_score, readability: row.readability_score, keywordMatch: row.keyword_match_score, skills: parseJson(row.extracted_skills, extracted.skills || []), experience: parseJson(row.extracted_experience, extracted.experience || []), education: parseJson(row.extracted_education, extracted.education || []), languages: parseJson(row.extracted_languages, extracted.languages || []), certifications: parseJson(row.extracted_certifications, extracted.certifications || []), recommendations: parseJson(row.recommendations, extracted.recommendations || []) } });
+    const analysis = {
+      ...row,
+      parsed_text: undefined,
+      ...extracted,
+      cvScore: row.cv_score,
+      readability: row.readability_score,
+      keywordMatch: row.keyword_match_score,
+      skills: parseJson(row.extracted_skills, extracted.skills || []),
+      experience: parseJson(row.extracted_experience, extracted.experience || []),
+      education: parseJson(row.extracted_education, extracted.education || []),
+      languages: parseJson(row.extracted_languages, extracted.languages || []),
+      certifications: parseJson(row.extracted_certifications, extracted.certifications || []),
+      recommendations: parseJson(row.recommendations, extracted.recommendations || []),
+    };
+    analysis.jobMatches = await getPublishedJobMatches(analysis);
+    const bestMatch = analysis.jobMatches.find((job) => job.match_score !== null);
+    analysis.matchScore = bestMatch?.match_score ?? null;
+    analysis.bestMatchJob = bestMatch ? {
+      id: bestMatch.id,
+      title: bestMatch.title,
+      company_name: bestMatch.company_name,
+    } : null;
+    return res.json({ success: true, is_cv: true, data: analysis });
   } catch (error) { return res.status(500).json({ success: false, message: 'Unable to load CV analysis.' }); }
 }
 

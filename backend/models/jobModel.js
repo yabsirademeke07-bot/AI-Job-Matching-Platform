@@ -2,16 +2,25 @@ const db = require('../config/db');
 
 async function listJobs() {
   const [rows] = await db.execute(
-    `SELECT id, employer_id, title, description, category, job_type, experience_level,
-            location, work_mode, salary_min, salary_max, currency, status, application_deadline
-    FROM jobs WHERE LOWER(status) IN ('active', 'published') ORDER BY created_at DESC`
+    `SELECT j.id, j.employer_id, j.title, j.description, j.category, j.job_type, j.experience_level,
+        j.required_skills, j.required_education,
+        COALESCE(cp.company_name, j.company_name, u.full_name, 'Company') AS company_name,
+        j.location, j.work_mode, j.salary_min, j.salary_max, j.currency, j.status, j.application_deadline,
+        j.scheduled_date, DATE_FORMAT(j.scheduled_date, '%Y-%m-%dT%H:%i:%sZ') AS scheduledAt,
+        CASE WHEN j.status = 'scheduled' AND j.scheduled_date IS NOT NULL THEN TRUE ELSE FALSE END AS isScheduled,
+        j.created_at
+     FROM jobs j
+     JOIN users u ON u.id = j.employer_id
+     LEFT JOIN company_profiles cp ON cp.employer_id = j.employer_id
+     WHERE LOWER(j.status) IN ('active', 'published')
+     ORDER BY j.created_at DESC`
   );
-  return rows;
+  return rows.map((job) => ({ ...job, isScheduled: Boolean(job.isScheduled) }));
 }
 
 async function findJobById(id) {
-  const [rows] = await db.execute('SELECT * FROM jobs WHERE id = ? LIMIT 1', [id]);
-  return rows[0] || null;
+  const [rows] = await db.execute("SELECT *, DATE_FORMAT(scheduled_date, '%Y-%m-%dT%H:%i:%sZ') AS scheduledAt, CASE WHEN status = 'scheduled' AND scheduled_date IS NOT NULL THEN TRUE ELSE FALSE END AS isScheduled FROM jobs WHERE id = ? LIMIT 1", [id]);
+  return rows[0] ? { ...rows[0], isScheduled: Boolean(rows[0].isScheduled) } : null;
 }
 
 async function createJob(job) {

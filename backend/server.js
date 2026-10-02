@@ -18,6 +18,9 @@ const jobSeekerRoutes = require("./routes/jobSeekerRoutes");
 const cvRoutes = require("./routes/cvRoutes");
 const seekerMatchingRoutes = require("./routes/seekerMatchingRoutes");
 const profileRoutes = require("./routes/profileRoutes");
+const aboutRoutes = require("./routes/aboutRoutes");
+const contactRoutes = require("./routes/contactRoutes");
+const howItWorksRoutes = require("./routes/howItWorksRoutes");
 const { issueOtp } = require("./services/otpService");
 const { syncGoogleUser } = require("./config/googleAuth");
 const { validateSignUp, validateLogin } = require("./middleware/validateAuth");
@@ -25,7 +28,7 @@ require("./config/passport");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-const JWT_SECRET = process.env.JWT_SECRET || 'your_super_secret_key_here';
+const JWT_SECRET = process.env.JWT_SECRET || 'your_secret_key';
 
 app.use(cors());
 app.use(express.json());
@@ -49,9 +52,6 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api/contact', contactRoutes);
 app.use('/api/about', aboutRoutes);
 app.use('/api/how-it-works', howItWorksRoutes);
-
-const PORT = process.env.PORT || 5000;
-const JWT_SECRET = process.env.JWT_SECRET || 'your_secret_key';
 
 const ensureDatabaseSchema = async () => {
   try {
@@ -415,7 +415,7 @@ const resolveEffectiveRole = (role, email) => {
   return safeRoles.includes(value) ? value : 'job_seeker';
 };
 
-const sanitizeUser = (user) => ({
+const sanitizeUser = (user = {}) => ({
   id: user.id,
   full_name: user.full_name,
   email: user.email,
@@ -473,25 +473,6 @@ const upload = multer({
     cb(new Error('Only PDF, DOC, DOCX, and TXT files are allowed.'));
   },
 });
-
-const sanitizeUser = (user = {}) => ({
-  id: user.id,
-  full_name: user.full_name || user.fullName || null,
-  email: user.email || null,
-  phone: user.phone || null,
-  role: user.role || 'job_seeker',
-  is_verified: Boolean(user.is_verified),
-  is_active: user.is_active !== false,
-  auth_provider: user.auth_provider || 'email',
-  avatar_url: user.avatar_url || user.profile_picture_url || null,
-});
-
-const resolveEffectiveRole = (role, email) => {
-  const targetEmail = String(email || '').trim().toLowerCase();
-  if (['tekebaaweke32@gmail.com'].includes(targetEmail)) return 'admin';
-  const value = String(role || 'job_seeker').trim().toLowerCase();
-  return ['super_admin', 'admin', 'employer', 'job_seeker'].includes(value) ? value : 'job_seeker';
-};
 
 const authenticateUser = (req, res, next) => {
   const authHeader = req.headers.authorization || '';
@@ -906,78 +887,6 @@ app.use('/api', seekerMatchingRoutes);
 app.use('/api/job-seekers', jobSeekerRoutes);
 app.use('/api/seeker', jobSeekerRoutes);
 app.use('/api/profile', profileRoutes);
-
-  if (!normalizedEmail || !otpCode) {
-    return res.status(400).json({ success: false, message: 'Email and OTP are required.' });
-  }
-
-  try {
-    const [otpRows] = await db.query(
-      `SELECT * FROM otps
-        WHERE email = ? AND is_used = 0 AND purpose = 'login' AND expires_at > NOW()
-       ORDER BY id DESC LIMIT 1`,
-      [normalizedEmail]
-    );
-
-    if (!otpRows || otpRows.length === 0) {
-      return res.status(400).json({ success: false, error: 'No active verification code found. Please request a new code.' });
-    }
-
-    const otpRecord = otpRows[0];
-    if (new Date() > new Date(otpRecord.expires_at)) {
-      await db.query('UPDATE otps SET is_used = 1 WHERE id = ?', [otpRecord.id]);
-      return res.status(400).json({ success: false, error: 'This OTP code has expired. Please request a new one.' });
-    }
-
-    if (Number(otpRecord.attempts || 0) >= 4) {
-      return res.status(429).json({ success: false, error: 'Too many failed attempts. For your security, please wait 15 minutes before requesting a new code.' });
-    }
-
-    if (String(otpRecord.otp_code).trim() !== otpCode) {
-      const nextAttempts = Number(otpRecord.attempts || 0) + 1;
-      await db.query('UPDATE otps SET attempts = ? WHERE id = ?', [nextAttempts, otpRecord.id]);
-      const remaining = 4 - nextAttempts;
-
-      if (remaining <= 0) {
-        return res.status(429).json({ success: false, error: 'Too many failed attempts. Please wait 15 minutes before trying again.' });
-      }
-
-      return res.status(400).json({ success: false, error: `Invalid OTP code. You have ${remaining} attempt(s) remaining.` });
-    }
-
-    await db.query('UPDATE otps SET is_used = 1 WHERE id = ?', [otpRecord.id]);
-    console.log('--> [SUCCESS] OTP marked as is_used = 1 in database for ID:', otpRecord.id);
-
-    const [userRows] = await db.query('SELECT * FROM users WHERE email = ?', [normalizedEmail]);
-    if (userRows.length === 0) {
-      return res.status(404).json({ success: false, message: 'User not found.' });
-    }
-
-    const user = userRows[0];
-    await db.query("UPDATE users SET is_verified = TRUE, auth_status = 'active' WHERE id = ?", [user.id]);
-    const effectiveRole = resolveEffectiveRole(user.role, user.email);
-    if (effectiveRole !== user.role) {
-      await db.query('UPDATE users SET role = ? WHERE id = ?', [effectiveRole, user.id]);
-      user.role = effectiveRole;
-    }
-
-    const token = jwt.sign({ id: user.id, email: user.email, role: effectiveRole }, JWT_SECRET, { expiresIn: '7d' });
-
-    return res.status(200).json({
-      success: true,
-      message: 'OTP verified successfully.',
-      token,
-      redirect_to: '/select-role',
-      onboarding_step: 'role_selection',
-      requiresRoleSelection: true,
-      user: sanitizeUser({ ...user, is_verified: true, role: effectiveRole }),
-    });
-  } catch (error) {
-    console.error('Verify Login OTP Error:', error);
-    return res.status(500).json({ success: false, message: 'Unable to verify login OTP / OTP ማረጋገጥ አልተቻለም' });
-  }
-});
-
 app.use((err, _req, res, _next) => {
   console.error('Unhandled server error:', err);
   res.status(err.status || 500).json({ success: false, message: err.message || 'Server error.' });
@@ -1239,7 +1148,8 @@ const handleGetEmployerMyJobs = async (req, res) => {
 
     const [jobs] = await db.query(
       `SELECT
-         j.*,
+        j.*,
+        DATE_FORMAT(j.scheduled_date, '%Y-%m-%dT%H:%i:%sZ') AS scheduledAt,
          COALESCE((SELECT COUNT(*) FROM applications a WHERE a.job_id = j.id), 0) AS total_applicants,
          COALESCE((SELECT COUNT(*) FROM applications a WHERE a.job_id = j.id AND (a.status = 'pending' OR a.status IS NULL)), 0) AS pending_count,
          COALESCE((SELECT COUNT(*) FROM applications a WHERE a.job_id = j.id AND a.status = 'shortlisted'), 0) AS shortlisted_count,
@@ -1272,7 +1182,10 @@ const handleGetEmployerMyJobs = async (req, res) => {
     return res.json({
       success: true,
       count: jobs.length,
-      jobs: jobs || [],
+      jobs: (jobs || []).map((job) => ({
+        ...job,
+        isScheduled: String(job.status).toLowerCase() === 'scheduled' && Boolean(job.scheduledAt),
+      })),
     });
   } catch (error) {
     console.error('--> [FETCH MY JOBS ERROR]:', error.message);
@@ -1457,9 +1370,29 @@ async function ensureAuthColumns() {
   }
 }
 
+const activateDueScheduledJobs = async () => {
+  try {
+    const [result] = await db.query(
+      `UPDATE jobs
+       SET status = 'active', published_at = COALESCE(published_at, UTC_TIMESTAMP())
+       WHERE status = 'scheduled'
+         AND scheduled_date IS NOT NULL
+         AND scheduled_date <= UTC_TIMESTAMP()`
+    );
+    if (result.affectedRows) {
+      console.log(`--> [SCHEDULED JOBS ACTIVATED] ${result.affectedRows} job(s)`);
+    }
+  } catch (error) {
+    console.error('--> [SCHEDULED JOB ACTIVATION ERROR]:', error.message);
+  }
+};
+
 ensureDatabaseSchema()
   .then(() => ensureAuthColumns())
   .then(() => {
+    activateDueScheduledJobs();
+    const scheduledJobTimer = setInterval(activateDueScheduledJobs, 30_000);
+    scheduledJobTimer.unref();
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
     });

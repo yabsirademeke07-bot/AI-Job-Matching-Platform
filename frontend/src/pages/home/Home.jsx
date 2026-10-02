@@ -127,20 +127,22 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-white text-slate-800 font-sans">
-      <section className="bg-[#f1f6ff] px-5 py-4 text-center sm:px-8 sm:py-6" aria-label="AI job matching hero">
-        <div className="mx-auto max-w-5xl">
-          <p className="mb-2 inline-flex rounded-full border border-blue-200 bg-blue-100/70 px-3 py-1 text-[0.55rem] font-bold tracking-wide text-blue-700 sm:text-[0.65rem]">
-            #1 Ethiopian AI-Powered Tech Career Platform
-          </p>
-          <h1 className="min-h-[3.5rem] text-2xl font-black leading-[1.08] tracking-tight text-[#102756] sm:min-h-0 sm:text-3xl lg:text-4xl">
-            {typedHeadline}
-            {typedHeadline.length < headline.length && <span className="ml-1 text-blue-600" aria-hidden="true">|</span>}
-          </h1>
-        </div>
-      </section>
-      <section className="flex w-full justify-end overflow-hidden bg-white" aria-label="AI job matching team">
-        <div className="relative mr-0 block h-[360px] w-full sm:h-[520px] lg:h-[700px] lg:w-[86%]">
-          {heroImages.map((image, index) => <img key={image} src={image} alt="Team using AI for job matching" className={`absolute inset-0 h-full w-full object-cover object-[center_62%] transition-all duration-1000 ease-in-out ${index === activeHeroImage ? 'scale-[1.08] opacity-100 lg:scale-[1.1]' : 'scale-[1.13] opacity-0 lg:scale-[1.15]'}`} />)}
+      <section className="relative m-0 w-full overflow-hidden bg-slate-50 p-0" aria-label="AI job matching hero">
+        <div className="relative m-0 h-[360px] w-full overflow-hidden bg-slate-50 p-0 sm:h-[440px] md:h-[500px] lg:h-[540px]">
+          {heroImages.map((image, index) => <img key={image} src={image} alt="Team using AI for job matching" className={`absolute inset-0 h-full w-full object-cover object-top transition-opacity duration-1000 ease-in-out ${index === activeHeroImage ? 'opacity-100' : 'opacity-0'}`} />)}
+          <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/40 via-black/10 to-transparent" />
+          <div className="pointer-events-none absolute inset-x-0 top-4 z-10 px-4 text-center sm:top-6">
+            <div className="mx-auto flex max-w-3xl flex-col items-center">
+              <p className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-white/30 bg-white/20 px-3 py-0.5 text-xs font-medium text-white shadow-sm backdrop-blur-md">
+                <span aria-hidden="true">✨</span>
+                <span>#1 Ethiopian AI-Powered Tech Career Platform</span>
+              </p>
+              <h1 className="min-h-[2.5em] text-xl font-extrabold leading-snug tracking-tight text-white drop-shadow-md sm:text-2xl md:text-3xl">
+                {typedHeadline}
+                {typedHeadline.length < headline.length && <span className="ml-1 text-white" aria-hidden="true">|</span>}
+              </h1>
+            </div>
+          </div>
         </div>
       </section>
       <TrustedBy />

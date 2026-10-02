@@ -79,7 +79,6 @@ CREATE TABLE IF NOT EXISTS job_seeker_profiles (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    INDEX idx_email (email),
     INDEX idx_location (location),
     INDEX idx_availability (is_available)
 );
@@ -94,7 +93,7 @@ CREATE TABLE IF NOT EXISTS cvs (
     file_name VARCHAR(255) NOT NULL,
     file_url VARCHAR(255) NOT NULL,
     file_size INT,
-    mime_type VARCHAR(50),
+    mime_type VARCHAR(100),
     is_primary BOOLEAN DEFAULT FALSE,
     is_active BOOLEAN DEFAULT TRUE,
     upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -176,7 +175,6 @@ CREATE TABLE IF NOT EXISTS company_profiles (
 CREATE TABLE IF NOT EXISTS employers (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL UNIQUE,
-    employer_type VARCHAR(50) DEFAULT 'company',
     full_name VARCHAR(255) DEFAULT NULL,
     job_title VARCHAR(150) DEFAULT NULL,
     phone_number VARCHAR(50) DEFAULT NULL,
@@ -256,23 +254,6 @@ CREATE TABLE IF NOT EXISTS talent_pool (
     INDEX idx_talent_pool_employer (employerId)
 );
 
-CREATE TABLE IF NOT EXISTS job_invitations (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    employerId INT NOT NULL,
-    candidateId INT NOT NULL,
-    jobId INT NOT NULL,
-    message TEXT,
-    status ENUM('invited', 'accepted', 'declined', 'expired') DEFAULT 'invited',
-    sentAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (employerId) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (candidateId) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (jobId) REFERENCES jobs(id) ON DELETE CASCADE,
-    UNIQUE KEY unique_job_invitation (employerId, candidateId, jobId),
-    INDEX idx_invitation_status (status),
-    INDEX idx_invitation_candidate (candidateId)
-);
-
 CREATE TABLE IF NOT EXISTS employer_settings (
     id INT AUTO_INCREMENT PRIMARY KEY,
     userId INT NOT NULL UNIQUE,
@@ -310,22 +291,6 @@ CREATE TABLE IF NOT EXISTS employer_messages (
     FOREIGN KEY (employerId) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (candidateId) REFERENCES users(id) ON DELETE CASCADE,
     INDEX idx_employer_message_participants (employerId, candidateId, isRead)
-);
-
-CREATE TABLE IF NOT EXISTS offers (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    applicationId INT NOT NULL UNIQUE,
-    employerId INT NOT NULL,
-    candidateId INT NOT NULL,
-    offeredSalary DECIMAL(12,2),
-    startDate DATE,
-    offerLetterUrl VARCHAR(255),
-    status ENUM('draft', 'sent', 'accepted', 'declined') DEFAULT 'draft',
-    sentAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (applicationId) REFERENCES applications(id) ON DELETE CASCADE,
-    FOREIGN KEY (employerId) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (candidateId) REFERENCES users(id) ON DELETE CASCADE,
-    INDEX idx_offers_employer (employerId)
 );
 
 CREATE TABLE IF NOT EXISTS onboarding_tasks (
@@ -410,6 +375,23 @@ CREATE TABLE IF NOT EXISTS jobs (
     FULLTEXT INDEX ft_title_desc (title, description)
 );
 
+CREATE TABLE IF NOT EXISTS job_invitations (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    employerId INT NOT NULL,
+    candidateId INT NOT NULL,
+    jobId INT NOT NULL,
+    message TEXT,
+    status ENUM('invited', 'accepted', 'declined', 'expired') DEFAULT 'invited',
+    sentAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (employerId) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (candidateId) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (jobId) REFERENCES jobs(id) ON DELETE CASCADE,
+    UNIQUE KEY unique_job_invitation (employerId, candidateId, jobId),
+    INDEX idx_invitation_status (status),
+    INDEX idx_invitation_candidate (candidateId)
+);
+
 -- Job Required Skills
 CREATE TABLE IF NOT EXISTS job_required_skills (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -470,6 +452,22 @@ CREATE TABLE IF NOT EXISTS applications (
     INDEX idx_status (status),
     INDEX idx_ai_score (ai_match_score)
     ,UNIQUE KEY unique_application_candidate_job (job_id, job_seeker_id)
+);
+
+CREATE TABLE IF NOT EXISTS offers (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    applicationId INT NOT NULL UNIQUE,
+    employerId INT NOT NULL,
+    candidateId INT NOT NULL,
+    offeredSalary DECIMAL(12,2),
+    startDate DATE,
+    offerLetterUrl VARCHAR(255),
+    status ENUM('draft', 'sent', 'accepted', 'declined') DEFAULT 'draft',
+    sentAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (applicationId) REFERENCES applications(id) ON DELETE CASCADE,
+    FOREIGN KEY (employerId) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (candidateId) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_offers_employer (employerId)
 );
 
 -- Skill Gaps

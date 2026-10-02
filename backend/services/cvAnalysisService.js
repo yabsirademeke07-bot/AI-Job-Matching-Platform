@@ -1,6 +1,10 @@
 const fs = require('fs/promises');
 const path = require('path');
 const mammoth = require('mammoth');
+const JSZip = require('jszip');
+const { DOMParser } = require('@xmldom/xmldom');
+const WordExtractor = require('word-extractor');
+const parseRTF = require('rtf-parser');
 
 const CV_FIELDS = ['fullName', 'email', 'phone', 'headline', 'skills', 'experience', 'education', 'certifications', 'languages'];
 const INVALID_MARKERS = ['invoice', 'electric bill', 'utility bill', 'receipt', 'bank statement', 'purchase order', 'table of contents'];
@@ -18,6 +22,36 @@ async function extractText(file) {
   if (extension === '.docx') {
     const result = await mammoth.extractRawText({ buffer });
     return normalizeExtractedText(result.value);
+  }
+  if (extension === '.doc') {
+    const extractor = new WordExtractor();
+    const document = await extractor.extract(file.path);
+    return normalizeExtractedText(document.getBody());
+  }
+  if (extension === '.rtf') {
+    const document = await new Promise((resolve, reject) => {
+      parseRTF.string(buffer.toString('latin1'), (error, parsedDocument) => {
+        if (error) return reject(error);
+        resolve(parsedDocument);
+      });
+    });
+    const text = document.content
+      .map((item) => (Array.isArray(item.content)
+        ? item.content.map((span) => span.value || '').join('')
+        : item.value || ''))
+      .join('\n');
+    return normalizeExtractedText(text);
+  }
+  if (extension === '.odt') {
+    const archive = await JSZip.loadAsync(buffer);
+    const contentFile = archive.file('content.xml');
+    if (!contentFile) throw new Error('Could not read the ODT document content.');
+    const xmlDocument = new DOMParser().parseFromString(await contentFile.async('string'), 'text/xml');
+    const text = Array.from(xmlDocument.getElementsByTagName('*'))
+      .filter((element) => element.nodeName === 'text:p' || element.nodeName === 'text:h')
+      .map((element) => element.textContent)
+      .join('\n');
+    return normalizeExtractedText(text);
   }
   if (extension === '.pdf') {
     const parserModule = require('pdf-parse');
@@ -210,73 +244,49 @@ function calculateScores(analysis, text) {
   return { cvScore, readability, keywordMatch, profileCompletion };
 }
 
-function calculateRealJobMatch(candidateSkills = [], activeJobs = []) {
-  if (!candidateSkills.length || !activeJobs.length) return 0;
-  const normalizedCandidateSkills = candidateSkills
-    .map((skill) => (typeof skill === 'string' ? skill : skill.skill_name))
-    .filter(Boolean)
-    .map((skill) => skill.toLowerCase().trim());
-  let totalMatch = 0;
-  let evaluatedJobs = 0;
-
-  for (const job of activeJobs) {
-    const jobSkills = Array.isArray(job.required_skills)
-      ? job.required_skills
-      : typeof job.required_skills === 'string'
-        ? (() => {
-          try { return JSON.parse(job.required_skills); } catch { return job.required_skills.split(','); }
-        })()
-        : [];
-    const normalizedJobSkills = jobSkills
-      .map((skill) => (typeof skill === 'string' ? skill : skill.skill_name))
-      .filter(Boolean)
-      .map((skill) => skill.toLowerCase().trim());
-    if (!normalizedJobSkills.length) continue;
-    const matched = normalizedJobSkills.filter((skill) => normalizedCandidateSkills.includes(skill));
-    totalMatch += (matched.length / normalizedJobSkills.length) * 100;
-    evaluatedJobs += 1;
-  }
-
-  return evaluatedJobs ? Math.round(totalMatch / evaluatedJobs) : 0;
-}
-
-function normalizeMatchText(value) {
-  return String(value || '').toLowerCase().replace(/nodejs/g, 'node.js').replace(/[^a-z0-9+#.]+/g, ' ').trim();
+function flattenSkills(value) {
+  if (Array.isArray(value)) return value.flatMap(flattenSkills);
+  if (typeof value === 'string') return [value];
+  if (!value || typeof value !== 'object') return [];
+  if (value.skill_name || value.name) return [value];
+  return Object.values(value).flatMap(flattenSkills);
 }
 
 function toSkillNames(skills) {
-  return new Set((Array.isArray(skills) ? skills : []).map((skill) => normalizeSkill(typeof skill === 'string' ? skill : skill?.skill_name || skill?.name)).filter(Boolean));
+  return new Set(flattenSkills(skills).map((skill) => normalizeSkill(typeof skill === 'string' ? skill : skill.skill_name || skill.name)).filter(Boolean));
 }
 
 function parseJobSkills(value) {
-  if (Array.isArray(value)) return value;
+  if (Array.isArray(value) || (value && typeof value === 'object')) return flattenSkills(value);
   if (!value) return [];
-  try { return JSON.parse(value); } catch { return String(value).split(','); }
+  try { return flattenSkills(JSON.parse(value)); } catch { return String(value).split(','); }
 }
 
 function calculateJobMatches(candidate, activeJobs = []) {
   const candidateSkillNames = toSkillNames(candidate?.skills);
-  const candidateTitle = normalizeMatchText([
-    candidate?.headline,
-    candidate?.professional_title,
-    ...(candidate?.experience || []).map((item) => item?.job_title || item?.role),
-  ].join(' '));
-  const candidateEducation = normalizeMatchText((candidate?.education || []).map((item) => [item?.degree, item?.field_of_study, item?.institution].join(' ')).join(' '));
-  const educationRank = { 'high-school': 1, associate: 2, bachelor: 3, master: 4, phd: 5 };
 
   return activeJobs.map((job) => {
-    const requiredSkills = parseJobSkills(job.required_skills).map((skill) => normalizeSkill(typeof skill === 'string' ? skill : skill?.skill_name)).filter(Boolean);
-    const uniqueRequiredSkills = [...new Set(requiredSkills)];
-    const matchedSkills = uniqueRequiredSkills.filter((skill) => candidateSkillNames.has(skill));
-    const skillScore = uniqueRequiredSkills.length ? matchedSkills.length / uniqueRequiredSkills.length : 0;
-    const jobTitleTokens = new Set(normalizeMatchText(job.title).split(' ').filter((token) => token.length > 2));
-    const candidateTitleTokens = new Set(candidateTitle.split(' ').filter((token) => token.length > 2));
-    const titleScore = jobTitleTokens.size ? [...jobTitleTokens].filter((token) => candidateTitleTokens.has(token)).length / jobTitleTokens.size : 0;
-    const requiredEducation = String(job.required_education || 'any').toLowerCase();
-    const educationScore = requiredEducation === 'any' || (educationRank[requiredEducation] && Object.keys(educationRank).some((level) => educationRank[level] >= educationRank[requiredEducation] && candidateEducation.includes(level))) ? 1 : 0;
-    const score = Math.round((skillScore * 60 + titleScore * 25 + educationScore * 15) * 100) / 100;
-    return { ...job, required_skills: uniqueRequiredSkills, matched_skills: matchedSkills, match_breakdown: { skills: Math.round(skillScore * 100), title: Math.round(titleScore * 100), education: Math.round(educationScore * 100) }, match_score: score };
-  }).sort((left, right) => right.match_score - left.match_score || left.id - right.id);
+    const requiredSkills = [...new Set([
+      ...parseJobSkills(job.required_skills),
+      ...parseJobSkills(job.additional_required_skills),
+    ].map((skill) => normalizeSkill(typeof skill === 'string' ? skill : skill.skill_name || skill.name)).filter(Boolean))];
+    const matchedSkills = requiredSkills.filter((skill) => candidateSkillNames.has(skill));
+    const matchScore = requiredSkills.length && candidateSkillNames.size
+      ? Math.round((matchedSkills.length / requiredSkills.length) * 100)
+      : null;
+
+    return {
+      ...job,
+      required_skills: requiredSkills,
+      matched_skills: matchedSkills,
+      missing_skills: requiredSkills.filter((skill) => !candidateSkillNames.has(skill)),
+      match_breakdown: { skills: matchScore },
+      match_score: matchScore,
+    };
+  }).sort((left, right) => {
+    const scoreDifference = (right.match_score ?? -1) - (left.match_score ?? -1);
+    return scoreDifference || Number(left.id || 0) - Number(right.id || 0);
+  });
 }
 
 function buildPrompt(text) {
@@ -315,4 +325,4 @@ async function classifyAndExtract(text) {
   return { ...local, ai_provider: 'fallback_parser', is_fallback: true };
 }
 
-module.exports = { extractText, classifyAndExtract, calculateScores, calculateRealJobMatch, calculateJobMatches, validateCvContent, CV_CONTENT_ERROR, localParse };
+module.exports = { extractText, classifyAndExtract, calculateScores, calculateJobMatches, validateCvContent, CV_CONTENT_ERROR, localParse };

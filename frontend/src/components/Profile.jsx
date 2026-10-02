@@ -5,7 +5,6 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../hooks/useToast.js';
 import { notifyProfileUpdated } from '../utils/profileUpdateEvent';
 import { scrollToFeedback } from '../utils/scrollHelper.js';
-import personalImage from '../pages/images/personal.png';
 
 const fieldClass = 'h-14 w-full rounded-xl border-[1.5px] border-slate-300 bg-slate-50/60 px-4 py-3.5 text-base font-medium leading-relaxed text-slate-900 not-italic placeholder:italic placeholder:font-normal placeholder:text-slate-400 dark:placeholder:text-slate-500 outline-none transition-all focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:placeholder:opacity-50';
 const labelClass = 'mb-3 block text-sm font-bold leading-relaxed text-slate-800';
@@ -492,29 +491,17 @@ const Profile = ({ userData = {}, onContinue }) => {
   };
 
   return (
-    <div className="min-h-screen min-w-0 overflow-x-hidden bg-white text-slate-900 dark:bg-white lg:flex">
-      <section className="relative flex min-h-[26rem] w-full items-center overflow-hidden bg-white px-5 py-10 dark:bg-white sm:px-10 lg:min-h-0 lg:w-[45%] lg:px-12 lg:py-16">
-        <div className="relative mx-auto flex w-full max-w-lg flex-col items-center text-center lg:items-start lg:text-left">
-          <div className="mb-8 max-w-md">
-            <span className="mb-3 inline-flex rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-bold uppercase tracking-widest text-blue-700 dark:border-blue-900 dark:bg-blue-950/60 dark:text-blue-300">
-              Your next opportunity
-            </span>
-            <h2 className="text-3xl font-black tracking-tight text-slate-900 sm:text-4xl dark:text-white">
-              Build a profile that works for you.
-            </h2>
-            <p className="mt-3 text-sm font-medium leading-6 text-slate-600 sm:text-base dark:text-slate-300">
-              Add your experience and preferences so we can find roles that fit your strengths.
-            </p>
-          </div>
-          <div className="relative flex w-full items-center justify-center overflow-hidden rounded-3xl border border-slate-200/50 bg-white p-6 dark:border-slate-800 dark:bg-white sm:p-8 lg:min-h-[25rem]">
-            <img src={personalImage} alt="Personal profile setup" className="h-auto max-h-[20rem] w-full max-w-md object-contain drop-shadow-lg sm:max-h-[24rem]" />
-          </div>
-        </div>
-      </section>
-
-      <section className="h-auto min-w-0 w-full overflow-x-hidden bg-[#f8fbfd] lg:w-[55%]">
-      <div className="information-page profile-readable mx-auto min-w-0 max-w-3xl space-y-7 overflow-x-hidden px-5 py-8 pb-12 leading-relaxed sm:px-8 lg:px-10">
-      <h1 className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">Personal Profile Setup</h1>
+    <div className="min-h-screen min-w-0 overflow-x-hidden bg-[#f8fbfd] text-slate-900 dark:bg-[#f8fbfd]">
+      <main className="information-page profile-readable mx-auto min-w-0 w-full max-w-3xl space-y-7 overflow-x-hidden px-5 py-10 pb-12 leading-relaxed sm:px-8 lg:px-10">
+      <header className="space-y-3 text-center">
+        <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-bold uppercase tracking-widest text-blue-700">
+          Your next opportunity
+        </span>
+        <h1 className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">Personal Profile Setup</h1>
+        <p className="mx-auto max-w-xl text-sm font-medium leading-6 text-slate-600 sm:text-base">
+          Add your experience and preferences so we can find roles that fit your strengths.
+        </p>
+      </header>
       {isSaved && <div id="success-banner" role="status" className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-bold text-emerald-700"><CheckCircle2 className="h-5 w-5" />your profile saved succussfuly</div>}
       <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
         <div className="mb-2 flex items-center justify-between text-sm font-bold text-slate-800"><span>Profile Completion</span><span className="text-blue-700">{completionPercentage}%</span></div>
@@ -523,7 +510,7 @@ const Profile = ({ userData = {}, onContinue }) => {
 
       {/* Personal Information */}
       <div className="space-y-6 rounded-3xl border border-slate-200/80 bg-white p-6 shadow-xl transition-shadow duration-300 hover:shadow-2xl dark:border-slate-800 dark:bg-white sm:p-10">
-        <div className="flex items-center justify-between border-b pb-3">
+        <div className="flex flex-col items-center gap-3 border-b pb-4 text-center">
           <h3 className="text-lg font-bold text-slate-800">Personal Information</h3>
           <button type="button" onClick={useExistingInformation} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-black uppercase tracking-wide text-slate-700 transition hover:bg-slate-50 hover:text-blue-700">Use Existing Information</button>
         </div>
@@ -611,7 +598,7 @@ const Profile = ({ userData = {}, onContinue }) => {
       </div>
 
       <div className="space-y-6 rounded-3xl border border-slate-200/80 bg-white p-6 shadow-xl transition-shadow duration-300 hover:shadow-2xl dark:border-slate-800 dark:bg-white sm:p-10">
-        <div className="border-b border-slate-200 pb-3">
+        <div className="border-b border-slate-200 pb-3 text-center">
           <h3 className="text-lg font-bold text-slate-800">Job Preferences</h3>
           <p className="mt-1 text-sm text-slate-500">These details help us calculate accurate job matches.</p>
         </div>
@@ -708,7 +695,7 @@ const Profile = ({ userData = {}, onContinue }) => {
           </div>
         </div>
 
-        <div className="mt-8 flex items-center justify-end border-t border-slate-200/80 pt-8">
+        <div className="mt-8 flex items-center justify-center border-t border-slate-200/80 pt-8">
           <button
             type="button"
             disabled={isSaving || isNavigating}
@@ -842,8 +829,7 @@ const Profile = ({ userData = {}, onContinue }) => {
           </div>
         </div>
       </div>
-      </div>
-      </section>
+      </main>
     </div>
   );
 };

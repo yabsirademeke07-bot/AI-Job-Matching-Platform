@@ -12,12 +12,61 @@ import {
   X,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import cvImage from '../pages/images/cv.jpg';
+import cvImage from '../pages/image (4).png';
 import { useToast } from '../hooks/useToast.js';
 import { scrollToFeedback } from '../utils/scrollHelper.js';
 
-const ALLOWED_EXTENSIONS = ['.pdf', '.docx', '.png', '.jpg', '.jpeg', '.webp'];
+const ALLOWED_EXTENSIONS = ['.pdf', '.docx', '.doc', '.txt', '.rtf', '.odt', '.png', '.jpg', '.jpeg', '.webp'];
+const ALLOWED_MIME_TYPES = [
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/msword',
+  'text/plain',
+  'text/rtf',
+  'application/rtf',
+  'application/vnd.oasis.opendocument.text',
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'application/x-pdf',
+  'application/x-msword',
+  'application/octet-stream',
+];
+const MIME_EXTENSION_MAP = {
+  'application/pdf': '.pdf',
+  'application/x-pdf': '.pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+  'application/msword': '.doc',
+  'application/x-msword': '.doc',
+  'text/plain': '.txt',
+  'text/rtf': '.rtf',
+  'application/rtf': '.rtf',
+  'application/vnd.oasis.opendocument.text': '.odt',
+  'image/png': '.png',
+  'image/jpeg': '.jpg',
+  'image/webp': '.webp',
+};
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const ACCEPTED_FILE_MESSAGE = 'Please upload a PDF, DOCX, DOC, TXT, RTF, ODT, PNG, JPG, or WEBP file (max 10MB).';
+
+const validateFile = (file) => {
+  if (file.size > MAX_FILE_SIZE) {
+    return { isValid: false, error: 'File size exceeds 10MB. Please upload a smaller file.' };
+  }
+
+  const extension = file.name.match(/\.[^.]+$/)?.[0].toLowerCase() || '';
+  const hasValidExtension = ALLOWED_EXTENSIONS.includes(extension);
+  const mimeType = file.type?.toLowerCase() || '';
+  const hasValidMime = ALLOWED_MIME_TYPES.includes(mimeType)
+    && (mimeType !== 'application/octet-stream' || hasValidExtension);
+
+  if (hasValidExtension || hasValidMime) return { isValid: true };
+
+  return {
+    isValid: false,
+    error: 'Unsupported file type. Please upload a valid PDF, DOCX, DOC, TXT, RTF, ODT, PNG, JPG, or WEBP file (max 10MB).',
+  };
+};
 
 const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
   const navigate = useNavigate();
@@ -41,10 +90,13 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
   const [isInvalidFile, setIsInvalidFile] = useState(false);
 
   useEffect(() => {
-    if (!toastError) return undefined;
-    const timer = window.setTimeout(() => setToastError(''), 4000);
+    if (!toastError && !validationNotice) return undefined;
+    const timer = window.setTimeout(() => {
+      setToastError('');
+      setValidationNotice('');
+    }, 10000);
     return () => window.clearTimeout(timer);
-  }, [toastError, isInvalidFile]);
+  }, [toastError, validationNotice]);
 
   const resetUploadState = () => {
     setFile(null);
@@ -71,7 +123,12 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
 
     try {
       const formData = new FormData();
-      formData.append('cv', selectedFile);
+      const extension = selectedFile.name.match(/\.[^.]+$/)?.[0].toLowerCase() || '';
+      const fallbackExtension = MIME_EXTENSION_MAP[selectedFile.type?.toLowerCase() || ''];
+      const uploadName = ALLOWED_EXTENSIONS.includes(extension) || !fallbackExtension
+        ? selectedFile.name
+        : `${selectedFile.name}${fallbackExtension}`;
+      formData.append('cv', selectedFile, uploadName);
       if (user?.id) formData.append('userId', String(user.id));
 
       const xhr = new XMLHttpRequest();
@@ -106,8 +163,9 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
       if (uploadError.status === 422 || /invalid|does not contain|not a cv|resume\/cv/i.test(uploadError.message || '')) {
         showInvalidFileToast(uploadError.message);
       } else {
-        setToastError(uploadError.message || 'Unable to analyze your CV. Please try again.');
-        showError('⚠️ Upload failed. Please upload a valid PDF or DOCX file (max 5MB).');
+        const message = uploadError.message || 'Unable to analyze your CV. Please try again.';
+        setToastError(message);
+        showError(message);
         scrollCvFeedback('error');
       }
     } finally {
@@ -121,17 +179,10 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
     setIsInvalidFile(false);
     if (!selectedFile) return;
 
-    const extension = `.${selectedFile.name.split('.').pop().toLowerCase()}`;
-    if (!ALLOWED_EXTENSIONS.includes(extension)) {
-      setValidationNotice('Unsupported file type. Please upload a PDF or DOCX file.');
-      showError('⚠️ Upload failed. Please upload a valid PDF or DOCX file (max 5MB).');
-      scrollCvFeedback('error');
-      return;
-    }
-
-    if (selectedFile.size > MAX_FILE_SIZE) {
-      setValidationNotice(`File size must be under ${MAX_FILE_SIZE / (1024 * 1024)}MB.`);
-      showError('⚠️ Upload failed. Please upload a valid PDF or DOCX file (max 5MB).');
+    const validation = validateFile(selectedFile);
+    if (!validation.isValid) {
+      setValidationNotice(validation.error);
+      showError(validation.error);
       scrollCvFeedback('error');
       return;
     }
@@ -143,7 +194,7 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
   const showInvalidFileToast = (message) => {
     setIsInvalidFile(true);
     setToastError(message || 'Invalid Document - Not a Candidate CV. A valid CV must contain all 4 sections: Contact Details, Work Experience, Education, and Skills.');
-    showError('⚠️ Upload failed. Please upload a valid PDF or DOCX file (max 5MB).');
+    showError(`⚠️ Upload failed. ${ACCEPTED_FILE_MESSAGE}`);
     scrollCvFeedback('error');
   };
 
@@ -169,7 +220,7 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
       setValidationNotice(
         isInvalidFile ? 'Please replace this invalid document before continuing.' : 'Please upload your CV first, or skip this step for now using the button below.'
       );
-      showError('⚠️ Upload failed. Please upload a valid PDF or DOCX file (max 5MB).');
+      showError(`⚠️ Upload failed. ${ACCEPTED_FILE_MESSAGE}`);
       scrollCvFeedback('error');
       return;
     }
@@ -214,8 +265,8 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
   return (
     <main className="min-h-[85vh] px-4 py-8 sm:px-6 lg:py-16">
       <div className="mx-auto grid w-full max-w-6xl items-stretch gap-0 lg:grid-cols-[1.1fr_1fr]">
-        <aside className="relative min-h-112 overflow-hidden rounded-[28px] border border-slate-200 bg-slate-950 shadow-2xl shadow-slate-900/10 sm:min-h-136 lg:min-h-full">
-          <img src={cvImage} alt="Professional CV preview" className="absolute inset-0 h-full w-full scale-105 object-cover" />
+        <aside className="order-2 relative min-h-112 overflow-hidden rounded-[28px] border border-slate-200 bg-slate-100 shadow-2xl shadow-slate-900/10 sm:min-h-136 lg:min-h-full">
+          <img src={cvImage} alt="Professional CV preview" className="absolute inset-0 h-full w-full object-contain" />
           <div className="absolute inset-0 bg-linear-to-t from-slate-950/90 via-slate-950/20 to-transparent" />
           <div className="absolute inset-x-0 bottom-0 p-7 text-left sm:p-9">
             <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-200">Your career, clearly presented</p>
@@ -224,7 +275,7 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
           </div>
         </aside>
 
-        <section className="w-full rounded-[28px] border border-slate-200 bg-white p-8 text-center shadow-2xl shadow-slate-900/5 sm:p-12">
+        <section className="order-1 w-full rounded-[28px] border border-slate-200 bg-white p-8 text-center shadow-2xl shadow-slate-900/5 sm:p-12">
         <h1 className="mt-5 text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">
           Upload Your Resume
         </h1>
@@ -246,7 +297,7 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
         <input
           ref={fileInputRef}
           type="file"
-          accept=".pdf,.docx,.png,.jpg,.jpeg,.webp"
+          accept=".pdf,.docx,.doc,.txt,.rtf,.odt,.png,.jpg,.jpeg,.webp,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword,text/plain,text/rtf,application/rtf,application/vnd.oasis.opendocument.text,image/png,image/jpeg,image/webp"
           className="hidden"
           onChange={(event) => handleFileSelect(event.target.files?.[0])}
         />
@@ -363,12 +414,12 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
           <div className="flex items-start gap-3 rounded-xl border border-red-300 border-l-4 border-l-red-500 bg-white p-4 shadow-xl">
             <AlertCircle className="mt-0.5 h-6 w-6 shrink-0 text-red-500" />
             <div className="flex-1">
-              <h4 className="text-sm font-bold text-slate-900">Invalid Document</h4>
-              <p className="mt-1 text-xs leading-5 text-slate-600">The uploaded file does not contain CV content. Please upload a valid resume.</p>
+              <h4 className="text-sm font-bold text-slate-900">{isInvalidFile ? 'Invalid Document' : 'Upload Failed'}</h4>
+              <p className="mt-1 text-xs leading-5 text-slate-600">{toastError}</p>
             </div>
             <button type="button" onClick={() => setToastError('')} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Dismiss invalid document notification"><X className="h-4 w-4" /></button>
           </div>
-          <div className="h-1 origin-left animate-[toastProgress_5s_linear] rounded-b-xl bg-red-500" />
+          <div className="h-1 origin-left animate-[toastProgress_10s_linear] rounded-b-xl bg-red-500" />
         </div>
       )}
     </main>

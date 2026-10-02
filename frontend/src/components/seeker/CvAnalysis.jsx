@@ -2,6 +2,57 @@ import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Loader2, Sparkles, RefreshCw, FileText, CheckCircle2, Pencil, Save, Briefcase, GraduationCap, Mail, Phone, MapPin, ArrowRight } from 'lucide-react';
 
+const normalizeMatchSkill = (value) => String(value || '')
+  .toLowerCase()
+  .trim()
+  .replace(/nodejs/g, 'node.js')
+  .replace(/problem-solving/g, 'problem solving')
+  .replace(/\s+/g, ' ');
+
+const flattenSkillNames = (value) => {
+  if (Array.isArray(value)) return value.flatMap(flattenSkillNames);
+  if (typeof value === 'string') return [value];
+  if (!value || typeof value !== 'object') return [];
+  if (value.skill_name || value.name) return [value.skill_name || value.name];
+  return Object.values(value).flatMap(flattenSkillNames);
+};
+
+const estimateExperienceYears = (experience) => {
+  const totalMonths = (Array.isArray(experience) ? experience : []).reduce((total, item) => {
+    const duration = [item?.duration, item?.start_date, item?.end_date].filter(Boolean).join(' ').toLowerCase();
+    const explicitYears = duration.match(/(\d+(?:\.\d+)?)\s*\+?\s*(?:years?|yrs?)/);
+    const explicitMonths = duration.match(/(\d+(?:\.\d+)?)\s*months?/);
+    if (explicitYears || explicitMonths) {
+      return total + Number(explicitYears?.[1] || 0) * 12 + Number(explicitMonths?.[1] || 0);
+    }
+
+    const dateRange = duration.match(/((?:19|20)\d{2}).*?((?:19|20)\d{2}|present|current)/);
+    if (!dateRange) return total;
+    const startYear = Number(dateRange[1]);
+    const endYear = /present|current/.test(dateRange[2]) ? new Date().getFullYear() : Number(dateRange[2]);
+    return total + Math.max(0, endYear - startYear) * 12;
+  }, 0);
+
+  return totalMonths / 12;
+};
+
+const requiredExperienceYears = (job) => {
+  const requirement = `${job.experience_level || ''} ${job.description || ''}`.toLowerCase();
+  const explicitYears = requirement.match(/(\d+(?:\.\d+)?)\s*\+?\s*(?:years?|yrs?)/);
+  if (explicitYears) return Number(explicitYears[1]);
+  if (/expert|principal|lead/.test(requirement)) return 8;
+  if (/senior/.test(requirement)) return 5;
+  if (/intermediate|mid[- ]level/.test(requirement)) return 3;
+  if (/junior/.test(requirement)) return 1;
+  if (/entry[- ]level|intern/.test(requirement)) return 0;
+  return null;
+};
+
+const cleanLocation = (value) => String(value || '')
+  .replace(/^\s*address\s*:\s*/i, '')
+  .replace(/^\[|\]$/g, '')
+  .trim();
+
 const AiCvAnalysis = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -116,9 +167,43 @@ const AiCvAnalysis = () => {
   const headline = analysis?.headline || analysis?.professional_title;
   const firstEducation = analysis?.education?.[0];
   const firstExperience = analysis?.experience?.[0];
-  const matchScore = analysis?.matchScore ?? analysis?.keywordMatch;
-  const skillLabel = (skill) => typeof skill === 'string' ? skill : skill.skill_name;
-  const visibleSkills = skills.filter((skill) => skillLabel(skill));
+  const skillLabel = (skill) => typeof skill === 'string' ? skill : skill?.skill_name || skill?.name || '';
+  const visibleSkills = (Array.isArray(skills) ? skills : flattenSkillNames(skills)).filter((skill) => skillLabel(skill));
+  const candidateSkills = flattenSkillNames(skills).map((skill) => String(skill || '').trim()).filter(Boolean);
+  const publishedJobs = Array.isArray(analysis?.jobMatches) ? analysis.jobMatches : [];
+  const candidateSkillSet = new Set(candidateSkills.map(normalizeMatchSkill).filter(Boolean));
+  const candidateExperienceYears = estimateExperienceYears(analysis?.experience);
+  const scoredPublishedJobs = publishedJobs
+    .map((job) => {
+      const requiredSkills = [...new Set(flattenSkillNames(job.required_skills).map(normalizeMatchSkill).filter(Boolean))];
+      if (!requiredSkills.length) return null;
+
+      const matchedSkills = requiredSkills.filter((skill) => candidateSkillSet.has(skill));
+      const skillScore = Math.round((matchedSkills.length / requiredSkills.length) * 100);
+      const expectedExperience = requiredExperienceYears(job);
+      const experienceScore = expectedExperience === null
+        ? null
+        : expectedExperience === 0
+          ? 100
+          : Math.min(100, Math.round((candidateExperienceYears / expectedExperience) * 100));
+      const matchScore = experienceScore === null
+        ? skillScore
+        : Math.round(skillScore * 0.8 + experienceScore * 0.2);
+
+      return {
+        ...job,
+        requiredSkills,
+        matchedSkills,
+        skillScore,
+        experienceScore,
+        matchScore,
+      };
+    })
+    .filter(Boolean)
+    .sort((left, right) => right.matchScore - left.matchScore)
+    .slice(0, 5);
+  const bestPublishedMatch = scoredPublishedJobs[0] || null;
+  const displayLocation = cleanLocation(analysis?.location);
 
   return (
     <div className="min-h-screen w-full bg-slate-100/70 flex items-center justify-center p-4 sm:p-6 lg:p-10">
@@ -151,7 +236,7 @@ const AiCvAnalysis = () => {
               <div className="space-y-6 lg:col-span-7">
                 <section className="space-y-4 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-6">
                   <div className="flex items-center justify-between"><span className="text-xs font-bold uppercase tracking-wider text-slate-400">Candidate profile</span><button type="button" onClick={() => setEditing((value) => !value)} className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-800">{editing ? <Save className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}{editing ? 'Done' : 'Edit fields'}</button></div>
-                  {editing ? <div className="space-y-3">{[['firstName', 'First name'], ['lastName', 'Last name'], ['email', 'Email'], ['phone', 'Phone'], ['location', 'Location'], ['headline', 'Headline']].map(([field, label]) => <label key={field} className="block text-xs font-bold text-slate-600">{label}<input value={analysis[field] || ''} onChange={(event) => updateField(field, event.target.value)} className="mt-1 w-full rounded-lg border border-blue-300 bg-white px-3 py-2 text-sm font-normal text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-200" /></label>)}<label className="block text-xs font-bold text-slate-600">Add skill<input onKeyDown={addSkill} placeholder="Type a skill and press Enter" className="mt-1 w-full rounded-lg border border-blue-300 bg-white px-3 py-2 text-sm font-normal text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-200" /></label><div className="flex flex-wrap gap-2">{visibleSkills.map((skill, index) => <button type="button" key={`${skillLabel(skill)}-${index}`} onClick={() => setSkills((current) => current.filter((_, itemIndex) => itemIndex !== index))} className="rounded-lg border border-blue-200 bg-white px-3 py-1 text-xs font-bold text-blue-700">{skillLabel(skill)} x</button>)}</div></div> : <><h2 className="text-2xl font-extrabold text-slate-900">{displayName}</h2><div className="grid gap-3 pt-2 text-sm text-slate-600 sm:grid-cols-2">{analysis.email && <div className="flex min-w-0 items-center gap-2"><Mail className="h-4 w-4 shrink-0 text-slate-400" /><span className="truncate">{analysis.email}</span></div>}{analysis.phone && <div className="flex items-center gap-2"><FileText className="h-4 w-4 shrink-0 text-slate-400" /><span>{analysis.phone}</span></div>}{analysis.location && <div className="flex items-center gap-2"><MapPin className="h-4 w-4 shrink-0 text-slate-400" /><span>{analysis.location}</span></div>}</div>{headline && <p className="border-t border-slate-200 pt-3 text-sm font-semibold text-slate-700">{headline}</p>}</>}
+                  {editing ? <div className="space-y-3">{[['firstName', 'First name'], ['lastName', 'Last name'], ['email', 'Email'], ['phone', 'Phone'], ['location', 'Location'], ['headline', 'Headline']].map(([field, label]) => <label key={field} className="block text-xs font-bold text-slate-600">{label}<input value={analysis[field] || ''} onChange={(event) => updateField(field, event.target.value)} className="mt-1 w-full rounded-lg border border-blue-300 bg-white px-3 py-2 text-sm font-normal text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-200" /></label>)}<label className="block text-xs font-bold text-slate-600">Add skill<input onKeyDown={addSkill} placeholder="Type a skill and press Enter" className="mt-1 w-full rounded-lg border border-blue-300 bg-white px-3 py-2 text-sm font-normal text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-200" /></label><div className="flex flex-wrap gap-2">{visibleSkills.map((skill, index) => <button type="button" key={`${skillLabel(skill)}-${index}`} onClick={() => setSkills((current) => current.filter((_, itemIndex) => itemIndex !== index))} className="rounded-lg border border-blue-200 bg-white px-3 py-1 text-xs font-bold text-blue-700">{skillLabel(skill)} x</button>)}</div></div> : <><h2 className="text-2xl font-extrabold text-slate-900">{displayName}</h2><div className="grid gap-3 pt-2 text-sm text-slate-600 sm:grid-cols-2">{analysis.email && <div className="flex min-w-0 items-center gap-2"><Mail className="h-4 w-4 shrink-0 text-slate-400" /><span className="truncate">{analysis.email}</span></div>}{analysis.phone && <div className="flex items-center gap-2"><FileText className="h-4 w-4 shrink-0 text-slate-400" /><span>{analysis.phone}</span></div>}{analysis.location && <div className="flex items-center gap-2"><MapPin className="h-4 w-4 shrink-0 text-slate-400" /><span>{displayLocation}</span></div>}</div>{headline && <p className="border-t border-slate-200 pt-3 text-sm font-semibold text-slate-700">{headline}</p>}</>}
                 </section>
 
                 <div className="space-y-4">{firstEducation && (firstEducation.degree || firstEducation.school_name || firstEducation.institution) && <section className="rounded-xl border border-slate-200/80 bg-white p-5"><div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-400"><GraduationCap className="h-4 w-4 text-blue-600" />Education</div><p className="mt-2 text-sm font-bold text-slate-800">{[firstEducation.degree, firstEducation.field_of_study].filter(Boolean).join(' in ')}</p><p className="mt-1 text-xs text-slate-500">{[firstEducation.school_name || firstEducation.institution, firstEducation.graduationYear || firstEducation.end_date].filter(Boolean).join(' • ')}</p></section>}{firstExperience && (firstExperience.job_title || firstExperience.role || firstExperience.company_name || firstExperience.company) && <section className="rounded-xl border border-slate-200/80 bg-white p-5"><div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-400"><Briefcase className="h-4 w-4 text-emerald-600" />Experience</div><p className="mt-2 text-sm font-bold text-slate-800">{firstExperience.job_title || firstExperience.role}</p><p className="mt-1 text-xs text-slate-500">{[firstExperience.company_name || firstExperience.company, firstExperience.duration].filter(Boolean).join(' • ')}</p>{(firstExperience.responsibilities?.length || firstExperience.description) && <ul className="mt-3 space-y-1 text-xs leading-5 text-slate-600">{(firstExperience.responsibilities?.length ? firstExperience.responsibilities : [firstExperience.description]).slice(0, 3).map((item, index) => <li key={index}>• {item}</li>)}</ul>}</section>}</div>
@@ -160,7 +245,59 @@ const AiCvAnalysis = () => {
               </div>
 
               <div className="flex flex-col justify-between space-y-6 lg:col-span-5">
-                <section className="space-y-4 rounded-2xl border border-blue-200/80 bg-linear-to-br from-blue-50 via-indigo-50/40 to-emerald-50/40 p-6"><div className="flex items-center justify-between"><span className="text-xs font-bold uppercase tracking-wider text-blue-700">AI job market compatibility</span><span className="rounded-lg bg-blue-100 p-1.5 text-blue-700"><Sparkles className="h-4 w-4" /></span></div><div className="flex items-baseline gap-2"><span className="text-5xl font-extrabold tracking-tight text-blue-600">{matchScore ?? '--'}{matchScore !== undefined && <span>%</span>}</span><span className="text-xs font-semibold text-slate-500">compatibility score</span></div><p className="text-xs leading-relaxed text-slate-600">Calculated from normalized candidate skills against published job requirements.</p><div className="space-y-2 border-t border-blue-200/60 pt-3 text-xs font-medium text-slate-700"><div className="flex items-start gap-2"><span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" /><span>{visibleSkills.length ? `${visibleSkills.length} verified skills available for matching.` : 'Add skills to improve matching precision.'}</span></div><div className="flex items-start gap-2"><span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" /><span>{firstExperience ? 'Professional experience is included in the profile.' : 'Education and skills can still support entry-level matches.'}</span></div></div></section>
+                <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                  {bestPublishedMatch ? (
+                    <>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <span className="text-xs font-bold uppercase tracking-wider text-blue-700">Job Match Score</span>
+                          <h2 className="mt-1 truncate text-lg font-bold text-slate-900">{bestPublishedMatch.title}</h2>
+                          {bestPublishedMatch.company_name && <p className="mt-1 text-xs font-semibold text-slate-500">{bestPublishedMatch.company_name}</p>}
+                        </div>
+                        <span className="shrink-0 rounded-lg bg-blue-100 p-1.5 text-blue-700"><Sparkles className="h-4 w-4" /></span>
+                      </div>
+                      <div className="text-3xl font-extrabold text-slate-900">{bestPublishedMatch.matchScore}% Match</div>
+                      <div role="progressbar" aria-label="Match against posted job" aria-valuemin={0} aria-valuemax={100} aria-valuenow={bestPublishedMatch.matchScore} className="h-2.5 overflow-hidden rounded-full bg-slate-100">
+                        <div className="h-full rounded-full bg-emerald-500 transition-[width] duration-500" style={{ width: `${bestPublishedMatch.matchScore}%` }} />
+                      </div>
+                      <p className="text-xs leading-relaxed text-slate-600">
+                        Matched against actual requirements for {bestPublishedMatch.company_name || 'this employer'}. Score weighs skill overlap (80%) and experience-level fit (20%) when the job lists an experience requirement.
+                      </p>
+                      <div className="space-y-3 border-t border-slate-100 pt-3 text-xs font-medium text-slate-700">
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                          <span className="font-bold text-slate-800">Skills: {bestPublishedMatch.skillScore}% ({bestPublishedMatch.matchedSkills.length}/{bestPublishedMatch.requiredSkills.length})</span>
+                          {bestPublishedMatch.experienceScore !== null && <span className="font-bold text-slate-800">Experience: {bestPublishedMatch.experienceScore}%</span>}
+                        </div>
+                        {bestPublishedMatch.matchedSkills.length > 0 ? (
+                          <div className="flex flex-wrap gap-1.5">
+                            {bestPublishedMatch.matchedSkills.map((skill) => <span key={skill} className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-emerald-800"><CheckCircle2 className="h-3.5 w-3.5" />{skill}</span>)}
+                          </div>
+                        ) : <p className="text-slate-500">No listed skills matched the skills extracted from this CV.</p>}
+                      </div>
+                    </>
+                  ) : publishedJobs.length === 0 ? (
+                    <>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Job Matching</span>
+                        <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700">Awaiting Openings</span>
+                      </div>
+                      <h2 className="text-lg font-bold text-slate-900">No Jobs Posted Yet</h2>
+                      <p className="text-xs leading-relaxed text-slate-500">Match score will calculate once employers post active tech jobs.</p>
+                      <div className="border-t border-slate-100 pt-3">
+                        <p className="mb-2 text-xs font-semibold text-slate-700">Your Parsed Skills ({candidateSkills.length})</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {candidateSkills.map((skill) => <span key={skill} className="rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">{skill}</span>)}
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Job Matching</span>
+                      <h2 className="text-lg font-bold text-slate-900">No Match Score Available</h2>
+                      <p className="text-xs leading-relaxed text-slate-500">Active jobs are posted, but their skill requirements are not available for a reliable match score yet.</p>
+                    </>
+                  )}
+                </section>
                 <div className="space-y-3 pt-2"><button type="button" onClick={continueToProfile} disabled={saving} className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-2xl bg-blue-600 px-6 py-4 text-base font-bold text-white shadow-lg shadow-blue-500/25 transition-all hover:bg-blue-700 hover:shadow-blue-500/40 active:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-75">{saving ? <><Loader2 size={18} className="animate-spin" /> Preparing profile...</> : <><span>Save and Continue</span><ArrowRight className="h-5 w-5" /></>}</button><div className="grid grid-cols-2 gap-3 pt-1"><button type="button" onClick={() => setEditing(true)} className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50">Edit fields</button><button type="button" onClick={handleReplace} className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50"><RefreshCw className="h-3.5 w-3.5" />Replace CV</button></div></div>
               </div>
             </div>
