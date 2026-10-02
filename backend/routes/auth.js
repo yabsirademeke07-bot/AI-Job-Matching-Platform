@@ -9,6 +9,15 @@ const { issueOtp, generateAndSendOtp } = require('../services/otpService');
 const router = express.Router();
 const LOGIN_OTP_WINDOW_MS = 2 * 60 * 1000;
 const ADMIN_EMAILS = new Set(['tekebaaweke32@gmail.com']);
+const requireGoogleOAuth = (req, res, next) => {
+  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+    return res.status(503).json({
+      success: false,
+      message: 'Google sign-in is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in the backend environment, then restart the server.',
+    });
+  }
+  next();
+};
 const resolveEffectiveRole = (role, email) => {
   const targetEmail = String(email || '').trim().toLowerCase();
   if (ADMIN_EMAILS.has(targetEmail)) return 'admin';
@@ -250,7 +259,7 @@ router.post('/signup', validateSignUp, async (req, res) => {
 // ==========================================
 // 2. የ Google Login ማስጀመሪያ Route
 // ==========================================
-router.get('/google', (req, res, next) => {
+router.get('/google', requireGoogleOAuth, (req, res, next) => {
   const role = req.query.role || 'pending';
   passport.authenticate('google', { 
     scope: ['profile', 'email'],
@@ -262,6 +271,7 @@ router.get('/google', (req, res, next) => {
 // ==========================================
 router.get(
   '/google/callback',
+  requireGoogleOAuth,
   passport.authenticate('google', {
     failureRedirect: `${process.env.CLIENT_URL || 'http://localhost:5173'}/login?error=auth_failed`,
     session: false,
@@ -491,6 +501,167 @@ router.post('/resend-otp', async (req, res) => {
       return res.status(429).json({ success: false, message: error.message });
     }
     res.status(500).json({ success: false, message: 'Failed to resend OTP.' });
+  }
+});
+
+// ==========================================
+// 5. PASSWORD RESET FLOW
+// ==========================================
+router.post('/forgot-password', async (req, res) => {
+  const email = String(req.body?.email || '').trim().toLowerCase();
+
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ success: false, message: 'Please enter a valid email address.' });
+  }
+
+  try {
+    const [userRows] = await db.query('SELECT id, phone, is_active FROM users WHERE email = ? LIMIT 1', [email]);
+
+    if (!userRows || userRows.length === 0 || !userRows[0].is_active) {
+      return res.status(200).json({
+        success: true,
+        message: 'If an account exists for this email, a verification code has been sent.'
+      });
+    }
+
+    const user = userRows[0];
+    await issueOtp({
+      dbClient: db,
+      email,
+      phone: user.phone,
+      purpose: 'password-reset',
+      expiresInMinutes: 3,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'If an account exists for this email, a verification code has been sent.'
+    });
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Unable to send a reset code right now. Please try again later.'
+    });
+  }
+});
+
+router.post('/verify-reset-otp', async (req, res) => {
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  const otpCode = String(req.body?.otp || '').trim();
+
+  if (!email || !otpCode || !/^\d{6}$/.test(otpCode)) {
+    return res.status(400).json({ success: false, message: 'Please enter the valid 6-digit OTP code.' });
+  }
+
+  try {
+    const [rows] = await db.query(
+      `SELECT * FROM otps
+       WHERE email = ? AND purpose = 'password-reset' AND is_used = 0 AND expires_at > NOW()
+       ORDER BY id DESC LIMIT 1`,
+      [email]
+    );
+
+    if (!rows || rows.length === 0) {
+      return res.status(400).json({ success: false, message: 'No active reset code found. Please request a new one.' });
+    }
+
+    const otpRecord = rows[0];
+    if (new Date() > new Date(otpRecord.expires_at)) {
+      await db.query('UPDATE otps SET is_used = 1 WHERE id = ?', [otpRecord.id]);
+      return res.status(400).json({ success: false, message: 'This reset code has expired. Please request a new one.' });
+    }
+
+    if (Number(otpRecord.attempts || 0) >= 4) {
+      return res.status(429).json({ success: false, message: 'Too many failed attempts. Please wait before requesting a new code.' });
+    }
+
+    if (String(otpRecord.otp_code).trim() !== otpCode) {
+      const nextAttempts = Number(otpRecord.attempts || 0) + 1;
+      await db.query('UPDATE otps SET attempts = ? WHERE id = ?', [nextAttempts, otpRecord.id]);
+      const remaining = 4 - nextAttempts;
+
+      if (remaining <= 0) {
+        return res.status(429).json({ success: false, message: 'Too many failed attempts. Please wait before trying again.' });
+      }
+
+      return res.status(400).json({
+        success: false,
+        message: `Invalid code. You have ${remaining} attempt(s) remaining.`
+      });
+    }
+
+    await db.query('UPDATE otps SET is_used = 1 WHERE id = ?', [otpRecord.id]);
+
+    const resetToken = jwt.sign(
+      { email, purpose: 'password-reset' },
+      process.env.JWT_SECRET || 'your_secret_key',
+      { expiresIn: '30m' }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: 'OTP verified successfully.',
+      resetToken,
+    });
+  } catch (error) {
+    console.error('Verify reset OTP error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to verify the reset code.' });
+  }
+});
+
+router.post('/reset-password', async (req, res) => {
+  const { resetToken, newPassword, confirmPassword } = req.body || {};
+
+  if (!resetToken) {
+    return res.status(401).json({ success: false, message: 'Your reset session is invalid or expired.' });
+  }
+
+  if (!newPassword || !confirmPassword) {
+    return res.status(400).json({ success: false, message: 'New password and confirmation are required.' });
+  }
+
+  if (newPassword !== confirmPassword) {
+    return res.status(400).json({ success: false, message: 'Passwords do not match.' });
+  }
+
+  if (newPassword.length < 8 || !/[A-Z]/.test(newPassword) || !/[a-z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Password must be at least 8 characters and include uppercase, lowercase, and a number.'
+    });
+  }
+
+  try {
+    const decoded = jwt.verify(resetToken, process.env.JWT_SECRET || 'your_secret_key');
+
+    if (!decoded || decoded.purpose !== 'password-reset' || !decoded.email) {
+      return res.status(401).json({ success: false, message: 'Your reset session is invalid or expired.' });
+    }
+
+    const email = String(decoded.email).trim().toLowerCase();
+    const [userRows] = await db.query('SELECT id FROM users WHERE email = ? LIMIT 1', [email]);
+
+    if (!userRows || userRows.length === 0) {
+      return res.status(404).json({ success: false, message: 'No account found for this email.' });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await db.query('UPDATE users SET password = ? WHERE email = ?', [hashedPassword, email]);
+    await db.query('UPDATE otps SET is_used = 1 WHERE email = ? AND purpose = ?', [email, 'password-reset']);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Password reset successfully.'
+    });
+  } catch (error) {
+    console.error('Reset password error:', error);
+
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ success: false, message: 'Your reset session has expired. Please request a new code.' });
+    }
+
+    return res.status(500).json({ success: false, message: 'Unable to reset your password right now.' });
   }
 });
 

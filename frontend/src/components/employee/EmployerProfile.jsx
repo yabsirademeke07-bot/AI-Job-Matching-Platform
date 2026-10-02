@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Building2, Save, Upload } from 'lucide-react';
-import officeImage from '../../pages/images/images3.jpg';
 
 const getStoredCompany = () => {
   try {
@@ -187,13 +186,6 @@ const EmployerProfile = () => {
           <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-white/20"><div className="h-full w-full bg-white" style={{ animation: 'toastCountdown 10000ms linear forwards', transformOrigin: 'left center' }} /></div>
         </div>
       )}
-      <img
-        src={officeImage}
-        alt="Office Collaboration"
-        className="pointer-events-none fixed inset-0 -z-20 h-full w-full object-cover"
-      />
-      <div className="pointer-events-none fixed inset-0 -z-10 bg-gradient-to-tr from-slate-950/60 via-blue-950/50 to-slate-900/60 backdrop-blur-[2px]" />
-
       <div className="mx-auto my-10 w-full max-w-3xl rounded-3xl border border-white/40 bg-white/95 p-8 shadow-2xl shadow-blue-950/40 ring-1 ring-white/20 backdrop-blur-xl sm:max-w-4xl sm:p-12">
         <div className="border-b border-slate-200 pb-6">
           <div className="flex items-center gap-3">

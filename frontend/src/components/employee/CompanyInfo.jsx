@@ -1,17 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import officeImage from '../../pages/images/images3.jpg';
 import { useToast } from '../../hooks/useToast.js';
 import { scrollToFeedback } from '../../utils/scrollHelper.js';
-
-const ambientZoomStyles = `
-  @keyframes ambientSlowZoom {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.05); }
-  }
-  .animate-ambient-zoom { animation: ambientSlowZoom 24s ease-in-out infinite; }
-`;
 
 const hiringVolumeOptions = ['1-5 Hires', '6-20 Hires', '20+ Scaled Hiring', 'Continuous Talent Pool'];
 const companySizeOptions = ['1-10', '11-50', '51-200', '201-500', '1000+'];
@@ -86,18 +76,6 @@ export default function CompanyInfo({ user, onComplete }) {
   const navigate = useNavigate();
   const { showSuccess, showError } = useToast();
   const currentUser = user || JSON.parse(localStorage.getItem('user') || '{}');
-  const slides = [
-    {
-      badge: '✨ AI-POWERED RECRUITMENT INTELLIGENCE',
-      heading: 'Build & Scale Your High-Performing Team.',
-      description: 'Connect with verified top-tier professionals matched precisely to your company culture and technical needs.',
-    },
-    {
-      badge: '⚡ 10X FASTER HIRING PIPELINE',
-      heading: 'Hire Top 1% AI-Matched Talent Faster.',
-      description: 'Eliminate manual CV screening with automated skill scoring and instant interview scheduling.',
-    },
-  ];
   const initialPhoneDigits = String(currentUser.phone || '').replace(/\D/g, '').replace(/^251/, '').replace(/^0/, '').slice(0, 9);
   const [phoneOperator, setPhoneOperator] = useState('Ethio Telecom');
   const [phoneNumber, setPhoneNumber] = useState(initialPhoneDigits);
@@ -129,7 +107,6 @@ export default function CompanyInfo({ user, onComplete }) {
   const attachSuccessTimerRef = useRef(null);
   const [attachSuccess, setAttachSuccess] = useState(false);
   const [success, setSuccess] = useState('');
-  const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
 
   useEffect(() => {
     if (!error) return undefined;
@@ -141,14 +118,6 @@ export default function CompanyInfo({ user, onComplete }) {
     if (validationTimerRef.current) window.clearTimeout(validationTimerRef.current);
     if (attachSuccessTimerRef.current) window.clearTimeout(attachSuccessTimerRef.current);
   }, []);
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentSlideIndex((previous) => (previous + 1) % slides.length);
-    }, 3500);
-
-    return () => clearInterval(timer);
-  }, [slides.length]);
 
   useEffect(() => {
     let cancelled = false;
@@ -238,7 +207,12 @@ export default function CompanyInfo({ user, onComplete }) {
       setErrors((current) => ({ ...current, tradeLicense: 'Trade License PDF must be 10MB or smaller.' }));
       return;
     }
-    setForm((current) => ({ ...current, trade_license_url: file.name, tradeLicenseFile: file, tradeLicenseName: file.name }));
+    setForm((current) => ({
+      ...current,
+      trade_license_url: '',
+      tradeLicenseFile: file,
+      tradeLicenseName: file.name,
+    }));
     setErrors((current) => ({ ...current, tradeLicense: '' }));
     setAttachSuccess(true);
     if (attachSuccessTimerRef.current) window.clearTimeout(attachSuccessTimerRef.current);
@@ -291,9 +265,10 @@ export default function CompanyInfo({ user, onComplete }) {
           phoneOperator,
           phoneNumber,
           tinNumber: employerType === 'individual' ? null : tinNumber,
-          tradeLicenseNumber: employerType === 'individual' ? null : (form.trade_license_number || form.trade_license_url || form.tradeLicenseName),
+          tradeLicenseNumber: employerType === 'individual' ? null : form.trade_license_number,
           trade_license_number: employerType === 'individual' ? null : form.trade_license_number,
-          trade_license_url: employerType === 'individual' ? null : (form.trade_license_url || form.tradeLicenseName),
+          trade_license_url: employerType === 'individual' ? null : form.trade_license_url,
+          tradeLicenseName: employerType === 'individual' ? null : form.tradeLicenseName,
           social_media_urls: { linkedin: form.linkedin },
         }),
       });
@@ -306,7 +281,8 @@ export default function CompanyInfo({ user, onComplete }) {
           ...form,
           employer_type: employerType,
           tin_number: employerType === 'individual' ? null : tinNumber,
-          trade_license_url: employerType === 'individual' ? null : (form.trade_license_url || form.tradeLicenseName),
+          trade_license_url: employerType === 'individual' ? null : form.trade_license_url,
+          tradeLicenseName: employerType === 'individual' ? null : form.tradeLicenseName,
         },
         isOnboardingComplete: true,
       }));
@@ -314,7 +290,8 @@ export default function CompanyInfo({ user, onComplete }) {
         ...form,
         employer_type: employerType,
         tin_number: employerType === 'individual' ? null : tinNumber,
-        trade_license_url: employerType === 'individual' ? null : (form.trade_license_url || form.tradeLicenseName),
+        trade_license_url: employerType === 'individual' ? null : form.trade_license_url,
+        tradeLicenseName: employerType === 'individual' ? null : form.tradeLicenseName,
       }));
       setSuccess('Company profile saved successfully!');
       await new Promise((resolve) => setTimeout(resolve, 700));
@@ -333,61 +310,9 @@ export default function CompanyInfo({ user, onComplete }) {
 
   return (
     <div className="w-full max-w-full overflow-x-hidden bg-slate-50/50 pt-2">
-      <style>{ambientZoomStyles}</style>
-      <div className="grid min-h-[calc(100vh-88px)] w-full min-w-0 grid-cols-1 lg:grid-cols-12 sm:min-h-[calc(100vh-104px)]">
-        <aside className="relative hidden h-[calc(100vh-104px)] min-w-0 overflow-hidden bg-slate-100 lg:sticky lg:top-24 lg:col-span-5 lg:block">
-          <img
-            src={officeImage}
-            alt="Collaborative Office Team"
-            className="animate-ambient-zoom absolute inset-0 h-full w-full object-cover object-[30%_top] select-none pointer-events-none lg:object-[center_top]"
-          />
-          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-slate-900/10 to-slate-900/40 lg:to-transparent" />
-          <div className="absolute inset-0 flex items-end p-8 lg:p-12">
-            <div className="w-full max-w-xl">
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={currentSlideIndex}
-                  initial={{ opacity: 0, y: 15 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -15 }}
-                  transition={{ duration: 0.5, ease: 'easeOut' }}
-                  className="space-y-4"
-                >
-                  <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3.5 py-1.5 text-[11px] font-black uppercase tracking-[0.18em] text-white backdrop-blur-md">
-                    <span>{slides[currentSlideIndex].badge}</span>
-                  </div>
-
-                  <h1 className="text-3xl font-black leading-tight tracking-tight text-white drop-shadow-md lg:text-4xl">
-                    {slides[currentSlideIndex].heading}
-                  </h1>
-
-                  <div className="max-w-lg rounded-2xl border border-white/20 bg-white/10 p-4 text-xs leading-relaxed text-white/90 shadow-xl backdrop-blur-md sm:p-5 sm:text-sm">
-                    <p>{slides[currentSlideIndex].description}</p>
-                    <div className="mt-3 flex items-center gap-3 border-t border-white/10 pt-3 text-[11px] font-bold text-emerald-400">
-                      <span>98.4% AI Match Accuracy</span>
-                      <span>•</span>
-                      <span>Verified Profiles</span>
-                    </div>
-                  </div>
-                </motion.div>
-              </AnimatePresence>
-
-              <div className="mt-6 flex items-center gap-2">
-                {slides.map((_, index) => (
-                  <span
-                    key={index}
-                    className={`h-2.5 w-2.5 rounded-full transition-all duration-300 ${
-                      index === currentSlideIndex ? 'bg-white shadow-lg shadow-white/50' : 'bg-white/40'
-                    }`}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-        </aside>
-
-        <main className="h-[calc(100vh-88px)] min-w-0 max-w-full overflow-y-auto overflow-x-hidden bg-white p-6 text-left [scrollbar-color:#cbd5e1_transparent] [scrollbar-width:thin] sm:h-[calc(100vh-104px)] sm:p-10 lg:col-span-7 lg:p-12">
-          <div className="w-full max-w-2xl pb-10 sm:pb-14">
+      <div className="grid min-h-[calc(100vh-88px)] w-full min-w-0 grid-cols-1 sm:min-h-[calc(100vh-104px)]">
+        <main className="flex h-[calc(100vh-88px)] min-w-0 max-w-full justify-center overflow-y-auto overflow-x-hidden bg-white p-6 text-left [scrollbar-color:#cbd5e1_transparent] [scrollbar-width:thin] sm:h-[calc(100vh-104px)] sm:p-10 lg:p-12">
+          <div className="mx-auto w-full max-w-3xl pb-10 sm:pb-14">
             <header className="mb-8">
               <h1 className="mb-1.5 text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">Employer Profile Setup</h1>
               <p className="mb-8 text-xs font-bold text-slate-500 sm:text-sm">Add the essential information candidates need to understand your organization or household.</p>
@@ -477,6 +402,9 @@ export default function CompanyInfo({ user, onComplete }) {
                   <Field id="companyName" label={employerType === 'individual' ? 'Household / Family Name *' : 'Company Name'} value={form.company_name} onChange={(value) => update('company_name', value)} required error={errors.companyName} placeholder={employerType === 'individual' ? "e.g. Yabsira's Residence" : ''} />
                   {employerType === 'company' && <Field id="tinNumber" label="Tax Identification Number (TIN) *" value={form.tin_number} onChange={(value) => update('tin_number', value)} placeholder="e.g. 0012345678 (10 digits)" maxLength={10} error={errors.tinNumber} />}
                   {employerType === 'company' && <div className="sm:col-span-2">
+                    <Field id="tradeLicenseNumber" label="Trade License Number (Optional)" value={form.trade_license_number} onChange={(value) => update('trade_license_number', value)} placeholder="Enter the registered trade license number" />
+                  </div>}
+                  {employerType === 'company' && <div className="sm:col-span-2">
                     <label className="mb-1 block text-xs font-semibold text-slate-800 sm:text-sm">
                       Trade License / Registration Document (PDF) <span className="font-bold text-rose-500">*</span>
                     </label>
@@ -537,17 +465,6 @@ export default function CompanyInfo({ user, onComplete }) {
                     <Field label={<><span>Website</span> <span className="ml-1 text-xs font-normal italic text-slate-400">(Optional)</span></>} type="url" value={form.website} onChange={(value) => update('website', value)} placeholder="https://example.com" />
                     <Field label={<><span>Social Media</span> <span className="ml-1 text-xs font-normal italic text-slate-400">(Optional)</span></>} type="url" value={form.linkedin} onChange={(value) => update('linkedin', value)} placeholder="https://linkedin.com/company/..." />
                   </>}
-                  <div className="sm:col-span-2">
-                    <label className={labelClass}>{employerType === 'individual' ? <><span>About Household & Expectations</span> <span className="ml-1 text-xs font-normal italic text-slate-400">(Optional)</span></> : 'About Company (Optional)'}
-                      <textarea
-                        rows={3}
-                        value={form.description}
-                        onChange={(event) => update('description', event.target.value)}
-                        className="mt-2 w-full resize-y rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-xs font-semibold text-slate-900 placeholder:italic placeholder:text-xs placeholder:text-slate-400 placeholder:font-normal outline-none transition-all hover:bg-slate-50 focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-500/10 sm:text-sm"
-                        placeholder={employerType === 'individual' ? 'Briefly describe your household or specific requirements for candidates...' : 'Briefly describe what your organization does...'}
-                      />
-                    </label>
-                  </div>
                 </div>
               </section>
 

@@ -1,5 +1,7 @@
 const db = require('../connection');
 const { normalizeJobStatus } = require('../models/jobModel');
+const { createNotification } = require('../services/databaseNotificationService');
+const { sendJobRejectionEmail } = require('../services/notificationService');
 
 const safeExecute = async (query, params = [], fallback = []) => {
   try {
@@ -10,10 +12,70 @@ const safeExecute = async (query, params = [], fallback = []) => {
   }
 };
 
+const jobEmployerLegalFields = `
+  COALESCE(
+    (SELECT NULLIF(cp.tin_number, '') FROM company_profiles cp WHERE cp.employer_id = j.employer_id LIMIT 1),
+    (SELECT COALESCE(NULLIF(e.tin_number, ''), NULLIF(e.tinNumber, '')) FROM employers e WHERE e.user_id = j.employer_id OR e.userId = j.employer_id LIMIT 1)
+  ) AS employer_tin_number,
+  COALESCE(
+    (SELECT COALESCE(NULLIF(cp.company_registration_number, ''), NULLIF(cp.trade_license_number, '')) FROM company_profiles cp WHERE cp.employer_id = j.employer_id LIMIT 1),
+    (SELECT COALESCE(NULLIF(e.trade_license_document, ''), NULLIF(e.licenseDocumentUrl, '')) FROM employers e WHERE e.user_id = j.employer_id OR e.userId = j.employer_id LIMIT 1)
+  ) AS employer_trade_license_number,
+  COALESCE(
+    (SELECT NULLIF(cp.trade_license_url, '') FROM company_profiles cp WHERE cp.employer_id = j.employer_id LIMIT 1),
+    (SELECT COALESCE(NULLIF(e.licenseDocumentUrl, ''), NULLIF(e.trade_license_document, '')) FROM employers e WHERE e.user_id = j.employer_id OR e.userId = j.employer_id LIMIT 1)
+  ) AS employer_trade_license_url,
+  COALESCE(
+    (SELECT cp.verification_status FROM company_profiles cp WHERE cp.employer_id = j.employer_id LIMIT 1),
+    (SELECT COALESCE(e.verification_status, e.verificationStatus) FROM employers e WHERE e.user_id = j.employer_id OR e.userId = j.employer_id LIMIT 1)
+  ) AS employer_verification_status
+`;
+
+const hasEmployerLegalDocuments = (job) =>
+  Boolean(String(job?.employer_tin_number || '').trim() && (
+    String(job?.employer_trade_license_number || '').trim() ||
+    String(job?.employer_trade_license_url || '').trim()
+  ));
+
 const normalizeBoolean = (value) => {
   if (typeof value === 'boolean') return value;
   if (typeof value === 'number') return value === 1;
   return String(value || '').toLowerCase() === 'true' || value === 1;
+};
+
+const createJobModerationNotifications = async (executor, { employerId, jobId, jobTitle, status, reason }) => {
+  const rejected = status === 'rejected';
+  const title = rejected ? 'Job listing needs changes' : 'Job approved';
+  const message = rejected
+    ? `Your job listing '${jobTitle}' was rejected: ${reason}`
+    : `Your job listing '${jobTitle}' has been approved and is now live.`;
+  try {
+    await executor.execute(
+      `INSERT INTO notifications
+        (user_id, type, title, message, reference_type, reference_id, related_job_id, action_url)
+       VALUES (?, 'JOB_STATUS', ?, ?, 'JOB_STATUS', ?, ?, ?)`,
+      [employerId, title, message, jobId, jobId, '/employer/jobs']
+    );
+  } catch (error) {
+    console.warn('Generic employer notification skipped:', error.message);
+  }
+  try {
+    await executor.execute(
+      'INSERT INTO employer_notifications (employerId, title, body, isRead, related_job_id) VALUES (?, ?, ?, FALSE, ?)',
+      [employerId, title, message, jobId]
+    );
+  } catch (error) {
+    console.warn('Employer notification skipped:', error.message);
+  }
+  return { rejected, title, message };
+};
+
+const sendJobRejectionEmailSafely = async (job, reason) => {
+  try {
+    await sendJobRejectionEmail({ toEmail: job.employer_email, jobTitle: job.title, reason });
+  } catch (error) {
+    console.warn('Job rejection email skipped:', error.message);
+  }
 };
 
 exports.getAdminDashboardStats = async (req, res) => {
@@ -103,9 +165,51 @@ exports.updateVerificationStatus = async (req, res) => {
   }
 
   try {
+    if (status === 'verified') {
+      const [companyRows] = await db.execute(`
+        SELECT cp.employer_type,
+               COALESCE(NULLIF(cp.tin_number, ''), NULLIF(e.tin_number, ''), NULLIF(e.tinNumber, '')) AS tin_number,
+               COALESCE(NULLIF(cp.company_registration_number, ''), NULLIF(cp.trade_license_number, ''), NULLIF(e.trade_license_document, ''), NULLIF(e.licenseDocumentUrl, '')) AS trade_license_number,
+               COALESCE(NULLIF(cp.trade_license_url, ''), NULLIF(e.licenseDocumentUrl, ''), NULLIF(e.trade_license_document, '')) AS trade_license_url
+        FROM company_profiles cp
+        LEFT JOIN employers e ON e.user_id = cp.employer_id OR e.userId = cp.employer_id
+        WHERE cp.id = ? OR cp.employer_id = ?
+        LIMIT 1`,
+      [id, id]);
+      let profile = companyRows[0];
+      if (!profile) {
+        const [legacyRows] = await db.execute(`
+          SELECT employer_type,
+                 COALESCE(NULLIF(tin_number, ''), NULLIF(tinNumber, '')) AS tin_number,
+                 COALESCE(NULLIF(trade_license_document, ''), NULLIF(licenseDocumentUrl, '')) AS trade_license_number,
+                 COALESCE(NULLIF(licenseDocumentUrl, ''), NULLIF(trade_license_document, '')) AS trade_license_url
+          FROM employers WHERE id = ? OR user_id = ? OR userId = ? LIMIT 1`,
+        [id, id, id]);
+        profile = legacyRows[0];
+      }
+      if (profile && String(profile.employer_type || 'company').toLowerCase() !== 'individual' &&
+          (!profile.tin_number || (!profile.trade_license_number && !profile.trade_license_url))) {
+        return res.status(422).json({
+          success: false,
+          message: 'A TIN number and trade license number or document are required before approving this company.',
+        });
+      }
+    }
     const [profileResult] = await db.execute('UPDATE company_profiles SET is_verified = ?, verification_status = ?, verified_at = ? WHERE id = ? OR employer_id = ?', [status === 'verified' ? 1 : 0, status, status === 'verified' ? new Date() : null, id, id]);
     if (!profileResult.affectedRows) {
       await db.execute('UPDATE employers SET verification_status = ?, verificationStatus = ? WHERE id = ? OR user_id = ? OR userId = ?', [status, status, id, id, id]);
+    }
+    const [[employer]] = await db.execute('SELECT employer_id FROM company_profiles WHERE id = ? OR employer_id = ? LIMIT 1', [id, id]);
+    if (employer?.employer_id) {
+      await createNotification({
+        userId: employer.employer_id,
+        type: 'VERIFICATION',
+        title: 'Company Verification Updated',
+        message: `Your company verification status is now ${status}.`,
+        referenceType: 'VERIFICATION',
+        referenceId: employer.employer_id,
+        relatedUserId: req.user.id,
+      });
     }
     return res.json({ success: true, message: `Company marked as ${status}` });
   } catch (error) {
@@ -118,6 +222,7 @@ exports.getAllJobsForModeration = async (req, res) => {
   try {
     const [jobs] = await db.execute(`
       SELECT j.*, cp.company_name, cp.logo_url, cp.location AS company_location,
+              ${jobEmployerLegalFields},
              COUNT(a.id) AS total_applicants
       FROM jobs j
       LEFT JOIN company_profiles cp ON j.employer_id = cp.employer_id
@@ -149,8 +254,16 @@ exports.getAdminDashboardData = async (req, res) => {
           COALESCE(cp.representative_name, e.representative_name, he.full_name, u.full_name) AS rep_name,
           u.email AS rep_email,
           COALESCE(cp.phone, e.phone_number, e.phoneNumber, he.phone_number, u.phone) AS rep_phone,
+          COALESCE(cp.employer_type, e.employer_type, he.employer_type, 'company') AS employer_type,
           COALESCE(cp.industry, e.industry, he.industry) AS industry,
           COALESCE(cp.location, e.location, e.headquarters_location, he.residence_location) AS location,
+          COALESCE(cp.tin_number, e.tin_number, e.tinNumber) AS tin_number,
+          COALESCE(cp.company_registration_number, cp.trade_license_number, e.trade_license_document, e.licenseDocumentUrl) AS trade_license_number,
+          COALESCE(cp.trade_license_url, e.licenseDocumentUrl, e.trade_license_document) AS trade_license_url,
+          COALESCE(cp.description, cp.company_summary, e.about_company, e.description, he.about_household) AS profile_description,
+          COALESCE(cp.website, e.website) AS website,
+          COALESCE(cp.social_media_urls, e.social_media) AS social_media,
+          cp.hiring_volume,
           COALESCE(cp.verification_status, e.verification_status, e.verificationStatus, 'pending') AS verification_status,
           COALESCE(cp.is_verified, 0) AS is_verified,
           COALESCE(cp.created_at, e.created_at, he.created_at, u.created_at) AS created_at
@@ -161,7 +274,16 @@ exports.getAdminDashboardData = async (req, res) => {
         WHERE u.role IN ('employer', 'company', 'recruiter')
         ORDER BY created_at DESC
       `),
-      safeExecute(`SELECT j.*, cp.company_name, cp.logo_url, cp.location AS company_location, COUNT(a.id) AS total_applicants FROM jobs j LEFT JOIN company_profiles cp ON j.employer_id = cp.employer_id LEFT JOIN applications a ON j.id = a.job_id GROUP BY j.id ORDER BY j.created_at DESC`),
+      safeExecute(`
+         SELECT j.*, cp.company_name, cp.logo_url, cp.location AS company_location,
+           ${jobEmployerLegalFields},
+               COUNT(a.id) AS total_applicants
+        FROM jobs j
+        LEFT JOIN company_profiles cp ON j.employer_id = cp.employer_id
+        LEFT JOIN applications a ON j.id = a.job_id
+        GROUP BY j.id
+        ORDER BY j.created_at DESC
+      `),
       safeExecute('SELECT id, full_name, email, phone, role, is_verified, is_active, created_at FROM users ORDER BY created_at DESC'),
       safeExecute(`SELECT u.full_name, u.email, u.role, l.activity_type, l.related_job_id, l.created_at FROM user_activity_log l LEFT JOIN users u ON u.id = l.user_id ORDER BY l.created_at DESC LIMIT 30`),
       safeExecute(`SELECT a.id, a.status, a.ai_match_score, a.skills_match_score, a.experience_match_score, a.education_match_score, a.location_match_score, a.applied_at, candidate.full_name AS candidate_name, j.title AS job_title, employer.full_name AS employer_name FROM applications a JOIN users candidate ON candidate.id = a.job_seeker_id JOIN jobs j ON j.id = a.job_id JOIN users employer ON employer.id = j.employer_id ORDER BY a.applied_at DESC LIMIT 100`),
@@ -263,9 +385,16 @@ exports.moderateJob = async (req, res) => {
   const connection = await db.getConnection();
   try {
     await connection.beginTransaction();
-    const [rows] = await connection.execute('SELECT j.id, j.title, j.employer_id, u.email AS employer_email FROM jobs j JOIN users u ON u.id = j.employer_id WHERE j.id = ? FOR UPDATE', [jobId]);
+    const [rows] = await connection.execute(`
+      SELECT j.id, j.title, j.employer_id, u.email AS employer_email,
+             ${jobEmployerLegalFields}
+      FROM jobs j JOIN users u ON u.id = j.employer_id WHERE j.id = ? FOR UPDATE`, [jobId]);
     if (!rows.length) { await connection.rollback(); return res.status(404).json({ success: false, message: 'Job not found.' }); }
     const job = rows[0];
+    if (nextStatus === 'active' && !hasEmployerLegalDocuments(job)) {
+      await connection.rollback();
+      return res.status(422).json({ success: false, message: 'Employer TIN and trade license details are required before approving this job.' });
+    }
     await connection.execute(
       `UPDATE jobs
        SET status = ?,
@@ -279,28 +408,32 @@ exports.moderateJob = async (req, res) => {
        WHERE id = ?`,
          [nextStatus, nextStatus === 'active', nextStatus === 'rejected' ? reason : null, nextStatus === 'active' ? req.user.id : null, nextStatus, req.user.id, jobId]
     );
-    const message = nextStatus === 'active' ? `Your job listing '${job.title}' has been approved and is now live.` : `Your job listing '${job.title}' was rejected: ${reason}`;
-    try {
-      await connection.execute('INSERT INTO notifications (user_id, type, title, message, related_job_id, action_url) VALUES (?, \'company-update\', ?, ?, ?, ?)', [job.employer_id, nextStatus === 'active' ? 'Job approved' : 'Job listing needs changes', message, jobId, '/employer/jobs']);
-    } catch (notificationError) {
-      console.warn('Generic employer notification skipped:', notificationError.message);
-    }
-    try {
-      await connection.execute('INSERT INTO employer_notifications (employerId, title, body, isRead, related_job_id) VALUES (?, ?, ?, FALSE, ?)', [job.employer_id, nextStatus === 'active' ? 'Job approved' : 'Job listing needs changes', message, jobId]);
-    } catch (notificationError) {
-      console.warn('Employer notification skipped:', notificationError.message);
-    }
+    await createJobModerationNotifications(connection, {
+      employerId: job.employer_id,
+      jobId,
+      jobTitle: job.title,
+      status: nextStatus,
+      reason,
+    });
     try {
       await connection.execute('INSERT INTO admin_actions_log (admin_id, action_type, target_job_id, reason) VALUES (?, \'content-moderated\', ?, ?)', [req.user.id, jobId, reason || `Job status changed to ${nextStatus}`]);
     } catch (auditError) {
       console.warn('Admin moderation audit skipped:', auditError.message);
     }
     await connection.commit();
+    if (nextStatus === 'rejected') await sendJobRejectionEmailSafely(job, reason);
     return res.json({ success: true, status: nextStatus, message: nextStatus === 'active' ? 'Job approved and published successfully!' : 'Job posting has been rejected.' });
   } catch (error) {
     await connection.rollback();
     console.error('Admin job moderation error:', error);
-    return res.status(500).json({ success: false, message: 'Failed to persist job moderation action.' });
+    const message = process.env.NODE_ENV === 'production'
+      ? 'Failed to persist job moderation action.'
+      : `Failed to persist job moderation action: ${error.message}`;
+    return res.status(500).json({
+      success: false,
+      message,
+      ...(process.env.NODE_ENV === 'production' ? {} : { code: error.code }),
+    });
   } finally {
     connection.release();
   }
@@ -345,8 +478,14 @@ exports.toggleJobStatus = async (req, res) => {
       return res.status(422).json({ success: false, message: 'A rejection reason is required.' });
     }
 
-    const [rows] = await db.execute('SELECT id, title, employer_id FROM jobs WHERE id = ?', [jobId]);
+    const [rows] = await db.execute(`
+      SELECT j.id, j.title, j.employer_id, u.email AS employer_email,
+             ${jobEmployerLegalFields}
+      FROM jobs j JOIN users u ON u.id = j.employer_id WHERE j.id = ?`, [jobId]);
     if (!rows.length) return res.status(404).json({ success: false, message: 'Job not found.' });
+    if (nextStatus === 'active' && !hasEmployerLegalDocuments(rows[0])) {
+      return res.status(422).json({ success: false, message: 'Employer TIN and trade license details are required before approving this job.' });
+    }
 
     await db.execute(
       `UPDATE jobs
@@ -363,20 +502,14 @@ exports.toggleJobStatus = async (req, res) => {
     );
 
     if (nextStatus === 'active' || nextStatus === 'rejected') {
-      const message = nextStatus === 'active'
-        ? `Your job listing '${rows[0].title}' has been approved and is now live.`
-        : `Your job listing '${rows[0].title}' was rejected: ${reason}`;
-      const title = nextStatus === 'active' ? 'Job approved' : 'Job listing needs changes';
-      try {
-        await db.execute('INSERT INTO notifications (user_id, type, title, message, related_job_id, action_url) VALUES (?, \'company-update\', ?, ?, ?, ?)', [rows[0].employer_id, title, message, jobId, '/employer/jobs']);
-      } catch (notificationError) {
-        console.warn('Generic employer notification skipped:', notificationError.message);
-      }
-      try {
-        await db.execute('INSERT INTO employer_notifications (employerId, title, body, isRead, related_job_id) VALUES (?, ?, ?, FALSE, ?)', [rows[0].employer_id, title, message, jobId]);
-      } catch (notificationError) {
-        console.warn('Employer notification skipped:', notificationError.message);
-      }
+      await createJobModerationNotifications(db, {
+        employerId: rows[0].employer_id,
+        jobId,
+        jobTitle: rows[0].title,
+        status: nextStatus,
+        reason,
+      });
+      if (nextStatus === 'rejected') await sendJobRejectionEmailSafely(rows[0], reason);
       try {
         await db.execute('INSERT INTO admin_actions_log (admin_id, action_type, target_job_id, reason) VALUES (?, \'content-moderated\', ?, ?)', [req.user.id, jobId, reason || `Job status changed to ${nextStatus}`]);
       } catch (auditError) {

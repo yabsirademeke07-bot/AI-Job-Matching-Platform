@@ -1,5 +1,6 @@
 const db = require('../config/db');
 const { calculateMatchScore } = require('../services/matchScoreService');
+const { createNotification } = require('../services/databaseNotificationService');
 
 const normalize = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9+#.]+/g, ' ').trim();
 const tokens = (value) => normalize(value).split(' ').filter((token) => token.length > 2);
@@ -192,6 +193,17 @@ async function createApplication(req, res) {
     );
     await connection.query('UPDATE jobs SET application_count = application_count + 1 WHERE id = ?', [jobId]);
     await connection.commit();
+    await createNotification({
+      userId: job.employer_id,
+      type: 'APPLICATION',
+      title: 'New Application',
+      message: `${profile.full_name || 'A candidate'} applied for ${job.title}.`,
+      referenceType: 'APPLICATION',
+      referenceId: result.insertId,
+      jobId,
+      applicationId: result.insertId,
+      relatedUserId: req.user.id,
+    });
     return res.status(201).json({ success: true, application: { id: result.insertId, jobId: Number(jobId), seekerId: req.user.id, appliedAt: new Date().toISOString(), status: 'pending_review', hasCv: Boolean(cv?.id), resumeSnapshot: snapshot, matchScore: match.score, matchBreakdown: match.breakdown, skillsMatchScore: match.breakdown.skills, experienceMatchScore: match.breakdown.experience, educationMatchScore: match.breakdown.education, locationMatchScore: match.breakdown.location, coverLetter: String(coverLetter || '') } });
   } catch (error) {
     await connection.rollback();

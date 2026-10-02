@@ -71,6 +71,21 @@ const statusClass = {
 };
 const formatDate = (value) =>
   value ? new Date(value).toLocaleDateString() : "Not provided";
+const hasCompanyVerificationDocuments = (company) =>
+  String(company?.employer_type || 'company').toLowerCase() === 'individual' ||
+  Boolean(String(company?.tin_number || '').trim() && (
+    String(company?.trade_license_number || '').trim() ||
+    String(company?.trade_license_url || '').trim()
+  ));
+const hasJobApprovalDocuments = (job) =>
+  Boolean(String(job?.employer_tin_number || '').trim() && (
+    String(job?.employer_trade_license_number || '').trim() ||
+    String(job?.employer_trade_license_url || '').trim()
+  ));
+const getSafeLicenseDocumentUrl = (value) => {
+  const url = String(value || '').trim();
+  return /^https?:\/\//i.test(url) || url.startsWith('/uploads/') ? url : '';
+};
 
 function AdminDashboard() {
   const { user, logout } = useAuth();
@@ -218,15 +233,15 @@ function AdminDashboard() {
     );
   return (
     <div className="admin-shell min-h-screen bg-slate-50 text-slate-900 lg:flex">
-      <aside className={`admin-sidebar w-full shrink-0 border-r border-slate-800 bg-[#061b41] text-white lg:min-h-screen lg:w-64 ${sidebarOpen ? "block" : "hidden lg:block"}`}>
+      <aside className={`admin-sidebar w-full shrink-0 border-r border-[var(--brand-deep)] bg-[var(--brand-deep)] text-white lg:min-h-screen lg:w-64 ${sidebarOpen ? "block" : "hidden lg:block"}`}>
         <div className="sticky top-0 p-5 lg:h-screen">
           <div className="flex items-center gap-3">
-            <div className="rounded-xl bg-blue-500/20 p-2.5 text-blue-300">
+            <div className="rounded-xl bg-white/15 p-2.5 text-white">
               <ShieldCheck className="h-5 w-5" />
             </div>
             <div>
               <p className="font-black text-white">SmartRecruit AI</p>
-              <p className="text-xs text-blue-200/70">Admin workspace</p>
+              <p className="text-xs text-white/75">Admin workspace</p>
             </div>
           </div>
           <nav
@@ -238,7 +253,7 @@ function AdminDashboard() {
                 key={id}
                 type="button"
                 onClick={() => { setSidebarOpen(false); go(path); }}
-                className={`flex items-center gap-3 border-l-4 px-3 py-2.5 text-left text-sm font-medium transition-colors ${activeTab === id ? "border-blue-300 bg-blue-600 text-white font-semibold" : "border-transparent text-blue-100/75 hover:bg-white/10 hover:text-white"}`}
+                className={`flex items-center gap-3 border-l-4 px-3 py-2.5 text-left text-sm font-medium transition-colors ${activeTab === id ? "border-white bg-[var(--brand-primary)] text-white font-semibold" : "border-transparent text-white/85 hover:bg-white/10 hover:text-white"}`}
               >
                 <Icon className="h-4 w-4 shrink-0" />
                 <span>{label}</span>
@@ -589,6 +604,10 @@ function AdminOverview({ stats, overview, go }) {
   );
   const [moderatingJobId, setModeratingJobId] = useState(null);
   const moderatePendingJob = async (job, action) => {
+    if (action === 'approve' && !hasJobApprovalDocuments(job)) {
+      window.alert('Employer TIN and trade license details are required before approving this job.');
+      return;
+    }
     const reason = action === "reject" ? window.prompt("Enter a reason for rejecting this job:")?.trim() : "";
     if (action === "reject" && !reason) return;
 
@@ -686,7 +705,7 @@ function AdminOverview({ stats, overview, go }) {
                   <p className="mt-1 truncate text-xs text-slate-500">{job.company_name || job.employer_name || "Employer"} · {job.location || "Location not provided"}</p>
                 </div>
                 <div className="flex shrink-0 gap-2">
-                  <button type="button" disabled={moderatingJobId === job.id} onClick={() => moderatePendingJob(job, "approve")} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50">Approve</button>
+                  <button type="button" disabled={moderatingJobId === job.id || !hasJobApprovalDocuments(job)} title={hasJobApprovalDocuments(job) ? 'Approve job' : 'Employer TIN and trade license are required.'} onClick={() => moderatePendingJob(job, "approve")} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">Approve</button>
                   <button type="button" disabled={moderatingJobId === job.id} onClick={() => moderatePendingJob(job, "reject")} className="rounded-lg bg-rose-600 px-3 py-2 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-50">Reject</button>
                 </div>
               </div>
@@ -884,6 +903,10 @@ function DataTable({ title, icon: Icon, headers, rows, empty }) {
 function AdminModule({ tab, overview, go }) {
   const [processingId, setProcessingId] = useState(null);
   const [selectedJob, setSelectedJob] = useState(null);
+  const [selectedNotification, setSelectedNotification] = useState(null);
+  const [rejectingJob, setRejectingJob] = useState(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [selectedCompany, setSelectedCompany] = useState(null);
   const [jobRows, setJobRows] = useState(overview.jobs || []);
   useEffect(() => {
     if (tab === "jobs") setJobRows(overview.jobs || []);
@@ -904,22 +927,39 @@ function AdminModule({ tab, overview, go }) {
                 : tab === "activity"
                   ? overview.logs || []
                   : [];
-  const handleJobModeration = async (job, action) => {
-    const reason = action === "reject" ? window.prompt("Enter a reason for rejecting this job:")?.trim() : "";
-    if (action === "reject" && !reason) return;
-
+  const handleJobModeration = async (job, action, reason = '') => {
+    const normalizedReason = String(reason || '').trim();
+    if (action === 'reject' && !normalizedReason) return false;
+    if (action === 'approve' && !hasJobApprovalDocuments(job)) {
+      window.alert('Employer TIN and trade license details are required before approving this job.');
+      return false;
+    }
     setProcessingId(job.id);
     const nextStatus = action === "approve" ? "active" : "rejected";
     setJobRows((current) => current.map((item) => String(item.id) === String(job.id)
-      ? { ...item, status: nextStatus, is_approved: action === "approve", isApproved: action === "approve" }
+      ? { ...item, status: nextStatus, rejection_reason: normalizedReason || null, is_approved: action === "approve", isApproved: action === "approve" }
       : item));
     try {
-      await moderateJob(job.id, action, reason);
+      await moderateJob(job.id, action, normalizedReason);
+      setSelectedJob((current) => current && String(current.id) === String(job.id)
+        ? { ...current, status: nextStatus, rejection_reason: normalizedReason || null }
+        : current);
+      return true;
     } catch (error) {
       setJobRows((current) => current.map((item) => String(item.id) === String(job.id) ? job : item));
       window.alert(error.response?.data?.message || "Unable to update this job.");
+      return false;
     } finally {
       setProcessingId(null);
+    }
+  };
+  const submitJobRejection = async (event) => {
+    event.preventDefault();
+    if (!rejectingJob || !rejectReason.trim()) return;
+    const rejected = await handleJobModeration(rejectingJob, 'reject', rejectReason);
+    if (rejected) {
+      setRejectingJob(null);
+      setRejectReason('');
     }
   };
   const runRowAction = async (row, action) => {
@@ -1041,20 +1081,22 @@ function AdminModule({ tab, overview, go }) {
                   {tab === "jobs" ? (
                     <div className="flex flex-wrap justify-end gap-2">
                       <button type="button" onClick={() => setSelectedJob(row)} className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Details</button>
-                      {String(row.status || "").toLowerCase() === "rejected" ? <span className="rounded-xl border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700">✕ Rejected</span> : String(row.status || "").toLowerCase() === "active" || String(row.status || "").toLowerCase() === "published" && (row.is_approved === true || row.is_approved === 1 || row.isApproved === true) ? <span className="rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">✓ Approved</span> : <><button type="button" disabled={processingId === row.id} onClick={() => handleJobModeration(row, "approve")} className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50">Approve</button><button type="button" disabled={processingId === row.id} onClick={() => handleJobModeration(row, "reject")} className="rounded-lg bg-rose-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-50">Reject</button></>}
+                      {String(row.status || "").toLowerCase() === "rejected" ? <span className="rounded-xl border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700">✕ Rejected</span> : String(row.status || "").toLowerCase() === "active" || String(row.status || "").toLowerCase() === "published" && (row.is_approved === true || row.is_approved === 1 || row.isApproved === true) ? <span className="rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">✓ Approved</span> : <><button type="button" disabled={processingId === row.id || !hasJobApprovalDocuments(row)} title={hasJobApprovalDocuments(row) ? 'Approve job' : 'Employer TIN and trade license are required.'} onClick={() => handleJobModeration(row, "approve")} className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">Approve</button><button type="button" disabled={processingId === row.id} onClick={() => handleJobModeration(row, "reject")} className="rounded-lg bg-rose-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-50">Reject</button></>}
+                    </div>
+                  ) : tab === "companies" ? (
+                    <div className="flex justify-end gap-2">
+                      <button type="button" onClick={() => setSelectedCompany(row)} className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Details</button>
+                      {String(row.verification_status || "").toLowerCase() === "pending" && <><button type="button" disabled={processingId === row.id || !hasCompanyVerificationDocuments(row)} title={hasCompanyVerificationDocuments(row) ? 'Approve company' : 'TIN and trade license details are required before approval.'} onClick={() => runRowAction(row, "verified")} className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">Approve</button><button type="button" disabled={processingId === row.id} onClick={() => runRowAction(row, "rejected")} className="rounded-lg bg-rose-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-50">Reject</button></>}
                     </div>
                   ) : tab === "users" ? (
                     <button type="button" disabled={processingId === row.id} onClick={() => runRowAction(row, "toggle")} className="rounded-lg bg-slate-800 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-slate-700 disabled:opacity-50">{row.is_active ? "Suspend" : "Activate"}</button>
-                  ) : tab === "companies" && ["pending"].includes(String(row.verification_status || "").toLowerCase()) ? (
-                    <div className="flex justify-end gap-2">
-                      <button type="button" disabled={processingId === row.id} onClick={() => runRowAction(row, "verified")} className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50">Approve</button>
-                      <button type="button" disabled={processingId === row.id} onClick={() => runRowAction(row, "rejected")} className="rounded-lg bg-rose-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-50">Reject</button>
-                    </div>
                   ) : tab === "reports" && ["pending", "under-review"].includes(String(row.status || "").toLowerCase()) ? (
                     <div className="flex justify-end gap-2">
                       <button type="button" disabled={processingId === row.id} onClick={() => runRowAction(row, "resolved")} className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50">Resolve</button>
                       <button type="button" disabled={processingId === row.id} onClick={() => runRowAction(row, "dismissed")} className="rounded-lg bg-slate-700 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-50">Dismiss</button>
                     </div>
+                  ) : tab === "notifications" ? (
+                    <button type="button" onClick={() => setSelectedNotification(row)} className="text-xs font-bold text-blue-600 hover:text-blue-800">View</button>
                   ) : (
                     <button type="button" onClick={() => go(getModulePath())} className="text-xs font-bold text-blue-600 hover:text-blue-800">View</button>
                   )}
@@ -1082,8 +1124,79 @@ function AdminModule({ tab, overview, go }) {
               <button type="button" onClick={() => setSelectedJob(null)} className="rounded-lg px-3 py-1 text-sm font-bold text-slate-500 hover:bg-slate-100">Close</button>
             </div>
             <div className="mt-6 grid gap-3 sm:grid-cols-3"><div className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Status</p><p className="mt-1 font-bold text-slate-900">{selectedJob.status || "Pending"}</p></div><div className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Job type</p><p className="mt-1 font-bold text-slate-900">{selectedJob.job_type || selectedJob.type || "Not provided"}</p></div><div className="rounded-xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Created</p><p className="mt-1 font-bold text-slate-900">{formatDate(selectedJob.created_at)}</p></div></div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-xl border border-slate-100 bg-slate-50 p-3"><p className="text-xs text-slate-500">Employer TIN</p><p className="mt-1 break-words font-bold text-slate-900">{selectedJob.employer_tin_number || 'Not provided'}</p></div>
+              <div className="rounded-xl border border-slate-100 bg-slate-50 p-3"><p className="text-xs text-slate-500">Trade license / registration</p><p className="mt-1 break-words font-bold text-slate-900">{selectedJob.employer_trade_license_number || 'Not provided'}</p></div>
+              <div className="rounded-xl border border-slate-100 bg-slate-50 p-3"><p className="text-xs text-slate-500">License document</p><p className="mt-1 break-words text-sm font-bold text-slate-900">{getSafeLicenseDocumentUrl(selectedJob.employer_trade_license_url) ? <a href={getSafeLicenseDocumentUrl(selectedJob.employer_trade_license_url)} target="_blank" rel="noreferrer" className="text-blue-700 underline">Open license</a> : selectedJob.employer_trade_license_url ? 'Document link unavailable' : 'Not provided'}</p></div>
+            </div>
+            {!hasJobApprovalDocuments(selectedJob) && <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">Approval is unavailable until the employer provides a TIN and trade license number or document.</p>}
             <p className="mt-6 whitespace-pre-wrap text-sm leading-7 text-slate-700">{selectedJob.description || "No job description provided."}</p>
-            <div className="mt-6 flex flex-wrap justify-end gap-2"><button type="button" disabled={processingId === selectedJob.id} onClick={() => handleJobModeration(selectedJob, "approve")} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50">Approve</button><button type="button" disabled={processingId === selectedJob.id} onClick={() => handleJobModeration(selectedJob, "reject")} className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700 disabled:opacity-50">Reject</button></div>
+            <div className="mt-6 flex flex-wrap justify-end gap-2"><button type="button" disabled={processingId === selectedJob.id || !hasJobApprovalDocuments(selectedJob)} title={hasJobApprovalDocuments(selectedJob) ? 'Approve job' : 'Employer TIN and trade license are required.'} onClick={() => handleJobModeration(selectedJob, "approve")} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">Approve</button><button type="button" disabled={processingId === selectedJob.id} onClick={() => { setRejectingJob(selectedJob); setRejectReason(''); }} className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700 disabled:opacity-50">Reject</button></div>
+          </div>
+        </div>
+      )}
+      {rejectingJob && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-labelledby="reject-job-title">
+          <form onSubmit={submitJobRejection} className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+            <h2 id="reject-job-title" className="text-xl font-black text-slate-900">Reject job listing</h2>
+            <p className="mt-2 text-sm text-slate-600">Enter the reason. The employer will see it in dashboard notifications.</p>
+            <p className="mt-3 text-sm font-bold text-slate-800">{rejectingJob.title || 'Untitled job'}</p>
+            <label htmlFor="job-rejection-reason" className="mt-5 block text-sm font-bold text-slate-700">Rejection reason</label>
+            <textarea
+              id="job-rejection-reason"
+              autoFocus
+              required
+              value={rejectReason}
+              onChange={(event) => setRejectReason(event.target.value)}
+              rows={4}
+              maxLength={2000}
+              placeholder="Explain what needs to be corrected..."
+              className="mt-2 w-full resize-y rounded-xl border border-slate-300 p-3 text-sm text-slate-900 outline-none focus:border-rose-500 focus:ring-4 focus:ring-rose-500/10"
+            />
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" disabled={processingId === rejectingJob.id} onClick={() => { setRejectingJob(null); setRejectReason(''); }} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">Cancel</button>
+              <button type="submit" disabled={!rejectReason.trim() || processingId === rejectingJob.id} className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50">{processingId === rejectingJob.id ? 'Rejecting...' : 'Reject job'}</button>
+            </div>
+          </form>
+        </div>
+      )}
+      {selectedCompany && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" role="dialog" aria-modal="true" aria-label="Employer profile details">
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl sm:p-8">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-5">
+              <div><p className="text-xs font-bold uppercase tracking-widest text-blue-600">Employer profile review</p><h2 className="mt-1 text-2xl font-black text-slate-900">{selectedCompany.company_name || "Unnamed employer"}</h2><p className="mt-1 text-sm text-slate-500">{selectedCompany.industry || "Industry not provided"} · {selectedCompany.location || "Location not provided"}</p></div>
+              <button type="button" onClick={() => setSelectedCompany(null)} className="rounded-lg px-3 py-1 text-sm font-bold text-slate-500 hover:bg-slate-100">Close</button>
+            </div>
+            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+              {[['Representative', selectedCompany.rep_name], ['Email', selectedCompany.rep_email], ['Phone', selectedCompany.rep_phone], ['TIN', selectedCompany.tin_number], ['Trade license / registration number', selectedCompany.trade_license_number], ['License document', selectedCompany.trade_license_url], ['Website', selectedCompany.website], ['Hiring volume', selectedCompany.hiring_volume], ['Verification', selectedCompany.verification_status], ['Submitted', formatDate(selectedCompany.created_at)]].map(([label, value]) => <div key={label} className="rounded-xl border border-slate-100 bg-slate-50 p-4"><p className="text-xs font-bold uppercase tracking-wider text-slate-400">{label}</p><p className="mt-1 break-words text-sm font-semibold text-slate-800">{label === 'License document' && value ? <a href={value} target="_blank" rel="noreferrer" className="text-blue-700 underline">Open license document</a> : value || 'Not provided'}</p></div>)}
+            </div>
+            {!hasCompanyVerificationDocuments(selectedCompany) && <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">Approval is unavailable until a TIN and trade license number or document are submitted.</p>}
+            <div className="mt-5 rounded-xl border border-slate-100 p-4"><p className="text-xs font-bold uppercase tracking-wider text-slate-400">Additional information</p><p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{selectedCompany.profile_description || 'No additional information provided.'}</p></div>
+          </div>
+        </div>
+      )}
+      {selectedNotification && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" role="dialog" aria-modal="true" aria-labelledby="admin-notification-title">
+          <div className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-blue-600">Notification details</p>
+                <h2 id="admin-notification-title" className="mt-1 text-xl font-black text-slate-900">{selectedNotification.title || 'Notification'}</h2>
+              </div>
+              <button type="button" onClick={() => setSelectedNotification(null)} className="rounded-lg px-3 py-1 text-sm font-bold text-slate-500 hover:bg-slate-100">Close</button>
+            </div>
+            <dl className="mt-5 grid gap-4 sm:grid-cols-2">
+              <div className="rounded-xl bg-slate-50 p-3"><dt className="text-xs text-slate-500">Recipient</dt><dd className="mt-1 break-words text-sm font-bold text-slate-800">{selectedNotification.recipient_name || selectedNotification.user_id || 'Not available'}</dd></div>
+              <div className="rounded-xl bg-slate-50 p-3"><dt className="text-xs text-slate-500">Type</dt><dd className="mt-1 text-sm font-bold text-slate-800">{selectedNotification.type || 'System'}</dd></div>
+              <div className="rounded-xl bg-slate-50 p-3"><dt className="text-xs text-slate-500">Status</dt><dd className="mt-1 text-sm font-bold text-slate-800">{selectedNotification.is_read ? 'Read' : 'Unread'}</dd></div>
+              <div className="rounded-xl bg-slate-50 p-3"><dt className="text-xs text-slate-500">Date</dt><dd className="mt-1 text-sm font-bold text-slate-800">{formatDate(selectedNotification.created_at)}</dd></div>
+              {selectedNotification.related_job_id && <div className="rounded-xl bg-slate-50 p-3"><dt className="text-xs text-slate-500">Related job</dt><dd className="mt-1 text-sm font-bold text-slate-800">#{selectedNotification.related_job_id}</dd></div>}
+              {selectedNotification.related_application_id && <div className="rounded-xl bg-slate-50 p-3"><dt className="text-xs text-slate-500">Related application</dt><dd className="mt-1 text-sm font-bold text-slate-800">#{selectedNotification.related_application_id}</dd></div>}
+            </dl>
+            <div className="mt-4 rounded-xl border border-slate-100 p-4">
+              <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Message</p>
+              <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-slate-700">{selectedNotification.message || 'No message provided.'}</p>
+            </div>
           </div>
         </div>
       )}

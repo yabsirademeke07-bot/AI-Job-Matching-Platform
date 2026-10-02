@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Bell, Check, Save, Settings } from 'lucide-react';
+import { Bell, Check, CheckCheck, Loader2, MessageSquareText, RefreshCw, Save, Settings, Trash2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
-
-const fallbackNotifications = [{ id: 'n-1', title: 'New candidate match', body: 'A registered seeker matches your Senior React Developer role at 94%.', read: false }];
+import { deleteNotification, deleteReadNotifications, getNotifications, markAllNotificationsAsRead, markNotificationAsRead } from '../../services/notificationService';
+import { deleteConversation, getConversation, getConversations, getUnreadMessageCount, markConversationAsRead, sendMessage } from '../../services/messageService';
 
 function read(key, fallback) { try { return JSON.parse(localStorage.getItem(key) || 'null') || fallback; } catch { return fallback; } }
 
-export function EmployerMessages() {
+function LegacyEmployerMessages() {
   const [search, setSearch] = useState('');
   const [conversationId, setConversationId] = useState('');
   const [input, setInput] = useState('');
@@ -430,40 +431,251 @@ export function EmployerMessages() {
   );
 }
 
-export function EmployerNotifications() {
-  const [notifications, setNotifications] = useState(fallbackNotifications);
+export function EmployerMessages() {
+  const [conversations, setConversations] = useState([]);
+  const [selectedId, setSelectedId] = useState('');
+  const [activeConversation, setActiveConversation] = useState(null);
+  const [search, setSearch] = useState('');
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [opening, setOpening] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState('');
+  const [sendError, setSendError] = useState('');
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [mobileChat, setMobileChat] = useState(false);
 
-  useEffect(() => {
-    let mounted = true;
-    const loadNotifications = async () => {
-      try {
-        const { data } = await api.get('/employer/notifications');
-        if (mounted && Array.isArray(data?.notifications)) {
-          setNotifications(data.notifications.length ? data.notifications : []);
-        }
-      } catch (requestError) {
-        if (mounted) setNotifications(read('employerNotifications', fallbackNotifications));
-        console.warn('Unable to load employer notifications:', requestError);
-      }
-    };
-    loadNotifications();
-    const intervalId = window.setInterval(loadNotifications, 10000);
-    return () => {
-      mounted = false;
-      window.clearInterval(intervalId);
-    };
-  }, []);
-
-  const markRead = async (item) => {
-    setNotifications((current) => current.map((notification) => notification.id === item.id ? { ...notification, isRead: true, read: true } : notification));
+  const loadConversations = async () => {
+    setLoading(true);
+    setError('');
     try {
-      await api.patch(`/employer/notifications/${item.id}/read`);
-    } catch (requestError) {
-      console.warn('Unable to mark notification as read:', requestError);
+      const [{ data }, countResponse] = await Promise.all([getConversations(), getUnreadMessageCount()]);
+      setConversations(data?.data || data?.conversations || []);
+      setUnreadCount(Number(countResponse.data?.data?.count || 0));
+      window.dispatchEvent(new Event('employer-messages:updated'));
+    } catch {
+      setError('Unable to load conversations.');
+    } finally {
+      setLoading(false);
     }
   };
 
-  return <ViewFrame icon={Bell} title="Notifications" subtitle="Stay current with candidates, jobs, and team activity.">{notifications.length ? notifications.map((item) => <article key={item.id} className={`flex items-start gap-4 rounded-2xl border p-5 ${item.isRead || item.is_read || item.read ? 'border-slate-200 bg-white' : 'border-blue-200 bg-blue-50/50'}`}><Bell className="mt-1 h-5 w-5 shrink-0 text-blue-600" /><div className="min-w-0 flex-1"><h3 className="font-black text-slate-900">{item.title}</h3><p className="mt-1 text-sm text-slate-600">{item.body || item.message}</p>{item.createdAt && <p className="mt-2 text-xs text-slate-400">{new Date(item.createdAt).toLocaleString()}</p>}</div>{!(item.isRead || item.is_read || item.read) && <button onClick={() => markRead(item)} className="inline-flex items-center gap-1 text-xs font-bold text-blue-700"><Check className="h-4 w-4" /> Mark read</button>}</article>) : <p className="rounded-2xl border border-dashed border-slate-200 bg-white p-8 text-center text-sm text-slate-500">No notifications yet.</p>}</ViewFrame>;
+  useEffect(() => { loadConversations(); }, []);
+
+  const openConversation = async (conversationId) => {
+    setSelectedId(String(conversationId));
+    setMobileChat(true);
+    setOpening(true);
+    setError('');
+    try {
+      const { data } = await getConversation(conversationId);
+      setActiveConversation(data?.data || data?.conversation || null);
+      setError('');
+      setUnreadCount((current) => Math.max(0, current - Number(conversations.find((item) => String(item.conversationId) === String(conversationId))?.unreadCount || 0)));
+      await markConversationAsRead(conversationId);
+      window.dispatchEvent(new Event('employer-messages:updated'));
+    } catch {
+      setError('Unable to open conversation.');
+    } finally {
+      setOpening(false);
+    }
+  };
+
+  const handleSend = async (event) => {
+    event.preventDefault();
+    const message = input.trim();
+    if (!message) { setSendError('Please enter a message.'); return; }
+    if (message.length > 5000) { setSendError('Message is too large.'); return; }
+    if (!selectedId) return;
+    setSending(true);
+    setSendError('');
+    try {
+      const { data } = await sendMessage(selectedId, message);
+      const saved = data?.data || data?.message;
+      setActiveConversation((current) => ({ ...current, messages: [...(current?.messages || []), saved] }));
+      setConversations((current) => current.map((item) => String(item.conversationId) === String(selectedId) ? { ...item, lastMessage: message, lastMessageTime: new Date().toISOString() } : item));
+      setInput('');
+      window.dispatchEvent(new Event('employer-messages:updated'));
+    } catch {
+      setSendError('Message could not be sent.');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const removeConversation = async (conversation) => {
+    if (!window.confirm('Are you sure you want to delete this conversation?')) return;
+    try {
+      await deleteConversation(conversation.conversationId);
+      setConversations((current) => current.filter((item) => item.conversationId !== conversation.conversationId));
+      if (String(selectedId) === String(conversation.conversationId)) { setSelectedId(''); setActiveConversation(null); setMobileChat(false); }
+      window.dispatchEvent(new Event('employer-messages:updated'));
+    } catch { setError('Unable to delete conversation.'); }
+  };
+
+  const filteredConversations = conversations.filter((item) => `${item.candidateName || ''} ${item.jobTitle || ''}`.toLowerCase().includes(search.toLowerCase()));
+  const formatTime = (value) => value ? new Date(value).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '';
+  const messages = activeConversation?.messages || [];
+
+  return <ViewFrame icon={MessageSquareText} title="Messages" subtitle="Communicate with candidates connected to your recruitment workflow."><div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><div className="grid min-h-[560px] md:grid-cols-[minmax(240px,0.36fr)_1fr]"> <aside className={`${mobileChat ? 'hidden md:block' : 'block'} border-b border-slate-200 md:border-b-0 md:border-r`}><div className="border-b border-slate-100 p-4"><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search candidates..." className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-blue-500" /></div>{loading ? <div className="flex items-center justify-center gap-2 p-8 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" />Loading...</div> : error && !conversations.length ? <div className="p-6 text-center"><p className="text-sm font-bold text-red-600">{error}</p><button type="button" onClick={loadConversations} className="mt-3 rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white">Retry</button></div> : filteredConversations.length ? <div className="divide-y divide-slate-100">{filteredConversations.map((item) => <div key={item.conversationId} className={`flex items-start gap-2 p-4 ${String(selectedId) === String(item.conversationId) ? 'bg-blue-50' : 'hover:bg-slate-50'}`}><button type="button" onClick={() => openConversation(item.conversationId)} className="min-w-0 flex-1 text-left"><p className="truncate font-black text-slate-800">{item.candidateName || 'Candidate'}</p><p className="truncate text-xs text-slate-500">{item.jobTitle || 'Application'}</p><p className="mt-1 truncate text-xs text-slate-400">{item.lastMessage || 'No messages yet.'}</p></button><div className="flex shrink-0 flex-col items-end gap-2"><span className="text-[10px] text-slate-400">{formatTime(item.lastMessageTime)}</span>{Number(item.unreadCount) > 0 && <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-black text-white">{item.unreadCount}</span>}<button type="button" onClick={() => removeConversation(item)} className="text-[10px] font-bold text-slate-400 hover:text-red-600">Delete</button></div></div>)}</div> : <p className="p-8 text-center text-sm text-slate-500">No conversations yet.</p>}</aside><section className={`${mobileChat ? 'block' : 'hidden md:block'} min-w-0`}>{opening ? <div className="flex h-full min-h-[560px] items-center justify-center gap-2 text-sm text-slate-500"><Loader2 className="h-5 w-5 animate-spin" />Opening conversation...</div> : activeConversation ? <><div className="flex items-center gap-3 border-b border-slate-200 p-4"><button type="button" onClick={() => setMobileChat(false)} className="md:hidden text-sm font-bold text-blue-600">← Back</button><div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 font-black text-blue-700">{(activeConversation.conversation?.candidateName || 'C').charAt(0)}</div><div className="min-w-0"><h3 className="truncate font-black text-slate-900">{activeConversation.conversation?.candidateName || 'Candidate'}</h3><p className="truncate text-xs text-slate-500">{activeConversation.conversation?.jobTitle || 'Application'} · {activeConversation.conversation?.candidateStatus || 'Active'}</p></div></div><div className="flex min-h-[390px] flex-col gap-3 overflow-y-auto bg-slate-50 p-4">{messages.length ? messages.map((message) => <div key={message.id} className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm ${String(message.senderId) === String(activeConversation.conversation?.employerId) ? 'self-end bg-blue-600 text-white' : 'self-start bg-white text-slate-700 shadow-sm'}`}><p>{message.message}</p><p className="mt-1 text-[10px] opacity-70">{formatTime(message.createdAt)}</p></div>) : <div className="m-auto text-center text-sm text-slate-500"><p>No messages yet.</p><p className="mt-1">Start the conversation.</p></div>}</div><form onSubmit={handleSend} className="border-t border-slate-200 p-4"><div className="flex gap-2"><input value={input} onChange={(event) => { setInput(event.target.value); setSendError(''); }} placeholder="Write a message..." className="min-w-0 flex-1 rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500" /><button type="submit" disabled={sending} className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white disabled:opacity-50">{sending ? 'Sending...' : 'Send'}</button></div>{sendError && <p className="mt-2 text-xs font-semibold text-red-600">{sendError}</p>}</form></> : <div className="flex min-h-[560px] items-center justify-center p-8 text-center text-sm text-slate-500">Select a candidate conversation.</div>}</section></div></div></ViewFrame>;
+}
+
+export function EmployerNotifications() {
+  const navigate = useNavigate();
+  const [notifications, setNotifications] = useState([]);
+  const [filter, setFilter] = useState('ALL');
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [busyId, setBusyId] = useState(null);
+
+  const loadNotifications = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const { data } = await getNotifications();
+      setNotifications(data?.data || data?.notifications || []);
+      setUnreadCount(Number(data?.unreadCount || 0));
+      window.dispatchEvent(new Event('employer-notifications:updated'));
+    } catch {
+      setError('Unable to load notifications.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadNotifications();
+    const intervalId = window.setInterval(loadNotifications, 30000);
+    return () => window.clearInterval(intervalId);
+  }, []);
+
+  const markRead = async (item) => {
+    if (item.isRead) return;
+    setBusyId(item.id);
+    setNotifications((current) => current.map((notification) => notification.id === item.id ? { ...notification, isRead: true } : notification));
+    setUnreadCount((current) => Math.max(0, current - 1));
+    try {
+      await markNotificationAsRead(item.id);
+      window.dispatchEvent(new Event('employer-notifications:updated'));
+    } catch {
+      await loadNotifications();
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const markAllRead = async () => {
+    setBusyId('all');
+    try {
+      await markAllNotificationsAsRead();
+      setNotifications((current) => current.map((item) => ({ ...item, isRead: true })));
+      setUnreadCount(0);
+      window.dispatchEvent(new Event('employer-notifications:updated'));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const remove = async (item) => {
+    setBusyId(item.id);
+    try {
+      await deleteNotification(item.id);
+      setNotifications((current) => current.filter((notification) => notification.id !== item.id));
+      if (!item.isRead) setUnreadCount((current) => Math.max(0, current - 1));
+      window.dispatchEvent(new Event('employer-notifications:updated'));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const removeRead = async () => {
+    if (!notifications.some((item) => item.isRead)) return;
+    setBusyId('read');
+    try {
+      await deleteReadNotifications();
+      setNotifications((current) => current.filter((item) => !item.isRead));
+      window.dispatchEvent(new Event('employer-notifications:updated'));
+    } catch {
+      await loadNotifications();
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const openNotification = async (item) => {
+    await markRead(item);
+    const destinations = { APPLICATION: 'applications', SHORTLIST: 'applications', INTERVIEW: 'hired', MESSAGE: 'messages', AI_MATCH: 'matching', JOB_STATUS: 'jobs', VERIFICATION: 'profile', INVITATION: 'talent-pool', HIRING: 'hired', SYSTEM: 'overview' };
+    navigate(`/employer/dashboard?view=${destinations[item.referenceType] || 'overview'}`);
+  };
+
+  const visibleNotifications = notifications.filter((item) => {
+    if (filter === 'UNREAD') return !item.isRead;
+    if (filter === 'APPLICATIONS') return ['APPLICATION', 'SHORTLIST', 'INVITATION'].includes(item.type);
+    if (filter === 'INTERVIEWS') return item.type === 'INTERVIEW';
+    if (filter === 'MESSAGES') return item.type === 'MESSAGE';
+    if (filter === 'AI') return item.type === 'AI_MATCH';
+    if (filter === 'SYSTEM') return ['JOB_STATUS', 'VERIFICATION', 'HIRING', 'SYSTEM'].includes(item.type);
+    return true;
+  });
+
+  const readCount = notifications.filter((item) => item.isRead).length;
+
+  return (
+    <ViewFrame icon={Bell} title="Notifications" subtitle="Stay current with candidates, jobs, and team activity.">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-2">
+          {[
+            ['ALL', 'All'],
+            ['UNREAD', `Unread (${unreadCount})`],
+            ['APPLICATIONS', 'Applications'],
+            ['INTERVIEWS', 'Interviews'],
+            ['MESSAGES', 'Messages'],
+            ['AI', 'AI Matching'],
+            ['SYSTEM', 'System'],
+          ].map(([value, label]) => (
+            <button type="button" key={value} onClick={() => setFilter(value)} className={`rounded-xl px-3 py-2 text-xs font-bold ${filter === value ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-blue-50'}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-4">
+          <button type="button" disabled={!unreadCount || busyId === 'all'} onClick={markAllRead} className="inline-flex items-center gap-1 text-xs font-bold text-blue-700 disabled:opacity-40">
+            <CheckCheck className="h-4 w-4" /> Mark all as read
+          </button>
+          <button type="button" disabled={!readCount || busyId === 'read'} onClick={removeRead} className="inline-flex items-center gap-1 text-xs font-bold text-rose-600 disabled:opacity-40" title="Delete all read notifications">
+            <Trash2 className="h-4 w-4" /> Delete read ({readCount})
+          </button>
+        </div>
+      </div>
+      {loading ? (
+        <div className="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white p-10 text-sm font-bold text-slate-500"><Loader2 className="h-5 w-5 animate-spin" /> Loading notifications...</div>
+      ) : error ? (
+        <div className="rounded-2xl border border-red-100 bg-red-50 p-6 text-center"><p className="text-sm font-bold text-red-700">{error}</p><button type="button" onClick={loadNotifications} className="mt-3 inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-xs font-bold text-white"><RefreshCw className="h-4 w-4" /> Retry</button></div>
+      ) : visibleNotifications.length ? (
+        visibleNotifications.map((item) => (
+          <article key={item.id} onClick={() => openNotification(item)} className={`flex cursor-pointer items-start gap-4 rounded-2xl border p-5 ${item.isRead ? 'border-slate-200 bg-white' : 'border-blue-200 bg-blue-50/50'}`}>
+            <Bell className="mt-1 h-5 w-5 shrink-0 text-blue-600" />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className={`font-black ${item.isRead ? 'text-slate-800' : 'text-slate-950'}`}>{item.title}</h3>
+                <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-500">{item.type}</span>
+                {!item.isRead && <span className="h-2 w-2 rounded-full bg-blue-600" />}
+              </div>
+              <p className="mt-1 text-sm text-slate-600">{item.message}</p>
+              <p className="mt-2 text-xs text-slate-400">{new Date(item.createdAt).toLocaleString()}</p>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              {!item.isRead && <button type="button" disabled={busyId === item.id} onClick={(event) => { event.stopPropagation(); markRead(item); }} className="inline-flex items-center gap-1 text-xs font-bold text-blue-700"><Check className="h-4 w-4" /> Read</button>}
+              <button type="button" disabled={busyId === item.id} onClick={(event) => { event.stopPropagation(); remove(item); }} className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label="Delete notification"><Trash2 className="h-4 w-4" /></button>
+            </div>
+          </article>
+        ))
+      ) : (
+        <p className="rounded-2xl border border-dashed border-slate-200 bg-white p-8 text-center text-sm text-slate-500">{filter === 'UNREAD' ? "You're all caught up." : 'No notifications yet.'}</p>
+      )}
+    </ViewFrame>
+  );
 }
 
 export function EmployerSettings() {

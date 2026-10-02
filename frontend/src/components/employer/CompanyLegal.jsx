@@ -27,10 +27,16 @@ const initialData = {
   isVerified: false,
 };
 
+const getLocalPhoneDigits = (number = '') => {
+  let digits = String(number || '').replace(/\D/g, '');
+  if (digits.startsWith('251')) digits = digits.slice(3);
+  if (digits.startsWith('0')) digits = digits.slice(1);
+  return digits;
+};
+
 const normalizePhoneNumber = (number = '') => {
-  const digits = String(number || '').replace(/\D/g, '').slice(0, 9);
-  if (!digits) return '';
-  return `+251${digits}`;
+  const digits = getLocalPhoneDigits(number).slice(0, 9);
+  return digits ? `+251${digits}` : '';
 };
 
 function buildFieldState(company = {}) {
@@ -62,8 +68,8 @@ export default function CompanyLegal({ company, onSaveSuccess }) {
   const [formData, setFormData] = useState(() => buildFieldState(company));
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
-  const [phoneOperator, setPhoneOperator] = useState(() => (String(company?.phone || '').replace(/\D/g, '').startsWith('7') ? 'safaricom' : 'ethio-telecom'));
-  const [phoneNumber, setPhoneNumber] = useState(() => String(company?.phone || '').replace(/\D/g, '').replace(/^251/, '').replace(/^0/, '').slice(0, 9));
+  const [phoneOperator, setPhoneOperator] = useState(() => (getLocalPhoneDigits(company?.phone).startsWith('7') ? 'safaricom' : 'ethio-telecom'));
+  const [phoneNumber, setPhoneNumber] = useState(() => getLocalPhoneDigits(company?.phone).slice(0, 9));
   const lastSavedSignatureRef = useRef('');
   const fieldRefs = useRef({});
   const errorsTimerRef = useRef(null);
@@ -78,8 +84,8 @@ export default function CompanyLegal({ company, onSaveSuccess }) {
   }, [company]);
 
   useEffect(() => {
-    setPhoneOperator((current) => (String(formData.phone || '').replace(/\D/g, '').startsWith('7') ? 'safaricom' : current || 'ethio-telecom'));
-    setPhoneNumber(String(formData.phone || '').replace(/\D/g, '').replace(/^251/, '').replace(/^0/, '').slice(0, 9));
+    setPhoneOperator((current) => (getLocalPhoneDigits(formData.phone).startsWith('7') ? 'safaricom' : current || 'ethio-telecom'));
+    setPhoneNumber(getLocalPhoneDigits(formData.phone).slice(0, 9));
   }, [formData.phone]);
 
   useEffect(() => {
@@ -115,8 +121,10 @@ export default function CompanyLegal({ company, onSaveSuccess }) {
     const nextErrors = {};
     const companyName = String(data.companyName || '').trim();
     const workEmail = String(data.workEmail || '').trim();
-    const phoneDigits = String(data.phone || '').replace(/\D/g, '');
+    const phoneDigits = getLocalPhoneDigits(data.phone);
     const tin = String(data.tinNumber || '').trim();
+    const expectedPhonePrefix = phoneOperator === 'safaricom' ? '7' : '9';
+    const phoneExample = phoneOperator === 'safaricom' ? '712345678' : '912345678';
 
     if (!companyName) nextErrors.companyName = 'Company Name is required.';
     else if (!/^[a-zA-Z\s]+$/.test(companyName)) nextErrors.companyName = 'Must contain letters only (no numbers or symbols).';
@@ -124,7 +132,9 @@ export default function CompanyLegal({ company, onSaveSuccess }) {
     if (!workEmail) nextErrors.workEmail = 'Official email address is required.';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(workEmail)) nextErrors.workEmail = 'Please enter a valid business email.';
     if (!phoneDigits) nextErrors.phone = 'Phone number is required.';
-    else if (phoneDigits.length < 9 || phoneDigits.length > 10) nextErrors.phone = 'Please enter a valid phone number (e.g. 0911223344).';
+    else if (phoneDigits.length !== 9 || !new RegExp(`^${expectedPhonePrefix}\\d{8}$`).test(phoneDigits)) {
+      nextErrors.phone = `Enter a 9-digit ${phoneOperator === 'safaricom' ? 'Safaricom' : 'Ethio Telecom'} number, e.g. ${phoneExample}.`;
+    }
     if (!tin) nextErrors.tinNumber = 'TIN number is required.';
     else if (!/^\d{10}$/.test(tin)) nextErrors.tinNumber = 'TIN must be exactly 10 digits.';
     if (!String(data.companyRegistrationNumber || '').trim() && !String(data.licenseDocumentUrl || '').trim()) nextErrors.tradeLicense = 'Trade License PDF document is required.';
@@ -267,7 +277,11 @@ export default function CompanyLegal({ company, onSaveSuccess }) {
                   type="tel"
                   inputMode="numeric"
                   value={phoneNumber}
-                  onChange={(event) => { setPhoneNumber(event.target.value.replace(/\D/g, '').slice(0, 9)); update('phone', event.target.value); }}
+                  onChange={(event) => {
+                    const digits = getLocalPhoneDigits(event.target.value).slice(0, 9);
+                    setPhoneNumber(digits);
+                    update('phone', normalizePhoneNumber(digits));
+                  }}
                   className={`h-11 w-full rounded-xl border bg-slate-50 px-3 text-sm font-semibold text-slate-800 outline-none transition focus:ring-4 ${errors.phone ? 'border-rose-400 ring-1 ring-rose-400/20 bg-rose-50/10' : 'border-slate-200 focus:border-blue-500 focus:ring-blue-500/10'}`}
                   placeholder="912345678"
                 />

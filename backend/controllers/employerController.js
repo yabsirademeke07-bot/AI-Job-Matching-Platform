@@ -1,4 +1,5 @@
 const db = require('../connection');
+const { createNotification } = require('../services/databaseNotificationService');
 
 const normalizeList = (value) => {
   if (Array.isArray(value)) return value;
@@ -97,8 +98,11 @@ const getOwnedJob = async (connection, jobId, employerId) => {
 exports.getCompanyProfile = async (req, res) => {
   try {
     const [employmentRows] = await db.execute('SELECT * FROM employers WHERE user_id = ? OR userId = ? LIMIT 1', [req.user.id, req.user.id]);
+    const [companyProfileRows] = await db.execute('SELECT * FROM company_profiles WHERE employer_id = ? LIMIT 1', [req.user.id]);
     const [householdRows] = await db.execute('SELECT * FROM household_employers WHERE user_id = ? LIMIT 1', [req.user.id]);
-    const profile = employmentRows[0] || householdRows[0] || null;
+    const profile = companyProfileRows[0]
+      ? { ...(employmentRows[0] || {}), ...companyProfileRows[0] }
+      : employmentRows[0] || householdRows[0] || null;
     return res.json({ success: true, profile: profile || null });
   } catch (error) {
     console.error('Get Company Profile Error:', error);
@@ -153,7 +157,10 @@ exports.updateCompanyProfile = async (req, res) => {
     const jobTitle = nullable(data.jobTitle || data.position || data.representative_title);
     const companyPhone = phone;
     const tinNumber = nullable(data.tinNumber || data.tin_number || data.taxId);
-    const tradeDoc = nullable(data.tradeLicenseName || data.tradeLicenseFile || data.trade_license_url || data.trade_license_number);
+    const companyRegistrationNumber = nullable(data.companyRegistrationNumber || data.company_registration_number);
+    const tradeLicenseNumber = nullable(data.tradeLicenseNumber || data.trade_license_number || companyRegistrationNumber);
+    const tradeLicenseUrl = nullable(data.tradeLicenseUrl || data.trade_license_url || data.licenseDocumentUrl || data.license_document_url);
+    const tradeDoc = tradeLicenseUrl || tradeLicenseNumber;
     const industry = nullable(data.industry);
     const companySize = nullable(data.companySize || data.company_size) || '11-50';
     const headquarters = nullable(data.headquarters || data.headquartersLocation || data.location);
@@ -179,6 +186,28 @@ exports.updateCompanyProfile = async (req, res) => {
         verification_status = VALUES(verification_status), updated_at = NOW()`,
       [userId, userId, employerType, fullName, fullName, jobTitle, jobTitle, workEmail, companyPhone, companyName, tinNumber,
         tradeDoc, industry, companySize, companySize, headquarters, website, socialMedia, aboutCompany, 'Pending']
+    );
+    await db.execute(
+      `INSERT INTO company_profiles (
+        employer_id, company_name, representative_name, representative_title, employer_type,
+        work_email, phone, tin_number, company_registration_number, trade_license_number, trade_license_url, industry,
+        company_size, website, description, company_summary, location, social_media_urls,
+        hiring_volume, linkedin, onboarding_completed, verification_status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, 'pending')
+      ON DUPLICATE KEY UPDATE
+        company_name = VALUES(company_name), representative_name = VALUES(representative_name),
+        representative_title = VALUES(representative_title), employer_type = VALUES(employer_type),
+        work_email = VALUES(work_email), phone = VALUES(phone), tin_number = VALUES(tin_number),
+        company_registration_number = VALUES(company_registration_number),
+        trade_license_number = VALUES(trade_license_number), trade_license_url = VALUES(trade_license_url),
+        industry = VALUES(industry), company_size = VALUES(company_size), website = VALUES(website),
+        description = VALUES(description), company_summary = VALUES(company_summary), location = VALUES(location),
+        social_media_urls = VALUES(social_media_urls), hiring_volume = VALUES(hiring_volume),
+        linkedin = VALUES(linkedin), onboarding_completed = TRUE, verification_status = 'pending', updated_at = NOW()` ,
+      [userId, companyName, fullName, jobTitle, employerType, workEmail, companyPhone, tinNumber,
+        companyRegistrationNumber, tradeLicenseNumber, tradeLicenseUrl,
+        industry, companySize, website, aboutCompany, aboutCompany, headquarters, socialMedia,
+        nullable(data.hiringVolume || data.hiring_volume), nullable(data.linkedin)]
     );
     await db.execute("INSERT INTO user_activity_log (user_id, activity_type) VALUES (?, 'profile-update')", [req.user.id]).catch(() => {});
     return res.json({ success: true, message: 'Company profile saved successfully!' });
@@ -467,6 +496,28 @@ exports.updateApplicationStatus = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Application not found.' });
     }
 
+    const [[details]] = await db.execute(
+      `SELECT a.job_id AS jobId, a.job_seeker_id AS candidateId, u.full_name AS candidateName, j.title AS jobTitle
+       FROM applications a JOIN jobs j ON j.id = a.job_id JOIN users u ON u.id = a.job_seeker_id
+       WHERE a.id = ? AND j.employer_id = ?`,
+      [req.params.applicationId, req.user.id]
+    );
+    if (details && ['shortlisted', 'hired'].includes(requestedStatus)) {
+      await createNotification({
+        userId: details.candidateId,
+        type: requestedStatus === 'hired' ? 'HIRING' : 'SHORTLIST',
+        title: requestedStatus === 'hired' ? 'You have been hired' : 'Candidate Shortlisted',
+        message: requestedStatus === 'hired'
+          ? `You have been hired for ${details.jobTitle}.`
+          : `You have been shortlisted for ${details.jobTitle}.`,
+        referenceType: requestedStatus === 'hired' ? 'HIRING' : 'SHORTLIST',
+        referenceId: details.jobId,
+        jobId: details.jobId,
+        applicationId: req.params.applicationId,
+        relatedUserId: req.user.id,
+      });
+    }
+
     return res.json({ success: true, status: requestedStatus });
   } catch (error) {
     console.error('Update Application Status Error:', error);
@@ -690,10 +741,21 @@ exports.scheduleInterview = async (req, res) => {
   const scheduledAt = scheduled_at || `${scheduledDate}T${scheduledTime}`;
   if (!targetApplication || !scheduledAt) return res.status(400).json({ success: false, message: 'Application and schedule are required.' });
   try {
-    const [owned] = await db.execute('SELECT a.id FROM applications a JOIN jobs j ON j.id = a.job_id WHERE a.id = ? AND j.employer_id = ?', [targetApplication, req.user.id]);
+    const [owned] = await db.execute('SELECT a.id, a.job_id AS jobId, a.job_seeker_id AS candidateId, u.full_name AS candidateName, j.title AS jobTitle FROM applications a JOIN jobs j ON j.id = a.job_id JOIN users u ON u.id = a.job_seeker_id WHERE a.id = ? AND j.employer_id = ?', [targetApplication, req.user.id]);
     if (!owned.length) return res.status(404).json({ success: false, message: 'Application not found.' });
     await db.execute(`INSERT INTO interviews (application_id, interview_type, scheduled_at, duration_minutes, interview_url, interview_status, interviewer_id, notes) VALUES (?, ?, ?, ?, ?, 'scheduled', ?, ?) ON DUPLICATE KEY UPDATE interview_type = VALUES(interview_type), scheduled_at = VALUES(scheduled_at), duration_minutes = VALUES(duration_minutes), interview_url = VALUES(interview_url), interview_status = 'scheduled', notes = VALUES(notes)`, [targetApplication, interview_type || interviewType || 'video', scheduledAt, duration_minutes || 60, interview_url || meetingLink || null, req.user.id, notes || null]);
     await db.execute("UPDATE applications SET status = 'interview' WHERE id = ?", [targetApplication]);
+    await createNotification({
+      userId: owned[0].candidateId,
+      type: 'INTERVIEW',
+      title: 'Interview Scheduled',
+      message: `An interview has been scheduled with ${owned[0].candidateName} for ${owned[0].jobTitle}.`,
+      referenceType: 'INTERVIEW',
+      referenceId: targetApplication,
+      jobId: owned[0].jobId,
+      applicationId: targetApplication,
+      relatedUserId: req.user.id,
+    });
     return res.json({ success: true, message: 'Interview scheduled.' });
   } catch (error) { return res.status(500).json({ success: false, message: 'Failed to schedule interview.' }); }
 };
@@ -754,6 +816,12 @@ exports.sendEmployerMessage = async (req, res) => {
       const [owned] = await db.execute('SELECT id FROM conversations WHERE id = ? AND employer_id = ?', [conversationId, req.user.id]);
       if (!owned.length) return res.status(404).json({ success: false, message: 'Conversation not found.' });
     } else {
+      const [relationship] = await db.execute(
+        `SELECT 1 FROM applications a JOIN jobs j ON j.id = a.job_id WHERE j.employer_id = ? AND a.job_seeker_id = ?
+         UNION SELECT 1 FROM job_invitations WHERE employerId = ? AND candidateId = ? LIMIT 1`,
+        [req.user.id, candidateId, req.user.id, candidateId]
+      );
+      if (!relationship.length) return res.status(403).json({ success: false, message: 'A valid application or invitation is required to start a conversation.' });
       const [existing] = await db.execute('SELECT id FROM conversations WHERE employer_id = ? AND job_seeker_id = ? ORDER BY updated_at DESC LIMIT 1', [req.user.id, candidateId]);
       if (existing.length) conversationId = existing[0].id;
       else {
@@ -761,8 +829,10 @@ exports.sendEmployerMessage = async (req, res) => {
         conversationId = created.insertId;
       }
     }
-    const [result] = await db.execute('INSERT INTO messages (conversation_id, sender_id, message_text, is_read) VALUES (?, ?, ?, TRUE)', [conversationId, req.user.id, body]);
+    const [[conversation]] = await db.execute('SELECT id, job_seeker_id AS candidateId FROM conversations WHERE id = ? AND employer_id = ?', [conversationId, req.user.id]);
+    const [result] = await db.execute('INSERT INTO messages (conversation_id, sender_id, receiver_id, message_text, is_read) VALUES (?, ?, ?, ?, TRUE)', [conversationId, req.user.id, conversation.candidateId, body]);
     await db.execute('UPDATE conversations SET last_message_at = NOW(), updated_at = NOW() WHERE id = ?', [conversationId]);
+    await createNotification({ userId: conversation.candidateId, type: 'MESSAGE', title: 'New Message', message: 'You received a new message from an employer.', referenceType: 'MESSAGE', referenceId: result.insertId, relatedUserId: req.user.id });
     return res.status(201).json({ success: true, messageId: result.insertId, conversationId });
   } catch (error) {
     console.error('Send Employer Message Error:', error);
@@ -770,10 +840,116 @@ exports.sendEmployerMessage = async (req, res) => {
   }
 };
 
+exports.getEmployerConversations = async (req, res) => {
+  try {
+    const [rows] = await db.execute(
+            `SELECT c.id AS conversationId, c.employer_id AS employerId, c.job_seeker_id AS candidateId, u.full_name AS candidateName,
+              COALESCE(u.profile_picture_url, u.avatar_url) AS candidatePhoto, j.title AS jobTitle,
+              (SELECT m.message_text FROM messages m WHERE m.conversation_id = c.id ORDER BY m.created_at DESC LIMIT 1) AS lastMessage,
+              COALESCE(c.last_message_at, c.updated_at, c.created_at) AS lastMessageTime,
+              (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id AND m.receiver_id = ? AND m.is_read = FALSE) AS unreadCount
+       FROM conversations c
+       JOIN users u ON u.id = c.job_seeker_id
+       LEFT JOIN jobs j ON j.id = c.job_id
+       WHERE c.employer_id = ? AND c.status <> 'archived'
+       ORDER BY lastMessageTime DESC`,
+      [req.user.id, req.user.id]
+    );
+    return res.json({ success: true, data: rows, conversations: rows });
+  } catch (error) {
+    console.error('Employer Conversations Error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to load conversations.' });
+  }
+};
+
+exports.getEmployerConversation = async (req, res) => {
+  try {
+    const [[conversation]] = await db.execute(
+            `SELECT c.id AS conversationId, c.employer_id AS employerId, c.job_seeker_id AS candidateId, u.full_name AS candidateName,
+              u.email AS candidateEmail, COALESCE(u.profile_picture_url, u.avatar_url) AS candidatePhoto, j.title AS jobTitle,
+              COALESCE(a.status, 'active') AS candidateStatus
+       FROM conversations c JOIN users u ON u.id = c.job_seeker_id
+       LEFT JOIN jobs j ON j.id = c.job_id
+       LEFT JOIN applications a ON a.job_id = c.job_id AND a.job_seeker_id = c.job_seeker_id
+       WHERE c.id = ? AND c.employer_id = ? LIMIT 1`,
+      [req.params.conversationId, req.user.id]
+    );
+    if (!conversation) return res.status(404).json({ success: false, message: 'Conversation not found.' });
+    const [messages] = await db.execute(
+      `SELECT m.id, m.conversation_id AS conversationId, m.sender_id AS senderId, m.receiver_id AS receiverId,
+              m.message_text AS message, m.is_read AS isRead, m.read_at AS readAt, m.created_at AS createdAt
+       FROM messages m WHERE m.conversation_id = ? ORDER BY m.created_at ASC`,
+      [req.params.conversationId]
+    );
+    await db.execute('UPDATE messages SET is_read = TRUE, read_at = NOW() WHERE conversation_id = ? AND receiver_id = ?', [req.params.conversationId, req.user.id]);
+    return res.json({ success: true, data: { conversation, messages } });
+  } catch (error) {
+    console.error('Employer Conversation Error:', error);
+    return res.status(500).json({ success: false, message: 'Unable to load conversation.' });
+  }
+};
+
+exports.sendConversationMessage = async (req, res) => {
+  try {
+    const message = String(req.body?.message || '').trim();
+    if (!message) return res.status(400).json({ success: false, message: 'Please enter a message.' });
+    if (message.length > 5000) return res.status(400).json({ success: false, message: 'Message is too large.' });
+    const [[conversation]] = await db.execute('SELECT id, job_seeker_id AS candidateId FROM conversations WHERE id = ? AND employer_id = ? AND status <> \'archived\'', [req.params.conversationId, req.user.id]);
+    if (!conversation) return res.status(404).json({ success: false, message: 'Conversation not found.' });
+    const [result] = await db.execute('INSERT INTO messages (conversation_id, sender_id, receiver_id, message_text, is_read) VALUES (?, ?, ?, ?, TRUE)', [conversation.id, req.user.id, conversation.candidateId, message]);
+    await db.execute('UPDATE conversations SET last_message_at = NOW(), updated_at = NOW() WHERE id = ? AND employer_id = ?', [conversation.id, req.user.id]);
+    await createNotification({ userId: conversation.candidateId, type: 'MESSAGE', title: 'New Message', message: 'You received a new message from an employer.', referenceType: 'MESSAGE', referenceId: result.insertId, relatedUserId: req.user.id });
+    const [[saved]] = await db.execute('SELECT id, conversation_id AS conversationId, sender_id AS senderId, receiver_id AS receiverId, message_text AS message, is_read AS isRead, created_at AS createdAt FROM messages WHERE id = ?', [result.insertId]);
+    return res.status(201).json({ success: true, data: saved, message: saved });
+  } catch (error) {
+    console.error('Send Conversation Message Error:', error);
+    return res.status(500).json({ success: false, message: 'Message could not be sent.' });
+  }
+};
+
+exports.markEmployerConversationRead = async (req, res) => {
+  try {
+    const [result] = await db.execute('UPDATE messages m JOIN conversations c ON c.id = m.conversation_id SET m.is_read = TRUE, m.read_at = NOW() WHERE m.conversation_id = ? AND c.employer_id = ? AND m.receiver_id = ?', [req.params.conversationId, req.user.id, req.user.id]);
+    if (!result.affectedRows) return res.status(200).json({ success: true, data: { marked: 0 } });
+    return res.json({ success: true, data: { marked: result.affectedRows } });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Unable to mark conversation as read.' });
+  }
+};
+
+exports.getEmployerUnreadMessageCount = async (req, res) => {
+  try {
+    const [[row]] = await db.execute('SELECT COUNT(*) AS count FROM messages m JOIN conversations c ON c.id = m.conversation_id WHERE c.employer_id = ? AND m.receiver_id = ? AND m.is_read = FALSE', [req.user.id, req.user.id]);
+    return res.json({ success: true, data: { count: Number(row?.count || 0) } });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Unable to load unread message count.' });
+  }
+};
+
+exports.deleteEmployerConversation = async (req, res) => {
+  try {
+    const [result] = await db.execute('DELETE FROM conversations WHERE id = ? AND employer_id = ?', [req.params.conversationId, req.user.id]);
+    if (!result.affectedRows) return res.status(404).json({ success: false, message: 'Conversation not found.' });
+    return res.json({ success: true });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Unable to delete conversation.' });
+  }
+};
+
 exports.getEmployerNotifications = async (req, res) => {
   try {
-    const [rows] = await db.execute('SELECT * FROM employer_notifications WHERE employerId = ? ORDER BY createdAt DESC', [req.user.id]);
-    return res.json({ success: true, notifications: rows });
+    const userId = req.user.id || req.user.userId;
+    const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 100);
+    const offset = Math.max(Number(req.query.offset) || 0, 0);
+    const [rows] = await db.execute(
+      `SELECT id, type, title, message, reference_type AS referenceType, reference_id AS referenceId,
+              related_job_id AS jobId, related_application_id AS applicationId, is_read AS isRead,
+              created_at AS createdAt, read_at AS readAt
+       FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`,
+      [userId]
+    );
+    const [countRows] = await db.execute('SELECT COUNT(*) AS count FROM notifications WHERE user_id = ? AND is_read = FALSE', [userId]);
+    return res.json({ success: true, data: rows, notifications: rows, unreadCount: Number(countRows[0]?.count || 0) });
   } catch (error) {
     console.error('Employer Notifications Error:', error);
     return res.status(500).json({ success: false, message: 'Failed to load notifications.' });
@@ -782,12 +958,58 @@ exports.getEmployerNotifications = async (req, res) => {
 
 exports.markEmployerNotificationRead = async (req, res) => {
   try {
-    const [result] = await db.execute('UPDATE employer_notifications SET isRead = TRUE WHERE id = ? AND employerId = ?', [req.params.id, req.user.id]);
+    const userId = req.user.id || req.user.userId;
+    const [result] = await db.execute('UPDATE notifications SET is_read = TRUE, read_at = NOW() WHERE id = ? AND user_id = ?', [req.params.id, userId]);
     if (!result.affectedRows) return res.status(404).json({ success: false, message: 'Notification not found.' });
     return res.json({ success: true, message: 'Notification marked as read.' });
   } catch (error) {
     console.error('Mark Employer Notification Error:', error);
     return res.status(500).json({ success: false, message: 'Failed to mark notification as read.' });
+  }
+};
+
+exports.getEmployerUnreadNotificationCount = async (req, res) => {
+  try {
+    const userId = req.user.id || req.user.userId;
+    const [rows] = await db.execute('SELECT COUNT(*) AS count FROM notifications WHERE user_id = ? AND is_read = FALSE', [userId]);
+    return res.json({ success: true, data: { count: Number(rows[0]?.count || 0) } });
+  } catch (error) {
+    console.error('Employer Notification Count Error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to load notification count.' });
+  }
+};
+
+exports.markAllEmployerNotificationsRead = async (req, res) => {
+  try {
+    const userId = req.user.id || req.user.userId;
+    await db.execute('UPDATE notifications SET is_read = TRUE, read_at = NOW() WHERE user_id = ? AND is_read = FALSE', [userId]);
+    return res.json({ success: true, data: { count: 0 } });
+  } catch (error) {
+    console.error('Mark All Employer Notifications Error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to mark notifications as read.' });
+  }
+};
+
+exports.deleteEmployerNotification = async (req, res) => {
+  try {
+    const userId = req.user.id || req.user.userId;
+    const [result] = await db.execute('DELETE FROM notifications WHERE id = ? AND user_id = ?', [req.params.id, userId]);
+    if (!result.affectedRows) return res.status(404).json({ success: false, message: 'Notification not found.' });
+    return res.json({ success: true, message: 'Notification deleted.' });
+  } catch (error) {
+    console.error('Delete Employer Notification Error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to delete notification.' });
+  }
+};
+
+exports.deleteReadEmployerNotifications = async (req, res) => {
+  try {
+    const userId = req.user.id || req.user.userId;
+    const [result] = await db.execute('DELETE FROM notifications WHERE user_id = ? AND is_read = TRUE', [userId]);
+    return res.json({ success: true, deletedCount: Number(result.affectedRows || 0) });
+  } catch (error) {
+    console.error('Delete Read Employer Notifications Error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to delete read notifications.' });
   }
 };
 

@@ -9,6 +9,9 @@ import Footer from './components/Footer';
 import Login from './pages/login';
 import Register from './pages/Register';
 import OtpVerification from './components/OtpVerification';
+import ForgotPassword from './pages/ForgotPassword';
+import VerifyResetOtp from './pages/VerifyResetOtp';
+import ResetPassword from './pages/ResetPassword';
 import RoleSelection from './components/RoleSelection';
 import GoogleCallback from './pages/GoogleCallback';
 
@@ -111,6 +114,9 @@ function AppLayout() {
           {/* 2. AUTHENTICATION & ONBOARDING ROUTES      */}
           {/* ========================================== */}
           <Route path="/login" element={<GuestOnlyRoute><Login /></GuestOnlyRoute>} />
+          <Route path="/forgot-password" element={<GuestOnlyRoute><ForgotPassword /></GuestOnlyRoute>} />
+          <Route path="/verify-reset-otp" element={<GuestOnlyRoute><VerifyResetOtp /></GuestOnlyRoute>} />
+          <Route path="/reset-password" element={<GuestOnlyRoute><ResetPassword /></GuestOnlyRoute>} />
           <Route path="/register" element={<Register />} />
           <Route path="/verify-otp" element={<OtpVerification />} />
 
@@ -302,6 +308,38 @@ function AppLayout() {
           <Route path="/seeker/profile" element={<ProtectedRoute allowedRoles={["job_seeker"]}>{withSeekerSidebar(<MyProfile />)}</ProtectedRoute>} />
           <Route
             path="/employer/candidates"
+            element={
+              <ProtectedRoute allowedRoles={["employer", "company", "recruiter"]}>
+                <EmployerWorkspace />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/employer/jobs"
+            element={
+              <ProtectedRoute allowedRoles={["employer", "company", "recruiter"]}>
+                <EmployerWorkspace />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/employer/jobs/:id"
+            element={
+              <ProtectedRoute allowedRoles={["employer", "company", "recruiter"]}>
+                <EmployerWorkspace />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/employer/applications"
+            element={
+              <ProtectedRoute allowedRoles={["employer", "company", "recruiter"]}>
+                <EmployerWorkspace />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/employer/messages"
             element={
               <ProtectedRoute allowedRoles={["employer", "company", "recruiter"]}>
                 <EmployerWorkspace />

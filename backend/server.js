@@ -134,11 +134,13 @@ const ensureDatabaseSchema = async () => {
     await db.query('ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS trade_license_number VARCHAR(100) NULL');
     await db.query('ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS trade_license_url VARCHAR(255) NULL');
     await db.query('ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS onboarding_completed BOOLEAN NOT NULL DEFAULT FALSE');
+    await db.query('ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS work_email VARCHAR(255) NULL');
     await db.query('ALTER TABLE company_profiles MODIFY COLUMN website VARCHAR(255) NULL DEFAULT NULL');
     await db.query('ALTER TABLE company_profiles MODIFY COLUMN logo_url VARCHAR(255) NULL DEFAULT NULL');
     await db.query('ALTER TABLE company_profiles MODIFY COLUMN description TEXT NULL DEFAULT NULL');
     await db.query('ALTER TABLE company_profiles MODIFY COLUMN company_size VARCHAR(50) NULL DEFAULT NULL');
     await db.query('ALTER TABLE company_profiles MODIFY COLUMN company_registration_number VARCHAR(100) NULL DEFAULT NULL');
+    await db.query('ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS phone VARCHAR(50) NULL');
     await db.query('ALTER TABLE company_profiles MODIFY COLUMN phone VARCHAR(50) NULL DEFAULT NULL');
     await db.query('ALTER TABLE company_profiles MODIFY COLUMN work_email VARCHAR(255) NULL DEFAULT NULL');
     await db.query('ALTER TABLE company_profiles MODIFY COLUMN industry VARCHAR(100) NULL DEFAULT NULL');
@@ -371,6 +373,13 @@ const ensureDatabaseSchema = async () => {
     )`);
   } catch (error) {
     console.warn('Employer compatibility tables check skipped:', error.message);
+  }
+
+  try {
+    await db.query('ALTER TABLE notifications ADD COLUMN IF NOT EXISTS reference_type VARCHAR(40) NULL');
+    await db.query('ALTER TABLE notifications ADD COLUMN IF NOT EXISTS reference_id INT NULL');
+  } catch (error) {
+    console.warn('Notification reference compatibility check skipped:', error.message);
   }
 
   try {

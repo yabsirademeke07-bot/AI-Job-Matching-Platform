@@ -6,10 +6,12 @@ import { scrollToFeedback } from '../utils/scrollHelper.js';
 import { clearUserWorkspace } from '../utils/authSession';
 import GoogleAuthButton from '../components/GoogleAuthButton';
 import {
-  Sparkles, ShieldCheck, Cpu, Lock,
-  ArrowRight, Eye, EyeOff, Target, User, Briefcase, RefreshCw, ArrowLeft
+  ShieldCheck, Lock,
+  ArrowRight, Eye, EyeOff, User, Briefcase, RefreshCw, ArrowLeft
 } from 'lucide-react';
 import EmailInputWithDomains from '../components/EmailInputWithDomains';
+import logoImage from './images/logo1.png';
+import registrationImage from './images/images (3).jpg';
 
 const Register = () => {
   const navigate = useNavigate();
@@ -319,78 +321,42 @@ const Register = () => {
     }
   };
 
-  const handleFacebookRegister = () => {
-    window.location.href = `${API_URL.replace(/\/$/, '')}/auth/facebook`;
-  };
-
   return (
     <div className="min-h-screen w-full bg-brand-soft bg-[radial-gradient(#d0e5f5_1px,transparent_1px)] bg-size-[16px_16px] flex items-center justify-center p-3 sm:p-4 md:p-6 lg:p-8 font-sans overflow-x-hidden">
       <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-12 rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xl bg-white border border-slate-300 my-auto">
 
         {/* LEFT SIDE: Info Section */}
-        <div className="md:col-span-5 brand-gradient p-6 sm:p-8 flex flex-col justify-between relative overflow-hidden">
+        <div className="md:col-span-5 auth-brand-gradient p-6 sm:p-8 flex flex-col justify-between relative overflow-hidden">
           <div className="flex items-center justify-between z-10">
             <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-white/15 flex items-center justify-center shadow-lg shadow-[#2b73a4]/30">
-                <Sparkles className="w-5 h-5 text-white" />
-              </div>
+              <img src={logoImage} alt="" className="w-12 h-12 sm:w-14 sm:h-14 rounded-full border-2 border-white/80 object-cover object-left shadow-md shrink-0" />
               <div>
-                <h3 className="text-white font-bold text-sm sm:text-base leading-tight tracking-wide">
+                <h3 className="text-white font-bold text-xs sm:text-sm lg:text-base leading-tight tracking-wide whitespace-nowrap">
                   SmartRecruit <span className="text-white/80">AI</span>
                 </h3>
-                <p className="text-[10px] sm:text-xs text-slate-400">Deep CV Inspector</p>
+                <p className="text-[9px] sm:text-[10px] md:text-xs text-slate-300 whitespace-nowrap">Deep CV Inspector</p>
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/15 border border-white/25 text-xs text-white shadow-sm backdrop-blur-md">
+            <div className="flex items-center gap-1 px-2 py-1 md:px-2.5 md:py-1.5 rounded-full bg-white/15 border border-white/25 text-[11px] sm:text-xs text-white shadow-sm backdrop-blur-md">
               <ShieldCheck className="w-4 h-4 text-emerald-400" />
               <span>Step {step} of 3</span>
             </div>
           </div>
 
-          <div className="my-6 sm:my-8 z-10">
+          <div className="mt-10 mb-6 sm:mt-12 sm:mb-8 z-10">
             <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold text-white tracking-tight leading-snug mb-3">
-              {step === 1 && <>Create Account <br /><span className="text-white/80">Smart Registration</span></>}
+              {step === 1 && <>Welcome to <br /><span className="text-white/80">AI Job Matching Platform</span></>}
               {step === 2 && <>Verify Email <br /><span className="text-white/80">Security Check</span></>}
               {step === 3 && <>Choose Role <br /><span className="text-white/80">Tailored Experience</span></>}
             </h1>
-            <p className="text-slate-300 text-xs sm:text-sm leading-relaxed mb-6">
-              Our AI platform matches top talents with top companies automatically using dynamic CV parsing.
+            <p className="text-slate-300 text-xs sm:text-sm leading-relaxed">
+              {step === 1
+                ? 'Create an account to get started with skill-based job matching.'
+                : 'Our AI platform matches top talents with top companies automatically using dynamic CV parsing.'}
             </p>
-
-            <div className="space-y-3.5">
-              <div className="flex items-start gap-3 p-3 sm:p-3.5 rounded-xl bg-slate-800/60 border border-slate-700/80 backdrop-blur-sm">
-                <div className="p-2 sm:p-2.5 rounded-xl bg-white/15 text-white border border-white/25 shrink-0">
-                  <Cpu className="w-4 h-4 sm:w-5 sm:h-5" />
-                </div>
-                <div>
-                  <h4 className="text-xs sm:text-sm font-semibold text-slate-100">AI Match Score & Skill Extraction</h4>
-                  <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5">Scans CV text to score compatibility & list missing skills.</p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3 p-3 sm:p-3.5 rounded-xl bg-slate-800/60 border border-slate-700/80 backdrop-blur-sm">
-                <div className="p-2 sm:p-2.5 rounded-xl bg-white/15 text-white border border-white/25 shrink-0">
-                  <Target className="w-4 h-4 sm:w-5 sm:h-5" />
-                </div>
-                <div>
-                  <h4 className="text-xs sm:text-sm font-semibold text-slate-100">Career Goals Alignment</h4>
-                  <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5">Tailors job recommendations based on salary & title goals.</p>
-                </div>
-              </div>
-            </div>
           </div>
-
-          <div className="bg-white/15 backdrop-blur-md p-3.5 sm:p-4 rounded-2xl border border-white/25 flex items-center gap-3 z-10">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white/15 border border-white/35 flex items-center justify-center font-bold text-white text-xs shrink-0">
-              100%
-            </div>
-            <div>
-              <p className="text-xs text-slate-200 font-medium leading-snug">
-                "Instant parsing & high-precision skill verification active."
-              </p>
-            </div>
-          </div>
+          <img src={registrationImage} alt="Colleagues collaborating in a workplace" className="z-10 mt-6 min-h-[420px] w-full flex-1 rounded-xl object-cover object-center" />
         </div>
 
         {/* RIGHT SIDE: Dynamic Form (Step 1, 2, 3) */}
@@ -400,7 +366,7 @@ const Register = () => {
           {step === 1 && (
             <>
               <div className="mb-6 sm:mb-8">
-                <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">Create Account</h2>
+                <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">Sign Up</h2>
                 <p className="text-xs sm:text-sm font-semibold text-slate-500 mt-1">Enter your credentials to get started</p>
               </div>
 
@@ -518,10 +484,6 @@ const Register = () => {
                 </div>
                 <div className="flex flex-col gap-3">
                   <GoogleAuthButton label="Continue with Google" />
-                  <button type="button" onClick={handleFacebookRegister} className="w-full py-3 px-4 brand-bg hover:bg-[#f0f7fc] hover:text-[#2b73a4] text-white font-bold text-xs sm:text-sm rounded-xl border border-[#56a2d8] shadow-sm transition-all duration-200 flex items-center justify-center gap-3 active:scale-[0.98] cursor-pointer">
-                    <span className="w-6 h-6 rounded-md bg-white text-[#56a2d8] flex items-center justify-center text-lg font-black">f</span>
-                    <span>Sign up with Facebook</span>
-                  </button>
                 </div>
               </div>
 

@@ -13,12 +13,11 @@ import {
   Repeat,
 } from 'lucide-react';
 
-// የፎቶ Path — use local asset fallback in project
-import siteLogo from '../pages/images/logo1.png';
 import { useAuth } from '../context/AuthContext';
 import LogoutFlowModals from './LogoutFlowModals';
 import { getNextOnboardingStep } from '../utils/applicationFlow';
 import API from '../services/api';
+import logoImage from '../pages/images/logo1.png';
 
 export default function Navbar() {
   const location = useLocation();
@@ -213,23 +212,21 @@ export default function Navbar() {
   }, [isAuthenticated, location.pathname]);
 
   return (
-    <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-sm transition-all w-full">
+    <header className="navbar sticky top-0 z-[9999] w-full border-b border-slate-200/80 bg-white/95 shadow-sm backdrop-blur-md">
       {/* Container: px-4 sm:px-6 lg:px-8 በመጠቀም ወደ ግራ እና ቀኝ ዳር እንዲጠጋ ተደርጓል */}
-      <div className="w-full px-4 sm:px-6 lg:px-8 h-20 sm:h-24 flex items-center justify-between gap-4">
+      <div className="w-full px-4 sm:px-6 lg:px-8 h-20 sm:h-24 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4">
 
-        {/* BRAND LOGO - ሙሉ በሙሉ ወደ ግራ */}
-        <Link to="/" className="flex items-center gap-2.5 group shrink-0">
-          <div className="h-16 w-16 overflow-hidden rounded-full border border-slate-200 bg-slate-950 shadow-md shadow-blue-500/10 transition-transform duration-200 group-hover:scale-[1.02] sm:h-20 sm:w-20">
-            <img
-              src={siteLogo}
-              alt="AI Job Match"
-              className="h-full w-full object-contain object-center"
-            />
+        {/* BRAND LOGO */}
+        <Link to="/" className="group flex shrink-0 items-center gap-3">
+          <img src={logoImage} alt="AI Job Matching" className="h-12 w-12 rounded-full object-cover transition-transform duration-200 group-hover:scale-[1.02] sm:h-14 sm:w-14" />
+          <div className="hidden text-left sm:block">
+            <div className="text-[0.55rem] font-black uppercase tracking-[0.25em] text-sky-600 sm:text-[0.7rem]">AI</div>
+            <div className="text-[0.68rem] font-black uppercase tracking-[0.18em] text-slate-800 sm:text-[0.82rem]">Job Matching</div>
           </div>
         </Link>
 
-        {/* DESKTOP NAVIGATION LINKS - mr-auto ml-6/ml-10 በመጠቀም ወደ ግራ ተጠግተዋል፣ text-lg በመጠቀም መጠናቸው ጨምሯል */}
-        <nav className="hidden lg:flex items-center gap-5 xl:gap-7 mr-auto ml-6 xl:ml-10">
+        {/* DESKTOP NAVIGATION LINKS */}
+        <nav className="hidden lg:flex items-center justify-center gap-5 xl:gap-7 min-w-0">
 
           <Link
             to="/"
@@ -304,7 +301,7 @@ export default function Navbar() {
           )}
         </nav>
 
-        <div className="hidden lg:flex items-center gap-3 shrink-0 ml-auto">
+        <div className="hidden lg:flex items-center justify-end gap-3 shrink-0">
           {isAuthenticated && (
             <div ref={profileMenuRef} className="relative">
               <div className="flex min-h-11 items-center gap-2 rounded-xl px-2 py-1.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100">
@@ -352,8 +349,8 @@ export default function Navbar() {
           )}
           {!isAuthenticated && !isSeekerDashboardPage && (
             <>
-              <Link to="/login" className="brand-button text-base px-5 xl:px-6 py-2.5"><LogIn className="w-5 h-5 text-blue-600" /><span>Log In</span></Link>
-              <Link to="/register" className="brand-button text-base px-6 xl:px-7 py-2.5"><UserPlus className="w-5 h-5" /><span>Sign Up</span></Link>
+              <Link to="/login" className="brand-button h-12 min-w-[150px] text-base xl:text-lg shadow-[0_10px_18px_rgba(78,150,214,0.25)]"><span>Log In</span></Link>
+              <Link to="/register" className="brand-button h-12 min-w-[160px] text-base xl:text-lg shadow-[0_10px_18px_rgba(78,150,214,0.25)]"><span>Sign Up</span></Link>
             </>
           )}
         </div>
@@ -460,8 +457,8 @@ export default function Navbar() {
             )}
             {!isAuthenticated && !isSeekerDashboardPage && (
               <div className="pt-3 mt-2 border-t border-slate-100 flex flex-col gap-2.5">
-                <Link to="/login" onClick={() => setIsMobileMenuOpen(false)} className="brand-button w-full text-base"><LogIn className="w-5 h-5 text-blue-600" /><span>Log In</span></Link>
-                <Link to="/register" onClick={() => setIsMobileMenuOpen(false)} className="brand-button w-full text-base"><UserPlus className="w-5 h-5" /><span>Sign Up</span></Link>
+                <Link to="/login" onClick={() => setIsMobileMenuOpen(false)} className="brand-button h-12 w-full text-base shadow-[0_10px_18px_rgba(78,150,214,0.25)]"><span>Log In</span></Link>
+                <Link to="/register" onClick={() => setIsMobileMenuOpen(false)} className="brand-button h-12 w-full text-base shadow-[0_10px_18px_rgba(78,150,214,0.25)]"><span>Sign Up</span></Link>
               </div>
             )}
 

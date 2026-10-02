@@ -231,9 +231,15 @@ export default function EmployerWorkspace({ standalonePostJob = false }) {
     location.pathname.includes("/post-job") ||
     location.pathname.endsWith("/jobs/new")
       ? "post"
-      : location.pathname.includes("/applicants")
+      : location.pathname.includes("/applicants") ||
+          location.pathname.includes("/applications") ||
+          location.pathname.includes("/candidates")
         ? "applications"
-        : searchParams.get("view") || "overview",
+        : location.pathname.includes("/messages")
+          ? "messages"
+          : location.pathname === "/employer/jobs" || /^\/employer\/jobs\/[^/]+$/.test(location.pathname)
+            ? "jobs"
+            : searchParams.get("view") || "overview",
   );
   const [jobs, setJobs] = useState([]);
   const [applications, setApplications] = useState([]);
@@ -266,7 +272,11 @@ export default function EmployerWorkspace({ standalonePostJob = false }) {
   const [minScore, setMinScore] = useState(0);
   const [jobStatusFilter, setJobStatusFilter] = useState("all");
   const [jobSearchQuery, setJobSearchQuery] = useState("");
+  const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
+  const [globalQuery, setGlobalQuery] = useState("");
   const [toast, setToast] = useState(null);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0);
   const [dark, setDark] = useState(false);
   const toastTimeoutRef = useRef(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -285,6 +295,49 @@ export default function EmployerWorkspace({ standalonePostJob = false }) {
     link: "",
     notes: "",
   });
+  useEffect(() => {
+    let mounted = true;
+    const loadUnreadNotifications = () => api.get('/employer/notifications/unread-count').then(({ data }) => {
+      if (mounted) setUnreadNotificationCount(Number(data?.data?.count || 0));
+    }).catch(() => {});
+    loadUnreadNotifications();
+    const intervalId = window.setInterval(loadUnreadNotifications, 30000);
+    const handleNotificationUpdate = () => loadUnreadNotifications();
+    window.addEventListener('employer-notifications:updated', handleNotificationUpdate);
+    return () => {
+      mounted = false;
+      window.clearInterval(intervalId);
+      window.removeEventListener('employer-notifications:updated', handleNotificationUpdate);
+    };
+  }, []);
+  useEffect(() => {
+    let mounted = true;
+    const loadUnreadMessages = () => api.get('/employer/messages/conversations/unread-count').then(({ data }) => {
+      if (mounted) setUnreadMessageCount(Number(data?.data?.count || 0));
+    }).catch(() => {});
+    loadUnreadMessages();
+    const intervalId = window.setInterval(loadUnreadMessages, 30000);
+    const handleMessageUpdate = () => loadUnreadMessages();
+    window.addEventListener('employer-messages:updated', handleMessageUpdate);
+    return () => {
+      mounted = false;
+      window.clearInterval(intervalId);
+      window.removeEventListener('employer-messages:updated', handleMessageUpdate);
+    };
+  }, []);
+  const globalSearchResults = useMemo(() => {
+    const query = globalQuery.trim().toLowerCase();
+    if (!query) return [];
+    const jobResults = jobs
+      .filter((item) => `${item.title || ""} ${item.location || ""} ${item.description || ""}`.toLowerCase().includes(query))
+      .slice(0, 5)
+      .map((item) => ({ type: "Job", title: item.title || "Untitled job", detail: `${item.location || "Location not provided"} · ${item.status || "Draft"}`, action: () => { setActive("jobs"); setGlobalSearchOpen(false); } }));
+    const employeeResults = applications
+      .filter((item) => `${item.candidate_name || item.candidateName || ""} ${item.job_title || item.jobTitle || ""} ${item.status || ""}`.toLowerCase().includes(query))
+      .slice(0, 8)
+      .map((item) => ({ type: "Employee", title: item.candidate_name || item.candidateName || "Employee", detail: `${item.job_title || item.jobTitle || "Application"} · ${item.status || "New"}`, action: () => { setActive("applications"); setGlobalSearchOpen(false); } }));
+    return [...employeeResults, ...jobResults];
+  }, [applications, globalQuery, jobs]);
   const handleLogout = () => {
     setLogoutSession({ token, user });
     setLogoutOpen(true);
@@ -294,7 +347,7 @@ export default function EmployerWorkspace({ standalonePostJob = false }) {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     logout();
-    navigate("/login", { replace: true });
+    navigate("/", { replace: true });
   };
 
   const notify = (message, type = "success") => {
@@ -355,9 +408,15 @@ export default function EmployerWorkspace({ standalonePostJob = false }) {
       location.pathname.includes("/post-job") ||
       location.pathname.endsWith("/jobs/new")
         ? "post"
-        : location.pathname.includes("/applicants")
+        : location.pathname.includes("/applicants") ||
+            location.pathname.includes("/applications") ||
+            location.pathname.includes("/candidates")
           ? "applications"
-          : searchParams.get("view") || "overview";
+          : location.pathname.includes("/messages")
+            ? "messages"
+            : location.pathname === "/employer/jobs" || /^\/employer\/jobs\/[^/]+$/.test(location.pathname)
+              ? "jobs"
+              : searchParams.get("view") || "overview";
     if (stages.some(([id]) => id === requestedStage)) setActive(requestedStage);
   }, [location.pathname, searchParams]);
   const selectStage = (stage) => {
@@ -1157,9 +1216,9 @@ export default function EmployerWorkspace({ standalonePostJob = false }) {
             currentTabTitle={title}
             breadcrumb={active === "overview" ? "Home / Dashboard" : `Home / ${title}`}
             user={user}
-            unreadNotificationsCount={0}
+            unreadNotificationsCount={unreadNotificationCount}
             onToggleSidebar={() => setSidebarOpen((current) => !current)}
-            onSearchClick={() => notify("Global search is ready for implementation.")}
+            onSearchClick={() => { setGlobalQuery(""); setGlobalSearchOpen(true); }}
             onOpenNotifications={() => setActive("notifications")}
             onOpenMessages={() => setActive("messages")}
             onLogout={handleHeaderLogout}
@@ -1180,6 +1239,7 @@ export default function EmployerWorkspace({ standalonePostJob = false }) {
               onSelect={selectStage}
               onLogout={handleLogout}
               applicationsCount={applications.length}
+              unreadMessages={unreadMessageCount}
               isOpen={sidebarOpen}
               onClose={() => setSidebarOpen(false)}
               stages={stages}
@@ -2821,13 +2881,29 @@ export default function EmployerWorkspace({ standalonePostJob = false }) {
           </div>
         )}
       </div>
+      {globalSearchOpen && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-slate-950/40 p-4 pt-24" role="dialog" aria-modal="true" aria-label="Search workspace">
+          <div className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center gap-3 border-b border-slate-100 p-4">
+              <Search className="h-5 w-5 text-slate-400" />
+              <input autoFocus value={globalQuery} onChange={(event) => setGlobalQuery(event.target.value)} onKeyDown={(event) => event.key === "Escape" && setGlobalSearchOpen(false)} placeholder="Search employees, jobs, skills..." className="min-w-0 flex-1 text-sm font-semibold text-slate-800 outline-none" />
+              <button type="button" onClick={() => setGlobalSearchOpen(false)} className="rounded-lg px-2 py-1 text-xs font-bold text-slate-500 hover:bg-slate-100">Close</button>
+            </div>
+            <div className="max-h-96 overflow-y-auto p-3">
+              {!globalQuery.trim() && <p className="p-6 text-center text-sm text-slate-500">Search your employees, jobs, and application records.</p>}
+              {globalQuery.trim() && !globalSearchResults.length && <p className="p-6 text-center text-sm text-slate-500">No employees or jobs found.</p>}
+              {globalSearchResults.map((result, index) => <button type="button" key={`${result.type}-${result.title}-${index}`} onClick={result.action} className="flex w-full items-start gap-3 rounded-xl p-3 text-left hover:bg-blue-50"><span className="rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-slate-500">{result.type}</span><span><span className="block text-sm font-bold text-slate-800">{result.title}</span><span className="mt-0.5 block text-xs text-slate-500">{result.detail}</span></span></button>)}
+            </div>
+          </div>
+        </div>
+      )}
       {logoutOpen && (
         <LogoutFlowModals
           user={logoutSession?.user}
           token={logoutSession?.token}
           logout={logout}
           setSession={setSession}
-          navigate={navigate}
+          navigate={(path, options) => navigate(path === "/login" ? "/" : path, options)}
           onClose={() => setLogoutOpen(false)}
         />
       )}

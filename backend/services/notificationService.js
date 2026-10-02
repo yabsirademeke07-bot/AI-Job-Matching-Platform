@@ -40,6 +40,26 @@ const escapeHtml = (value) => String(value)
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#039;');
 
+const sendJobRejectionEmail = async ({ toEmail, jobTitle, reason }) => {
+  const cleanTo = String(toEmail || '').trim().toLowerCase();
+  const senderEmail = process.env.SMTP_USER || process.env.EMAIL_USER;
+  if (!cleanTo) throw new Error('Employer email is missing.');
+  if (!senderEmail || !smtpPassword) {
+    throw new Error('SMTP credentials are not configured. Set SMTP_USER/EMAIL_USER and EMAIL_APP_PASSWORD.');
+  }
+
+  const safeJobTitle = escapeHtml(jobTitle || 'Job listing');
+  const safeReason = escapeHtml(reason || 'Please review the job listing and contact support if you need clarification.');
+  const dashboardUrl = `${(process.env.CLIENT_URL || 'http://localhost:5173').replace(/\/$/, '')}/employer/dashboard?view=jobs`;
+  return transporter.sendMail({
+    from: `"SmartRecruit AI" <${senderEmail}>`,
+    to: cleanTo,
+    subject: `Job listing rejected: ${jobTitle || 'Job listing'}`,
+    text: `Your job listing "${jobTitle || 'Job listing'}" was rejected.\n\nReason: ${reason}\n\nReview your job listings: ${dashboardUrl}`,
+    html: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#0f172a"><h2>Your job listing needs changes</h2><p>The job listing <strong>${safeJobTitle}</strong> was rejected by the admin team.</p><h3>Reason</h3><p>${safeReason}</p><p><a href="${escapeHtml(dashboardUrl)}" style="display:inline-block;padding:12px 18px;border-radius:8px;background:#2b73a4;color:#fff;text-decoration:none">Review job listing</a></p><p style="color:#64748b;font-size:13px">SmartRecruit AI</p></div>`,
+  });
+};
+
 const sendEmailOtp = async (toEmail, otpCode, recipientName = 'User') => {
   const cleanTo = toEmail.trim().toLowerCase();
   const senderEmail = process.env.SMTP_USER || process.env.EMAIL_USER;
@@ -84,4 +104,4 @@ const sendEmailOtp = async (toEmail, otpCode, recipientName = 'User') => {
   }
 };
 
-module.exports = { sendEmailOtp };
+module.exports = { sendEmailOtp, sendJobRejectionEmail };

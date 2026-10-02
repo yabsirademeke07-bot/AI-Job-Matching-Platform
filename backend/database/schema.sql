@@ -604,6 +604,7 @@ CREATE TABLE IF NOT EXISTS messages (
     id INT AUTO_INCREMENT PRIMARY KEY,
     conversation_id INT NOT NULL,
     sender_id INT NOT NULL,
+    receiver_id INT DEFAULT NULL,
     message_text TEXT NOT NULL,
     attachment_url VARCHAR(255),
     is_read BOOLEAN DEFAULT FALSE,
@@ -613,6 +614,9 @@ CREATE TABLE IF NOT EXISTS messages (
     FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
     FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
     INDEX idx_conversation_id (conversation_id),
+    INDEX idx_sender_id (sender_id),
+    INDEX idx_receiver_id (receiver_id),
+    INDEX idx_message_created_at (created_at),
     INDEX idx_is_read (is_read)
 );
 
@@ -623,9 +627,11 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE TABLE IF NOT EXISTS notifications (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
-    type ENUM('job-match', 'application-status', 'shortlisted', 'interview-scheduled', 'new-message', 'ai-recommendation', 'job-alert', 'company-update') DEFAULT 'job-match',
+    type VARCHAR(40) NOT NULL DEFAULT 'SYSTEM',
     title VARCHAR(200) NOT NULL,
     message TEXT NOT NULL,
+    reference_type VARCHAR(40) DEFAULT NULL,
+    reference_id INT DEFAULT NULL,
     related_job_id INT,
     related_application_id INT,
     related_user_id INT,
@@ -638,6 +644,8 @@ CREATE TABLE IF NOT EXISTS notifications (
     FOREIGN KEY (related_application_id) REFERENCES applications(id) ON DELETE SET NULL,
     FOREIGN KEY (related_user_id) REFERENCES users(id) ON DELETE SET NULL,
     INDEX idx_user_unread (user_id, is_read),
+    INDEX idx_notifications_created (created_at),
+    INDEX idx_notifications_reference (reference_type, reference_id),
     INDEX idx_type (type)
 );
 
