@@ -146,7 +146,11 @@ router.post('/verify-login-otp', async (req, res) => {
     const user = await findLoginUser(cleanEmail);
     if (!user || !user.is_active) return res.status(404).json({ success: false, message: 'No account found with this email.' });
     const safeUser = await getLoginUserDetails(user);
-    await db.query("INSERT INTO user_activity_log (user_id, activity_type) VALUES (?, 'login')", [user.id]);
+    await db.query(`
+      INSERT INTO user_activity_log
+        (user_id, activity_type, description, details, ip_address, user_agent)
+      VALUES (?, 'login', 'User signed in', ?, ?, ?)
+    `, [user.id, JSON.stringify({ recordId: user.id, oldValues: null, newValues: { signedIn: true }, ipAddress: req.ip, userAgent: req.get('user-agent') }), req.ip, req.get('user-agent')]).catch((error) => console.warn('Login audit log skipped:', error.message));
     const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, process.env.JWT_SECRET || 'your_secret_key', { expiresIn: '7d' });
     return res.json({
       success: true,
@@ -712,10 +716,11 @@ router.post(['/select-role', '/set-role'], async (req, res) => {
       );
     }
 
-    await connection.execute(
-      "INSERT INTO user_activity_log (user_id, activity_type) VALUES (?, 'role_selected')",
-      [targetUser.id]
-    );
+    await connection.execute(`
+      INSERT INTO user_activity_log
+        (user_id, activity_type, description, details, ip_address, user_agent)
+      VALUES (?, 'role_selected', ?, ?, ?, ?)
+    `, [targetUser.id, `User selected ${role.replaceAll('_', ' ')} role`, JSON.stringify({ recordId: targetUser.id, oldValues: { role: targetUser.role }, newValues: { role }, ipAddress: req.ip, userAgent: req.get('user-agent') }), req.ip, req.get('user-agent')]).catch((error) => console.warn('Role selection audit log skipped:', error.message));
 
     let redirect_to = null;
     let onboarding_step = null;

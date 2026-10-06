@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
+  Activity,
   BarChart3,
   Bell,
   BriefcaseBusiness,
   Building2,
+  CheckCircle2,
   CircleHelp,
+  Download,
   FileText,
   LogOut,
   Maximize2,
@@ -19,11 +22,10 @@ import {
   Menu,
   X,
   Clock3,
-  CalendarDays,
-  MapPin,
-  Search,
   Sparkles,
   ArrowUpRight,
+  Plus,
+  TrendingUp,
 } from "lucide-react";
 import {
   getAdminDashboardStats,
@@ -34,6 +36,8 @@ import {
   updateUserStatus,
 } from "../services/adminService";
 import { useAuth } from "../context/AuthContext";
+import AdminReports from "../components/admin/AdminReports";
+import AdminActivityLog from "../components/admin/AdminActivityLog";
 
 const tabs = [
   ["overview", "/admin/dashboard", "Dashboard", BarChart3],
@@ -134,6 +138,8 @@ function AdminDashboard() {
           logs: data.logs || [],
           performance: data.performance || [],
           categories: data.categories || [],
+          candidateCategories: data.candidateCategories || [],
+          offline: data.offline === true,
           stats: liveStats || fallback,
         });
       })
@@ -415,26 +421,22 @@ function AdminDashboard() {
             </div>
           </div>
         </header>
-        <p className="text-xs font-bold uppercase tracking-widest text-blue-600">
-          {activeTab === "overview"
-            ? "Platform overview"
-            : tabs.find(([id]) => id === activeTab)?.[2]}
-        </p>
-        <h1 className="mt-2 text-3xl font-black tracking-tight">
-          {activeTab === "overview"
-            ? "Admin Dashboard"
-            : tabs.find(([id]) => id === activeTab)?.[2]}
-        </h1>
-        <p className="mt-2 text-sm text-slate-500">
-          {activeTab === "overview"
-            ? "A clear view of platform activity and decisions."
-            : "Manage and monitor this area of the SmartRecruit platform."}
-        </p>
-        {activeTab !== "overview" && (
+        {activeTab !== "overview" && activeTab !== "reports" && activeTab !== "activity" && (
+          <>
+            <p className="text-xs font-bold uppercase tracking-widest text-blue-600">
+              {tabs.find(([id]) => id === activeTab)?.[2]}
+            </p>
+            <h1 className="mt-2 text-3xl font-black tracking-tight">{tabs.find(([id]) => id === activeTab)?.[2]}</h1>
+            <p className="mt-2 text-sm text-slate-500">Manage and monitor this area of the SmartRecruit platform.</p>
+          </>
+        )}
+        {activeTab === "reports" && <AdminReports />}
+        {activeTab === "activity" && <AdminActivityLog />}
+        {activeTab !== "overview" && activeTab !== "reports" && activeTab !== "activity" && (
           <AdminModule tab={activeTab} overview={overview} go={go} />
         )}
         {activeTab === "overview" && (
-          <AdminOverview stats={stats} overview={overview} go={go} />
+          <AdminOverview stats={stats} overview={overview} go={go} adminName={user?.full_name || user?.name || "Admin"} />
         )}
         {activeTab === "__legacy_disabled__" && (
           <>
@@ -596,307 +598,221 @@ function AdminDashboard() {
   );
 }
 
-function AdminOverview({ stats, overview, go }) {
+function AdminOverview({ stats, overview, go, adminName }) {
+  const [range, setRange] = useState("7d");
+  const [now, setNow] = useState(() => new Date());
   const performance = overview.performance || [];
-  const categories = overview.categories || [];
-  const pendingJobs = overview.jobs.filter((job) =>
+  const pendingJobs = (overview.jobs || []).filter((job) =>
     ["pending", "pending_approval", "draft"].includes(String(job.status || "").toLowerCase()),
   );
-  const [moderatingJobId, setModeratingJobId] = useState(null);
-  const moderatePendingJob = async (job, action) => {
-    if (action === 'approve' && !hasJobApprovalDocuments(job)) {
-      window.alert('Employer TIN and trade license details are required before approving this job.');
-      return;
-    }
-    const reason = action === "reject" ? window.prompt("Enter a reason for rejecting this job:")?.trim() : "";
-    if (action === "reject" && !reason) return;
-
-    setModeratingJobId(job.id);
-    try {
-      await moderateJob(job.id, action, reason);
-      window.location.reload();
-    } catch (error) {
-      window.alert(error.response?.data?.message || "Unable to update this job.");
-    } finally {
-      setModeratingJobId(null);
-    }
-  };
-  const jobs = overview.jobs
-    .filter((job) =>
-      ["published", "active"].includes(String(job.status || "").toLowerCase()),
-    )
+  const candidateCategories = (overview.candidateCategories || []).filter((item) => {
+    const category = String(item.category || "").trim().toLowerCase();
+    return category && !["select sector", "select category", "not specified", "n/a"].includes(category);
+  });
+  const categoryTotal = candidateCategories.reduce((total, item) => total + Number(item.total || 0), 0);
+  const recentJobs = [...(overview.jobs || [])]
+    .sort((left, right) => new Date(right.created_at || 0).getTime() - new Date(left.created_at || 0).getTime())
     .slice(0, 5);
-  const matches = overview.applications.slice(0, 5);
-  const maxApplications = Math.max(
-    ...performance.map((item) => Number(item.applications || 0)),
-    1,
-  );
-  const totalCategoryJobs = categories.reduce(
-    (sum, item) => sum + Number(item.total || 0),
-    0,
-  );
-  const cardData = [
-    [
-      "Total Candidates",
-      stats.jobSeekersCount,
-      "Registered job seekers and employees",
-      "bg-sky-50 text-sky-600",
-    ],
-    [
-      "Total Jobs Posted",
-      stats.activeJobs,
-      "Currently approved and visible jobs",
-      "bg-violet-50 text-violet-600",
-    ],
-    [
-      "Successful Matches",
-      stats.pipeline?.shortlisted || 0,
-      "Applications shortlisted by employers",
-      "bg-emerald-50 text-emerald-600",
-    ],
-    [
-      "Registered Companies",
-      stats.employersCount,
-      "Employer accounts in the database",
-      "bg-amber-50 text-amber-600",
-    ],
+  const activeJobs = Number(stats.activeJobs || 0);
+  const candidateCount = Number(stats.jobSeekersCount || 0);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const exportAnalytics = () => {
+    const rows = [
+      ["Metric", "Value"],
+      ["Total candidates", candidateCount],
+      ["Active jobs", activeJobs],
+      ["AI match rate", `${Number(stats.avgMatchScore || 0)}%`],
+      ["Registered companies", Number(stats.employersCount || 0)],
+      ["Candidate growth vs last month", `${Number(stats.candidateGrowthPercent || 0)}%`],
+      ["Jobs posted this week", Number(stats.newJobsThisWeek || 0)],
+      [],
+      ["Date", "Applications", "Matches"],
+      ...performance.map((item) => [item.day, item.applications, item.matches]),
+      [],
+      ["Candidate sector", "Candidates", "Share"],
+      ...candidateCategories.map((item) => [item.category, item.total, `${categoryTotal ? Math.round((Number(item.total || 0) / categoryTotal) * 100) : 0}%`]),
+    ];
+    const csv = rows.map((row) => row.map((value) => `"${String(value ?? "").replaceAll('"', '""')}"`).join(",")).join("\r\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `smartrecruit-analytics-${now.toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const dayKey = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  const metricByDay = new Map(performance.map((item) => [String(item.day).slice(0, 10), {
+    applications: Number(item.applications || 0),
+    matches: Number(item.matches || 0),
+  }]));
+  let chartRows;
+  if (range === "all") {
+    const monthly = new Map();
+    metricByDay.forEach((metrics, day) => {
+      const month = day.slice(0, 7);
+      const current = monthly.get(month) || { applications: 0, matches: 0 };
+      monthly.set(month, {
+        applications: current.applications + metrics.applications,
+        matches: current.matches + metrics.matches,
+      });
+    });
+    chartRows = [...monthly.entries()].map(([day, metrics]) => ({ day, ...metrics, label: new Date(`${day}-15T12:00:00`).toLocaleDateString(undefined, { month: "short", year: "2-digit" }) }));
+  } else {
+    const days = range === "7d" ? 7 : 30;
+    chartRows = Array.from({ length: days }, (_, index) => {
+      const date = new Date(now);
+      date.setDate(date.getDate() - (days - index - 1));
+      const key = dayKey(date);
+      return {
+        day: key,
+        label: date.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+        ...(metricByDay.get(key) || { applications: 0, matches: 0 }),
+      };
+    });
+  }
+  const chartMax = Math.max(1, ...chartRows.map((item) => Math.max(item.applications, item.matches)));
+
+  const activity = [
+    ...(overview.users || []).filter((user) => ["job_seeker", "seeker", "employee", "user"].includes(String(user.role || "").toLowerCase())).map((user) => ({
+      id: `user-${user.id}`,
+      label: `Candidate ${user.full_name || "account"} registered`,
+      detail: user.email,
+      created_at: user.created_at,
+      icon: Users,
+      tone: "bg-blue-100 text-blue-700",
+    })),
+    ...(overview.logs || []).map((log, index) => ({
+      id: `log-${log.user_id || index}-${log.created_at}`,
+      label: `${String(log.full_name || "User")} ${String(log.activity_type || "updated activity").replaceAll(/[_-]/g, " ")}`,
+      detail: log.email,
+      created_at: log.created_at,
+      icon: Activity,
+      tone: "bg-violet-100 text-violet-700",
+    })),
+    ...(overview.jobs || []).map((job) => ({
+      id: `job-${job.id}`,
+      label: `Job “${job.title || "Untitled job"}” ${["active", "published"].includes(String(job.status || "").toLowerCase()) ? "is live" : "was posted"}`,
+      detail: job.company_name || job.location || "Job listing",
+      created_at: job.updated_at || job.created_at,
+      icon: BriefcaseBusiness,
+      tone: "bg-emerald-100 text-emerald-700",
+    })),
+  ].sort((left, right) => (new Date(right.created_at || 0).getTime() || 0) - (new Date(left.created_at || 0).getTime() || 0)).slice(0, 6);
+
+  const kpis = [
+    { label: "Total candidates", value: candidateCount, note: `${Number(stats.candidateGrowthPercent || 0) >= 0 ? "+" : ""}${Number(stats.candidateGrowthPercent || 0)}% from last month`, Icon: Users, tone: "bg-blue-50 text-blue-700", trend: true, path: "/admin/users" },
+    { label: "Active jobs", value: activeJobs, note: `+${Number(stats.newJobsThisWeek || 0)} new this week`, Icon: BriefcaseBusiness, tone: "bg-emerald-50 text-emerald-700", path: "/admin/jobs" },
+    { label: "AI match rate", value: `${Number(stats.avgMatchScore || 0)}%`, note: "Average compatibility score", Icon: Sparkles, tone: "bg-violet-50 text-violet-700", path: "/admin/ai-matching" },
+    { label: "Registered companies", value: Number(stats.employersCount || 0), note: `${Number(overview.companies?.filter((company) => company.verification_status === "verified").length || 0)} verified profiles`, Icon: Building2, tone: "bg-amber-50 text-amber-700", path: "/admin/employers" },
   ];
+
   return (
-    <>
-      <div className="mt-8 grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {cardData.map(([label, value, note, tone, path]) => (
-          <button
-            key={label}
-            type="button"
-            onClick={() => go(path)}
-            className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <div className="flex items-start justify-between">
-              <span
-                className={`flex h-11 w-11 items-center justify-center rounded-xl ${tone}`}
-              >
-                <BriefcaseBusiness className="h-5 w-5" />
-              </span>
-              <ArrowUpRight className="h-4 w-4 text-slate-300" />
-            </div>
-            <p className="mt-4 text-xs font-semibold text-slate-500">{label}</p>
-            <p className="mt-1 truncate text-3xl font-black text-slate-900">
-              {Number(value || 0).toLocaleString()}
-            </p>
-            <p className="mt-2 truncate text-xs text-slate-400">{note}</p>
+    <div className="space-y-6 pb-4">
+      <section className="mt-6 flex flex-col justify-between gap-5 border-b border-slate-200 pb-5 lg:flex-row lg:items-end">
+        <div>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">Welcome back, {adminName}</h1>
+            <span className={`inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-bold ${overview.offline ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>
+              <span className={`h-2 w-2 rounded-full ${overview.offline ? "bg-rose-500" : "bg-emerald-500"}`} />
+              {overview.offline ? "Platform data unavailable" : "System operational"}
+            </span>
+          </div>
+          <p className="mt-2 text-sm text-slate-500">{now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" })} · {now.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}</p>
+          <p className="mt-1 text-sm text-slate-500">A clear view of hiring activity, matching performance, and platform health.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => go("/admin/jobs")} className="inline-flex items-center gap-2 rounded-lg bg-blue-700 px-3.5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-blue-800"><Plus className="h-4 w-4" />Post new job</button>
+          <button type="button" onClick={() => go("/admin/jobs?status=pending")} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50"><Clock3 className="h-4 w-4 text-amber-600" />Review pending ({pendingJobs.length})</button>
+          <button type="button" onClick={exportAnalytics} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50"><Download className="h-4 w-4" />Export analytics</button>
+        </div>
+      </section>
+
+      <section aria-label="Platform metrics" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {kpis.map(({ label, value, note, Icon, tone, trend, path }) => (
+          <button key={label} type="button" onClick={() => go(path)} className="group rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <div className="flex items-center justify-between"><span className={`flex h-10 w-10 items-center justify-center rounded-xl ${tone}`}><Icon className="h-5 w-5" /></span><ArrowUpRight className="h-4 w-4 text-slate-300 transition group-hover:text-blue-600" /></div>
+            <p className="mt-5 text-sm font-semibold text-slate-500">{label}</p>
+            <p className="mt-1 text-3xl font-black tabular-nums text-slate-950">{typeof value === "number" ? value.toLocaleString() : value}</p>
+            <p className={`mt-2 inline-flex items-center gap-1 text-xs font-semibold ${trend ? "text-emerald-700" : "text-slate-500"}`}>{trend && <TrendingUp className="h-3.5 w-3.5" />}{note}</p>
           </button>
         ))}
-      </div>
-      <section className="mt-6 min-w-0 rounded-2xl border border-amber-200 bg-amber-50/50 p-4 shadow-sm sm:p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-amber-700">Requires review</p>
-            <h2 className="mt-1 text-lg font-black text-slate-900">Pending Job Approvals</h2>
-            <p className="mt-1 text-sm text-slate-600">Review employer submissions before they become visible in Explore Jobs.</p>
-          </div>
-          <button type="button" onClick={() => go("/admin/jobs")} className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-amber-800 shadow-sm ring-1 ring-amber-200 hover:bg-amber-100">Open all jobs</button>
-        </div>
-        {pendingJobs.length ? (
-          <div className="mt-4 grid gap-3 lg:grid-cols-2">
-            {pendingJobs.slice(0, 6).map((job) => (
-              <div key={job.id} className="flex min-w-0 flex-col gap-3 rounded-xl border border-amber-100 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-black text-slate-900">{job.title || "Untitled job"}</p>
-                  <p className="mt-1 truncate text-xs text-slate-500">{job.company_name || job.employer_name || "Employer"} · {job.location || "Location not provided"}</p>
-                </div>
-                <div className="flex shrink-0 gap-2">
-                  <button type="button" disabled={moderatingJobId === job.id || !hasJobApprovalDocuments(job)} title={hasJobApprovalDocuments(job) ? 'Approve job' : 'Employer TIN and trade license are required.'} onClick={() => moderatePendingJob(job, "approve")} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">Approve</button>
-                  <button type="button" disabled={moderatingJobId === job.id} onClick={() => moderatePendingJob(job, "reject")} className="rounded-lg bg-rose-600 px-3 py-2 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-50">Reject</button>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="mt-4 rounded-xl bg-white p-4 text-sm text-slate-500">No jobs are waiting for approval.</p>
-        )}
       </section>
-      <div className="mt-6 grid min-w-0 gap-6 xl:grid-cols-12">
-        <section role="button" tabIndex={0} onClick={() => go("/admin/applications")} onKeyDown={(event) => event.key === "Enter" && go("/admin/applications")} className="min-w-0 cursor-pointer rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-blue-300 hover:shadow-md sm:p-5 xl:col-span-6">
-          <div className="flex items-center justify-between">
-            <div className="min-w-0">
-              <h2 className="truncate font-black text-slate-900">
-                Job Matching Performance
-              </h2>
-              <p className="mt-1 truncate text-xs text-slate-500">
-                Applications and average AI fit score, last 7 days
-              </p>
+
+      <section className="grid min-w-0 gap-5 xl:grid-cols-12">
+        <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-8">
+          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+            <div><div className="flex items-center gap-2"><Activity className="h-5 w-5 text-blue-700" /><h2 className="text-base font-black text-slate-900">Platform growth</h2></div><p className="mt-1 text-sm text-slate-500">Applications and AI matches over time</p></div>
+            <div className="inline-flex self-start rounded-lg border border-slate-200 bg-slate-50 p-1" aria-label="Chart date range">
+              {[ ["7d", "7 days"], ["30d", "30 days"], ["all", "All time"] ].map(([value, label]) => <button key={value} type="button" aria-pressed={range === value} onClick={() => setRange(value)} className={`rounded-md px-2.5 py-1.5 text-xs font-bold transition ${range === value ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>{label}</button>)}
             </div>
-            <BarChart3 className="h-5 w-5 shrink-0 text-blue-500" />
           </div>
+          <div className="mt-5 flex flex-wrap gap-4 text-xs font-semibold text-slate-600"><span className="inline-flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-sm bg-blue-600" />Applications</span><span className="inline-flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-sm bg-emerald-500" />Scored matches</span></div>
           {performance.length ? (
-            <div className="mt-6 min-w-0 overflow-x-auto pb-1">
-              <div className="flex h-52 min-w-[360px] items-end gap-2 border-b border-l border-slate-100 px-2 pb-2 sm:h-56">
-                {performance.map((item) => (
-                  <div
-                    key={item.day}
-                    className="flex h-full min-w-8 flex-1 items-end gap-1"
-                    title={`${item.day}: ${item.applications} applications`}
-                  >
-                    <div
-                      className="w-1/2 rounded-t bg-blue-500"
-                      style={{
-                        height: `${Math.max((Number(item.applications || 0) / maxApplications) * 100, 4)}%`,
-                      }}
-                    />
-                    <div
-                      className="w-1/2 rounded-t bg-violet-300"
-                      style={{
-                        height: `${Math.max(Number(item.average_score || 0), 4)}%`,
-                      }}
-                    />
+            <div className="mt-4 overflow-x-auto pb-2">
+              <div className="grid h-56 min-w-[560px] items-end gap-2 border-b border-l border-slate-100 px-2 pb-2 pt-3" style={{ gridTemplateColumns: `repeat(${chartRows.length}, minmax(24px, 1fr))` }}>
+                {chartRows.map((item) => (
+                  <div key={item.day} title={`${item.day}: ${item.applications} applications, ${item.matches} scored matches`} className="flex h-full min-w-0 items-end justify-center gap-1 border-b border-slate-100/70">
+                    <div className="w-[42%] rounded-t bg-blue-600 transition-[height] duration-300" style={{ height: `${item.applications ? Math.max((item.applications / chartMax) * 100, 2) : 0}%` }} />
+                    <div className="w-[42%] rounded-t bg-emerald-500 transition-[height] duration-300" style={{ height: `${item.matches ? Math.max((item.matches / chartMax) * 100, 2) : 0}%` }} />
+                    <span className="sr-only">{item.label}</span>
                   </div>
                 ))}
               </div>
+              <div className="grid min-w-[560px] gap-2 px-2 pt-2 text-center text-[10px] font-medium text-slate-400" style={{ gridTemplateColumns: `repeat(${chartRows.length}, minmax(24px, 1fr))` }}>
+                {chartRows.map((item, index) => <span key={item.day}>{range === "30d" && index % 5 !== 0 ? "" : item.label}</span>)}
+              </div>
             </div>
-          ) : (
-            <EmptyPanel label="No application performance data yet." className="min-h-52" />
-          )}
-        </section>
-        <section role="button" tabIndex={0} onClick={() => go("/admin/jobs")} onKeyDown={(event) => event.key === "Enter" && go("/admin/jobs")} className="min-w-0 cursor-pointer rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-blue-300 hover:shadow-md sm:p-5 xl:col-span-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="font-black text-slate-900">Job Categories</h2>
-              <p className="mt-1 text-xs text-slate-500">
-                Published jobs by category
-              </p>
-            </div>
-            <Target className="h-5 w-5 text-violet-500" />
-          </div>
-          {categories.length ? (
-            <div className="mt-6 min-h-52 space-y-3">
-              {categories.map((item, index) => (
-                <div key={item.category}>
-                  <div className="flex justify-between text-xs">
-                    <span className="font-semibold text-slate-700">
-                      {item.category}
-                    </span>
-                    <span className="text-slate-400">
-                      {Number(item.total).toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="mt-1 h-2 rounded-full bg-slate-100">
-                    <div
-                      className={`h-2 rounded-full ${["bg-blue-500", "bg-violet-500", "bg-emerald-400", "bg-amber-400", "bg-rose-400", "bg-slate-400"][index % 6]}`}
-                      style={{
-                        width: `${Math.max((Number(item.total || 0) / Math.max(totalCategoryJobs, 1)) * 100, 3)}%`,
-                      }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <EmptyPanel label="No job category data yet." />
-          )}
-        </section>
-        <section role="button" tabIndex={0} onClick={() => go("/admin/ai-matching")} onKeyDown={(event) => event.key === "Enter" && go("/admin/ai-matching")} className="min-w-0 cursor-pointer rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-blue-300 hover:shadow-md sm:p-5 xl:col-span-3">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-blue-500" />
-            <h2 className="font-black text-slate-900">AI Insights</h2>
-          </div>
-          <div className="mt-5 rounded-xl bg-blue-50 p-4">
-            <p className="text-sm font-bold text-blue-900">
-              Live platform signals
-            </p>
-            <p className="mt-2 text-xs leading-5 text-blue-700">
-              Insights are calculated from the current applications, jobs, and
-              candidate records.
-            </p>
-          </div>
-          <Insight label="Candidates" value={stats.jobSeekersCount} />
-          <Insight label="Open jobs" value={stats.activeJobs} />
-          <Insight label="Average fit" value={`${stats.avgMatchScore}%`} />
-        </section>
-      </div>
-      <div className="mt-6 grid gap-6 xl:grid-cols-2">
-        <DataTable
-          title="Recent Matches"
-          icon={Target}
-          headers={["Candidate", "Job", "Score", "Status"]}
-          rows={matches.map((item) => [
-            item.candidate_name || "Candidate",
-            item.job_title || "Job",
-            `${item.ai_match_score || 0}%`,
-            item.status || "applied",
-          ])}
-          empty="No application records yet."
-        />
-        <DataTable
-          title="Latest Job Listings"
-          icon={BriefcaseBusiness}
-          headers={["Job Title", "Company", "Location", "Status"]}
-          rows={jobs.map((job) => [
-            job.title,
-            job.company_name || "Employer",
-            job.location || "Not provided",
-            job.status,
-          ])}
-          empty="No approved job listings yet."
-        />
-      </div>
-    </>
-  );
-}
+          ) : <div className="mt-5 flex min-h-56 flex-col items-center justify-center rounded-xl bg-slate-50 px-4 text-center"><BarChart3 className="h-8 w-8 text-slate-300" /><p className="mt-3 text-sm font-semibold text-slate-700">No application activity yet</p><p className="mt-1 text-xs text-slate-500">Growth metrics will appear as candidates apply to jobs.</p></div>}
+        </div>
 
-function Insight({ label, value }) {
-  return (
-    <div className="mt-4 flex items-center justify-between border-t border-blue-100 pt-3 text-xs">
-      <span className="text-slate-500">{label}</span>
-      <strong className="text-slate-900">{value}</strong>
+        <div className="grid gap-5 xl:col-span-4">
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between"><div><h2 className="text-base font-black text-slate-900">AI insights</h2><p className="mt-1 text-sm text-slate-500">Candidate distribution by sector</p></div><Sparkles className="h-5 w-5 text-violet-600" /></div>
+            {candidateCategories.length ? <div className="mt-5 space-y-4">{candidateCategories.slice(0, 5).map((item, index) => {
+              const count = Number(item.total || 0);
+              const share = categoryTotal ? Math.round((count / categoryTotal) * 100) : 0;
+              const colors = ["bg-blue-600", "bg-emerald-500", "bg-amber-500", "bg-violet-500", "bg-rose-500"];
+              return <div key={item.category}><div className="flex items-center justify-between gap-3 text-xs"><span className="truncate font-semibold text-slate-700">{item.category}</span><span className="shrink-0 tabular-nums text-slate-500">{share}% <span className="text-slate-400">({count})</span></span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100"><div className={`h-full rounded-full ${colors[index % colors.length]}`} style={{ width: `${share}%` }} /></div></div>;
+            })}</div> : <div className="mt-5 rounded-xl bg-slate-50 px-4 py-6 text-center"><p className="text-sm font-semibold text-slate-700">Sector insights are building</p><p className="mt-1 text-xs text-slate-500">Candidate sectors appear as profiles are completed.</p></div>}
+          </section>
+          <section className={`rounded-2xl border p-5 shadow-sm ${pendingJobs.length ? "border-amber-200 bg-amber-50/70" : "border-emerald-200 bg-emerald-50/60"}`}>
+            <div className="flex items-start gap-3">
+              <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${pendingJobs.length ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}`}>{pendingJobs.length ? <Clock3 className="h-5 w-5" /> : <CheckCircle2 className="h-5 w-5" />}</span>
+              <div className="min-w-0 flex-1"><p className={`text-xs font-bold uppercase tracking-wide ${pendingJobs.length ? "text-amber-800" : "text-emerald-800"}`}>Pending actions</p><h2 className="mt-1 font-black text-slate-900">{pendingJobs.length ? `${pendingJobs.length} job${pendingJobs.length === 1 ? "" : "s"} need review` : "All caught up"}</h2><p className="mt-1 text-sm text-slate-600">{pendingJobs.length ? "Review new listings before they go live." : "No jobs pending review right now."}</p>{pendingJobs.length > 0 && <button type="button" onClick={() => go("/admin/jobs?status=pending")} className="mt-3 inline-flex items-center gap-1 text-sm font-bold text-amber-900 hover:underline">Open review queue <ArrowUpRight className="h-4 w-4" /></button>}</div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section className="grid min-w-0 gap-5 xl:grid-cols-2">
+        <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between gap-3"><div><h2 className="text-base font-black text-slate-900">Recent platform activity</h2><p className="mt-1 text-sm text-slate-500">New accounts and recent platform events</p></div><button type="button" onClick={() => go("/admin/activity-log")} className="shrink-0 text-xs font-bold text-blue-700 hover:text-blue-900">View log</button></div>
+          {activity.length ? <div className="mt-5 divide-y divide-slate-100">{activity.map((item) => {
+            const Icon = item.icon;
+            return <div key={item.id} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0"><span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${item.tone}`}><Icon className="h-4 w-4" /></span><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-slate-800">{item.label}</p><p className="mt-0.5 truncate text-xs text-slate-500">{item.detail || "SmartRecruit platform"}</p></div><time className="shrink-0 whitespace-nowrap text-[11px] text-slate-400">{item.created_at ? new Date(item.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "Recent"}</time></div>;
+          })}</div> : <div className="mt-5 rounded-xl bg-slate-50 px-4 py-8 text-center"><Activity className="mx-auto h-7 w-7 text-slate-300" /><p className="mt-2 text-sm font-semibold text-slate-700">No recent activity</p><p className="mt-1 text-xs text-slate-500">New registrations and platform events will appear here.</p></div>}
+        </div>
+
+        <section className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center justify-between gap-3 p-5"><div><h2 className="text-base font-black text-slate-900">Latest job listings</h2><p className="mt-1 text-sm text-slate-500">Recently submitted opportunities</p></div><button type="button" onClick={() => go("/admin/jobs")} className="shrink-0 text-xs font-bold text-blue-700 hover:text-blue-900">Manage jobs</button></div>
+          {recentJobs.length ? <div className="overflow-x-auto"><table className="w-full min-w-[610px] text-left text-sm"><thead className="border-y border-slate-100 bg-slate-50 text-[10px] font-bold uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3">Job</th><th className="px-4 py-3">Location</th><th className="px-4 py-3">Date</th><th className="px-4 py-3">Status</th><th className="px-4 py-3 text-right"> </th></tr></thead><tbody className="divide-y divide-slate-100">{recentJobs.map((job) => {
+            const status = String(job.status || "pending").toLowerCase();
+            const isActive = ["active", "published"].includes(status);
+            const isPending = ["pending", "pending_approval", "draft"].includes(status);
+            const company = job.company_name || job.employer_name || "Company";
+            return <tr key={job.id} className="hover:bg-slate-50/70"><td className="px-4 py-3"><div className="flex min-w-0 items-center gap-3"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-xs font-black text-blue-700">{String(company).trim().slice(0, 1).toUpperCase()}</span><div className="min-w-0"><p className="max-w-40 truncate text-xs font-bold text-slate-800">{job.title || "Untitled job"}</p><p className="max-w-40 truncate text-[10px] text-slate-500">{company}{job.category ? ` · ${job.category}` : ""}</p></div></div></td><td className="max-w-28 truncate px-4 py-3 text-xs text-slate-500">{job.location || "Not provided"}</td><td className="whitespace-nowrap px-4 py-3 text-xs text-slate-500">{job.created_at ? new Date(job.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "—"}</td><td className="px-4 py-3"><span className={`rounded-full px-2 py-1 text-[10px] font-bold capitalize ${isActive ? "bg-emerald-100 text-emerald-700" : isPending ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600"}`}>{isActive ? "Active" : isPending ? "Pending" : status.replaceAll("_", " ")}</span></td><td className="px-4 py-3 text-right"><button type="button" onClick={() => go("/admin/jobs")} className="rounded-md px-2 py-1 text-xs font-bold text-blue-700 hover:bg-blue-50">Manage</button></td></tr>;
+          })}</tbody></table></div> : <div className="px-5 py-10 text-center"><BriefcaseBusiness className="mx-auto h-7 w-7 text-slate-300" /><p className="mt-2 text-sm font-semibold text-slate-700">No job listings yet</p><p className="mt-1 text-xs text-slate-500">New opportunities will appear here.</p></div>}
+        </section>
+      </section>
     </div>
-  );
-}
-function EmptyPanel({ label, className = "" }) {
-  return (
-    <div className={`flex h-48 items-center justify-center text-center text-sm text-slate-400 ${className}`}>
-      {label}
-    </div>
-  );
-}
-function DataTable({ title, icon: Icon, headers, rows, empty }) {
-  return (
-    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="flex items-center gap-2 border-b border-slate-100 p-5">
-        <Icon className="h-5 w-5 text-blue-500" />
-        <h2 className="font-black text-slate-900">{title}</h2>
-      </div>
-      <div className="overflow-x-auto">
-        {rows.length ? (
-          <table className="w-full min-w-120 text-left text-sm">
-            <thead className="bg-slate-50 text-xs font-bold text-slate-500">
-              <tr>
-                {headers.map((header) => (
-                  <th key={header} className="px-5 py-3">
-                    {header}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {rows.map((row, index) => (
-                <tr key={`${title}-${index}`}>
-                  {row.map((value, valueIndex) => (
-                    <td
-                      key={`${title}-${index}-${valueIndex}`}
-                      className={`px-5 py-3.5 ${valueIndex === 0 ? "font-bold text-slate-800" : "text-slate-500"}`}
-                    >
-                      {value}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <EmptyPanel label={empty} />
-        )}
-      </div>
-    </section>
   );
 }
 
@@ -904,16 +820,19 @@ function AdminModule({ tab, overview, go }) {
   const [processingId, setProcessingId] = useState(null);
   const [selectedJob, setSelectedJob] = useState(null);
   const [selectedNotification, setSelectedNotification] = useState(null);
-  const [rejectingJob, setRejectingJob] = useState(null);
-  const [rejectReason, setRejectReason] = useState('');
+  const [moderatingJob, setModeratingJob] = useState(null);
+  const [moderationReason, setModerationReason] = useState('');
+  const [moderationAction, setModerationAction] = useState('reject');
   const [selectedCompany, setSelectedCompany] = useState(null);
   const [jobRows, setJobRows] = useState(overview.jobs || []);
+  const [userRows, setUserRows] = useState(overview.users || []);
+  const [feedback, setFeedback] = useState(null);
   useEffect(() => {
     if (tab === "jobs") setJobRows(overview.jobs || []);
   }, [tab, overview.jobs]);
   const rows =
     tab === "users"
-      ? overview.users || []
+      ? userRows
       : tab === "companies"
         ? overview.companies || []
         : tab === "jobs"
@@ -929,7 +848,10 @@ function AdminModule({ tab, overview, go }) {
                   : [];
   const handleJobModeration = async (job, action, reason = '') => {
     const normalizedReason = String(reason || '').trim();
-    if (action === 'reject' && !normalizedReason) return false;
+    if (normalizedReason.length < 20) {
+      setFeedback({ type: "error", message: "Please provide a reason of at least 20 characters." });
+      return false;
+    }
     if (action === 'approve' && !hasJobApprovalDocuments(job)) {
       window.alert('Employer TIN and trade license details are required before approving this job.');
       return false;
@@ -953,20 +875,36 @@ function AdminModule({ tab, overview, go }) {
       setProcessingId(null);
     }
   };
-  const submitJobRejection = async (event) => {
+  const startJobModeration = (job, action) => {
+    if (action === 'approve' && !hasJobApprovalDocuments(job)) {
+      window.alert('Employer TIN and trade license details are required before approving this job.');
+      return;
+    }
+    setModeratingJob(job);
+    setModerationAction(action);
+    setModerationReason('');
+  };
+  const submitJobModeration = async (event) => {
     event.preventDefault();
-    if (!rejectingJob || !rejectReason.trim()) return;
-    const rejected = await handleJobModeration(rejectingJob, 'reject', rejectReason);
-    if (rejected) {
-      setRejectingJob(null);
-      setRejectReason('');
+    if (!moderatingJob || moderationReason.trim().length < 20) return;
+    const completed = await handleJobModeration(moderatingJob, moderationAction, moderationReason);
+    if (completed) {
+      setModeratingJob(null);
+      setModerationReason('');
     }
   };
   const runRowAction = async (row, action) => {
     setProcessingId(row.id);
+    setFeedback(null);
     try {
       if (tab === "users") {
-        await updateUserStatus(row.id, row.is_active ? "inactive" : "active");
+        const status = row.status === "active" ? "suspended" : "active";
+        setUserRows((current) => current.map((item) => String(item.id) === String(row.id)
+          ? { ...item, status, is_active: status === "active" ? 1 : 0 }
+          : item));
+        const { data } = await updateUserStatus(row.id, status);
+        setFeedback({ type: "success", message: data.message });
+        return;
       } else if (tab === "companies") {
         await updateCompanyVerification(row.company_profile_id || row.id, action);
       } else if (tab === "reports") {
@@ -974,7 +912,14 @@ function AdminModule({ tab, overview, go }) {
       }
       window.location.reload();
     } catch (error) {
-      window.alert(error.response?.data?.message || "Unable to complete this action.");
+      if (tab === "users") {
+        setUserRows((current) => current.map((item) => String(item.id) === String(row.id)
+          ? { ...item, status: row.status, is_active: row.is_active }
+          : item));
+        setFeedback({ type: "error", message: error.response?.data?.message || "Unable to update user status." });
+      } else {
+        window.alert(error.response?.data?.message || "Unable to complete this action.");
+      }
     } finally {
       setProcessingId(null);
     }
@@ -1034,6 +979,11 @@ function AdminModule({ tab, overview, go }) {
     );
   return (
     <>
+      {feedback && tab === "users" && (
+        <p role={feedback.type === "error" ? "alert" : "status"} aria-live="polite" className={`mt-6 rounded-lg px-4 py-3 text-sm font-semibold ${feedback.type === "success" ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
+          {feedback.message}
+        </p>
+      )}
       <div className="mt-8 overflow-x-auto rounded-2xl border border-slate-100 bg-white shadow-sm">
       <table className="w-full min-w-[680px] text-left text-sm">
         <thead className="border-b border-slate-100 bg-slate-50 text-xs font-bold uppercase tracking-widest text-slate-500">
@@ -1081,7 +1031,7 @@ function AdminModule({ tab, overview, go }) {
                   {tab === "jobs" ? (
                     <div className="flex flex-wrap justify-end gap-2">
                       <button type="button" onClick={() => setSelectedJob(row)} className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Details</button>
-                      {String(row.status || "").toLowerCase() === "rejected" ? <span className="rounded-xl border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700">✕ Rejected</span> : String(row.status || "").toLowerCase() === "active" || String(row.status || "").toLowerCase() === "published" && (row.is_approved === true || row.is_approved === 1 || row.isApproved === true) ? <span className="rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">✓ Approved</span> : <><button type="button" disabled={processingId === row.id || !hasJobApprovalDocuments(row)} title={hasJobApprovalDocuments(row) ? 'Approve job' : 'Employer TIN and trade license are required.'} onClick={() => handleJobModeration(row, "approve")} className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">Approve</button><button type="button" disabled={processingId === row.id} onClick={() => handleJobModeration(row, "reject")} className="rounded-lg bg-rose-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-50">Reject</button></>}
+                      {String(row.status || "").toLowerCase() === "rejected" ? <span className="rounded-xl border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700">✕ Rejected</span> : String(row.status || "").toLowerCase() === "active" || String(row.status || "").toLowerCase() === "published" && (row.is_approved === true || row.is_approved === 1 || row.isApproved === true) ? <span className="rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">✓ Approved</span> : <><button type="button" disabled={processingId === row.id || !hasJobApprovalDocuments(row)} title={hasJobApprovalDocuments(row) ? 'Approve job' : 'Employer TIN and trade license are required.'} onClick={() => startJobModeration(row, "approve")} className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">Approve</button><button type="button" disabled={processingId === row.id} onClick={() => startJobModeration(row, "reject")} className="rounded-lg bg-rose-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-50">Reject</button></>}
                     </div>
                   ) : tab === "companies" ? (
                     <div className="flex justify-end gap-2">
@@ -1089,7 +1039,7 @@ function AdminModule({ tab, overview, go }) {
                       {String(row.verification_status || "").toLowerCase() === "pending" && <><button type="button" disabled={processingId === row.id || !hasCompanyVerificationDocuments(row)} title={hasCompanyVerificationDocuments(row) ? 'Approve company' : 'TIN and trade license details are required before approval.'} onClick={() => runRowAction(row, "verified")} className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">Approve</button><button type="button" disabled={processingId === row.id} onClick={() => runRowAction(row, "rejected")} className="rounded-lg bg-rose-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-50">Reject</button></>}
                     </div>
                   ) : tab === "users" ? (
-                    <button type="button" disabled={processingId === row.id} onClick={() => runRowAction(row, "toggle")} className="rounded-lg bg-slate-800 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-slate-700 disabled:opacity-50">{row.is_active ? "Suspend" : "Activate"}</button>
+                    <button type="button" disabled={processingId === row.id} onClick={() => runRowAction(row, "toggle")} className="rounded-lg bg-slate-800 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-slate-700 disabled:opacity-50">{row.status === "active" ? "Suspend" : "Activate"}</button>
                   ) : tab === "reports" && ["pending", "under-review"].includes(String(row.status || "").toLowerCase()) ? (
                     <div className="flex justify-end gap-2">
                       <button type="button" disabled={processingId === row.id} onClick={() => runRowAction(row, "resolved")} className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50">Resolve</button>
@@ -1131,31 +1081,33 @@ function AdminModule({ tab, overview, go }) {
             </div>
             {!hasJobApprovalDocuments(selectedJob) && <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">Approval is unavailable until the employer provides a TIN and trade license number or document.</p>}
             <p className="mt-6 whitespace-pre-wrap text-sm leading-7 text-slate-700">{selectedJob.description || "No job description provided."}</p>
-            <div className="mt-6 flex flex-wrap justify-end gap-2"><button type="button" disabled={processingId === selectedJob.id || !hasJobApprovalDocuments(selectedJob)} title={hasJobApprovalDocuments(selectedJob) ? 'Approve job' : 'Employer TIN and trade license are required.'} onClick={() => handleJobModeration(selectedJob, "approve")} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">Approve</button><button type="button" disabled={processingId === selectedJob.id} onClick={() => { setRejectingJob(selectedJob); setRejectReason(''); }} className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700 disabled:opacity-50">Reject</button></div>
+            <div className="mt-6 flex flex-wrap justify-end gap-2"><button type="button" disabled={processingId === selectedJob.id || !hasJobApprovalDocuments(selectedJob)} title={hasJobApprovalDocuments(selectedJob) ? 'Approve job' : 'Employer TIN and trade license are required.'} onClick={() => startJobModeration(selectedJob, "approve")} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">Approve</button><button type="button" disabled={processingId === selectedJob.id} onClick={() => startJobModeration(selectedJob, "reject")} className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700 disabled:opacity-50">Reject</button></div>
           </div>
         </div>
       )}
-      {rejectingJob && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-labelledby="reject-job-title">
-          <form onSubmit={submitJobRejection} className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
-            <h2 id="reject-job-title" className="text-xl font-black text-slate-900">Reject job listing</h2>
-            <p className="mt-2 text-sm text-slate-600">Enter the reason. The employer will see it in dashboard notifications.</p>
-            <p className="mt-3 text-sm font-bold text-slate-800">{rejectingJob.title || 'Untitled job'}</p>
-            <label htmlFor="job-rejection-reason" className="mt-5 block text-sm font-bold text-slate-700">Rejection reason</label>
+      {moderatingJob && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-4" role="dialog" aria-modal="true" aria-labelledby="job-moderation-title">
+          <form onSubmit={submitJobModeration} className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+            <h2 id="job-moderation-title" className="text-xl font-black text-slate-900">{moderationAction === 'approve' ? 'Approve' : 'Reject'} job listing</h2>
+            <p className="mt-2 text-sm text-slate-600">Provide a reason of at least 20 characters. The decision will be recorded in the admin activity log.</p>
+            <p className="mt-3 text-sm font-bold text-slate-800">{moderatingJob.title || 'Untitled job'}</p>
+            <label htmlFor="job-moderation-reason" className="mt-5 block text-sm font-bold text-slate-700">{moderationAction === 'approve' ? 'Approval reason' : 'Rejection reason'}</label>
             <textarea
-              id="job-rejection-reason"
+              id="job-moderation-reason"
               autoFocus
               required
-              value={rejectReason}
-              onChange={(event) => setRejectReason(event.target.value)}
+              minLength={20}
+              value={moderationReason}
+              onChange={(event) => setModerationReason(event.target.value)}
               rows={4}
               maxLength={2000}
-              placeholder="Explain what needs to be corrected..."
-              className="mt-2 w-full resize-y rounded-xl border border-slate-300 p-3 text-sm text-slate-900 outline-none focus:border-rose-500 focus:ring-4 focus:ring-rose-500/10"
+              placeholder={moderationAction === 'approve' ? 'Explain why this job meets the requirements...' : 'Explain what needs to be corrected...'}
+              className={`mt-2 w-full resize-y rounded-xl border border-slate-300 p-3 text-sm text-slate-900 outline-none focus:ring-4 ${moderationAction === 'approve' ? 'focus:border-emerald-500 focus:ring-emerald-500/10' : 'focus:border-rose-500 focus:ring-rose-500/10'}`}
             />
+            <p className="mt-1 text-right text-xs text-slate-500">{moderationReason.trim().length}/20 characters minimum</p>
             <div className="mt-5 flex justify-end gap-2">
-              <button type="button" disabled={processingId === rejectingJob.id} onClick={() => { setRejectingJob(null); setRejectReason(''); }} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">Cancel</button>
-              <button type="submit" disabled={!rejectReason.trim() || processingId === rejectingJob.id} className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50">{processingId === rejectingJob.id ? 'Rejecting...' : 'Reject job'}</button>
+              <button type="button" disabled={processingId === moderatingJob.id} onClick={() => { setModeratingJob(null); setModerationReason(''); }} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">Cancel</button>
+              <button type="submit" disabled={moderationReason.trim().length < 20 || processingId === moderatingJob.id} className={`rounded-lg px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50 ${moderationAction === 'approve' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-rose-600 hover:bg-rose-700'}`}>{processingId === moderatingJob.id ? (moderationAction === 'approve' ? 'Approving...' : 'Rejecting...') : `${moderationAction === 'approve' ? 'Approve' : 'Reject'} job`}</button>
             </div>
           </form>
         </div>

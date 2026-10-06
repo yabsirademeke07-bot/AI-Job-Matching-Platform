@@ -192,6 +192,15 @@ async function createApplication(req, res) {
       [jobId, req.user.id, cv?.id || null, JSON.stringify(snapshot), match.score, match.breakdown.skills, match.breakdown.experience, match.breakdown.education, match.breakdown.location, String(coverLetter || '')]
     );
     await connection.query('UPDATE jobs SET application_count = application_count + 1 WHERE id = ?', [jobId]);
+    try {
+      await connection.query(`
+        INSERT INTO user_activity_log
+          (user_id, activity_type, description, details, related_job_id, ip_address, user_agent)
+        VALUES (?, 'job-apply', ?, ?, ?, ?, ?)
+      `, [req.user.id, `Applied for ${job.title}`.slice(0, 255), JSON.stringify({ recordId: result.insertId, applicationId: result.insertId, relatedJobId: Number(jobId), oldValues: null, newValues: { status: 'pending_review' }, ipAddress: req.ip, userAgent: req.get('user-agent') }), jobId, req.ip, req.get('user-agent')]);
+    } catch (auditError) {
+      console.warn('Application audit log skipped:', auditError.message);
+    }
     await connection.commit();
     await createNotification({
       userId: job.employer_id,
