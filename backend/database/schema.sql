@@ -486,6 +486,10 @@ CREATE TABLE IF NOT EXISTS applications (
     employer_notes TEXT,
     seeker_cover_letter TEXT,
     ai_recommendation TEXT,
+    ai_match_summary TEXT,
+    ai_strengths JSON,
+    ai_missing_skills JSON,
+    evaluated_at DATETIME NULL,
     rank_position INT,
     applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -499,8 +503,9 @@ CREATE TABLE IF NOT EXISTS applications (
     INDEX idx_candidate_id (candidate_id),
     INDEX idx_employer_id (employer_id),
     INDEX idx_status (status),
-    INDEX idx_ai_score (ai_match_score)
-    ,UNIQUE KEY unique_application_candidate_job (job_id, job_seeker_id)
+    INDEX idx_ai_score (ai_match_score),
+    INDEX idx_job_ai_match_score (job_id, ai_match_score DESC),
+    UNIQUE KEY unique_application_candidate_job (job_id, job_seeker_id)
 );
 
 -- Skill Gaps
@@ -688,12 +693,18 @@ CREATE TABLE IF NOT EXISTS admin_actions_log (
 CREATE TABLE IF NOT EXISTS reports (
     id INT AUTO_INCREMENT PRIMARY KEY,
     reporter_id INT NOT NULL,
+    reporter_role ENUM('seeker', 'employer', 'admin') NOT NULL DEFAULT 'seeker',
+    target_type ENUM('job', 'candidate', 'employer', 'platform') NOT NULL DEFAULT 'job',
+    target_id INT NULL,
     reported_user_id INT,
     reported_job_id INT,
-    report_type ENUM('inappropriate-content', 'spam', 'fraud', 'offensive-language', 'other') NOT NULL,
+    report_type ENUM('inappropriate-content', 'spam', 'fraud', 'offensive-language', 'payment-issue', 'fake-profile', 'other') NOT NULL,
+    issue_category VARCHAR(100) NULL,
     description TEXT NOT NULL,
+    evidence_url VARCHAR(512) NULL,
     status ENUM('pending', 'under-review', 'resolved', 'dismissed') DEFAULT 'pending',
     resolution_notes TEXT,
+    admin_notes TEXT NULL,
     resolved_by INT,
     resolved_at TIMESTAMP NULL DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -701,7 +712,22 @@ CREATE TABLE IF NOT EXISTS reports (
     FOREIGN KEY (reported_user_id) REFERENCES users(id) ON DELETE SET NULL,
     FOREIGN KEY (reported_job_id) REFERENCES jobs(id) ON DELETE SET NULL,
     FOREIGN KEY (resolved_by) REFERENCES users(id) ON DELETE SET NULL,
-    INDEX idx_status (status)
+    INDEX idx_status (status),
+    INDEX idx_reporter_role_created (reporter_role, created_at),
+    INDEX idx_target_type_id (target_type, target_id)
+);
+
+CREATE TABLE IF NOT EXISTS report_messages (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    report_id INT NOT NULL,
+    sender_type ENUM('admin', 'user') NOT NULL,
+    sender_id INT NOT NULL,
+    message TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (report_id) REFERENCES reports(id) ON DELETE CASCADE,
+    FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_report_messages_thread (report_id, created_at, id),
+    INDEX idx_report_messages_sender (sender_type, sender_id)
 );
 
 -- Blocked Users
@@ -735,6 +761,8 @@ CREATE TABLE IF NOT EXISTS user_activity_log (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
     activity_type ENUM('login', 'profile-update', 'job-view', 'job-apply', 'profile-view', 'message-sent', 'cv-upload', 'role_selected') NOT NULL,
+    description VARCHAR(255) NULL,
+    details JSON NULL,
     related_job_id INT,
     related_user_id INT,
     ip_address VARCHAR(45),
@@ -743,7 +771,8 @@ CREATE TABLE IF NOT EXISTS user_activity_log (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (related_job_id) REFERENCES jobs(id) ON DELETE SET NULL,
     INDEX idx_user_id (user_id),
-    INDEX idx_created_at (created_at)
+    INDEX idx_created_at (created_at),
+    INDEX idx_activity_type_created (activity_type, created_at)
 );
 
 -- Job Analytics

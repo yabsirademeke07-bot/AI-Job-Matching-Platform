@@ -1,5 +1,6 @@
 const express = require('express');
 const controller = require('../controllers/employerController');
+const matchingController = require('../controllers/employerMatchingController');
 const db = require('../connection');
 const authenticate = require('../middleware/authMiddleware');
 
@@ -38,6 +39,10 @@ router.get('/employer/profile', controller.getCompanyProfile);
 router.put('/employer/profile', controller.updateCompanyProfile);
 router.post('/employer/profile', controller.updateCompanyProfile);
 router.get('/employer/stats', controller.getDashboardStats);
+router.get('/employer/matching/jobs', matchingController.getJobs);
+router.get('/employer/matching/candidates/:jobId', matchingController.getCandidates);
+router.post('/employer/matching/run/:jobId', matchingController.runMatching);
+router.post('/employer/matching/shortlist', matchingController.shortlist);
 router.get('/employer/dashboard', controller.getDashboardOverview);
 router.get('/employer/applications', controller.getEmployerApplications);
 router.patch('/employer/applications/:applicationId/status', controller.updateApplicationStatus);

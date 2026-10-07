@@ -27,7 +27,7 @@ import Home from './pages/home/Home';
 import About from './pages/about';
 import Contact from './pages/contact';
 import ExploreJobs from './pages/ExploreJobs';
-import JobDetailsPage from './pages/JobDetails';
+import JobDetailsPage from './pages/Jobdetails';
 import ApplyJob from './pages/ApplyJob';
 import Companies from './pages/Companies';
 import CompanyCommunity from './pages/CompanyCommunity';
@@ -299,6 +299,14 @@ function AppLayout() {
           />
           <Route
             path="/employer/dashboard"
+            element={
+              <ProtectedRoute allowedRoles={["employer", "company", "recruiter"]}>
+                <EmployerWorkspace />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/employer/ai-matching"
             element={
               <ProtectedRoute allowedRoles={["employer", "company", "recruiter"]}>
                 <EmployerWorkspace />
