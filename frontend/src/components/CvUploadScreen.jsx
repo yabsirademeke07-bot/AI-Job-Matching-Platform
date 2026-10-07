@@ -48,6 +48,7 @@ const MIME_EXTENSION_MAP = {
 };
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const ACCEPTED_FILE_MESSAGE = 'Please upload a PDF, DOCX, DOC, TXT, RTF, ODT, PNG, JPG, or WEBP file (max 10MB).';
+const INVALID_CV_MESSAGE = 'This document could not be verified as a CV. Please upload a readable CV with contact details and work history, education, or skills.';
 
 const validateFile = (file) => {
   if (file.size > MAX_FILE_SIZE) {
@@ -64,7 +65,7 @@ const validateFile = (file) => {
 
   return {
     isValid: false,
-    error: 'Unsupported file type. Please upload a valid PDF, DOCX, DOC, TXT, RTF, ODT, PNG, JPG, or WEBP file (max 10MB).',
+    error: `Unsupported file type. ${ACCEPTED_FILE_MESSAGE}`,
   };
 };
 
@@ -86,6 +87,7 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [toastError, setToastError] = useState('');
+  const [validationNotice, setValidationNotice] = useState('');
   const [isInvalidFile, setIsInvalidFile] = useState(false);
 
   useEffect(() => {
@@ -100,6 +102,7 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
   const resetUploadState = () => {
     setFile(null);
     setToastError('');
+    setValidationNotice('');
     setIsInvalidFile(false);
     setUploadProgress(0);
     localStorage.removeItem('lastAnalyzedCvId');
@@ -116,6 +119,7 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
     setIsUploading(true);
     setUploadProgress(0);
     setToastError('');
+    setValidationNotice('');
     setIsInvalidFile(false);
 
     try {
@@ -167,7 +171,6 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
       } else {
         const message = uploadError.message || 'Unable to analyze your CV. Please try again.';
         setToastError(message);
-        showError(message);
         scrollCvFeedback('error');
       }
     } finally {
@@ -177,13 +180,13 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
 
   const handleFileSelect = (selectedFile) => {
     setToastError('');
+    setValidationNotice('');
     setIsInvalidFile(false);
     if (!selectedFile) return;
 
     const validation = validateFile(selectedFile);
     if (!validation.isValid) {
       setValidationNotice(validation.error);
-      showError(validation.error);
       scrollCvFeedback('error');
       return;
     }
@@ -193,8 +196,7 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
 
   const showInvalidFileToast = (message) => {
     setIsInvalidFile(true);
-    setToastError(message || 'Invalid Document - Not a Candidate CV. A valid CV must contain all 4 sections: Contact Details, Work Experience, Education, and Skills.');
-    showError(`⚠️ Upload failed. ${ACCEPTED_FILE_MESSAGE}`);
+    setToastError(message || INVALID_CV_MESSAGE);
     scrollCvFeedback('error');
   };
 
@@ -220,7 +222,6 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
       setValidationNotice(
         isInvalidFile ? 'Please replace this invalid document before continuing.' : 'Please upload your CV first, or skip this step for now using the button below.'
       );
-      showError(`⚠️ Upload failed. ${ACCEPTED_FILE_MESSAGE}`);
       scrollCvFeedback('error');
       return;
     }
@@ -365,6 +366,12 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
               <span>Replace CV</span>
             </button>
           </div>
+        )}
+
+        {validationNotice && (
+          <p className="mt-4 text-sm font-semibold text-rose-700" role="alert">
+            {validationNotice}
+          </p>
         )}
 
         <div className="mt-6 flex items-center justify-center gap-2 text-[11px] font-bold text-slate-500 sm:text-xs">

@@ -24,7 +24,7 @@ async function getMatchedJobs(req, res) {
        FROM jobs j
        JOIN users u ON u.id = j.employer_id
        LEFT JOIN company_profiles cp ON cp.employer_id = j.employer_id
-      WHERE LOWER(j.status) = 'active' AND j.is_approved = TRUE
+      WHERE LOWER(j.status) = 'active' AND j.approval_status = 'approved'
        ORDER BY j.created_at DESC`,
       []
     );
@@ -68,7 +68,11 @@ async function getMatchedJobs(req, res) {
       isSaved: Boolean(job.saved_id),
       isApplied: Boolean(job.application_id),
       workSetup: job.work_mode,
-      salary: job.salary_min || job.salary_max ? `${job.currency || 'ETB'} ${job.salary_min || ''}${job.salary_min && job.salary_max ? ' - ' : ''}${job.salary_max || ''}` : 'Negotiable',
+      salary: job.is_negotiable || job.is_salary_negotiable
+        ? 'Negotiable'
+        : job.salary_min || job.salary_max
+          ? `${job.currency || 'ETB'} ${job.salary_min || ''}${job.salary_min && job.salary_max ? ' - ' : ''}${job.salary_max || ''}`
+          : 'Compensation disclosed upon application',
       rationale: profile.hasUploadedCv && job.match_score !== null
         ? `${job.matched_skills.length} of ${job.required_skills.length} listed required skills match your uploaded CV.`
         : 'Upload a CV and add required skills to this job to calculate a match.',
@@ -81,13 +85,66 @@ async function getMatchedJobs(req, res) {
   }
 }
 
+async function getSeekerNotifications(req, res) {
+  try {
+    const userId = req.user.id;
+    const [notifications] = await db.execute(
+      `SELECT id, type, title, message, action_url, related_job_id, is_read, created_at
+       FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 20`,
+      [userId]
+    );
+    const [[unread]] = await db.execute(
+      'SELECT COUNT(*) AS count FROM notifications WHERE user_id = ? AND is_read = FALSE',
+      [userId]
+    );
+    return res.json({ success: true, notifications, unreadCount: Number(unread?.count || 0) });
+  } catch (error) {
+    console.error('Seeker notifications lookup failed:', error.message);
+    return res.status(500).json({ success: false, message: 'Unable to load notifications.' });
+  }
+}
+
+async function markSeekerNotificationRead(req, res) {
+  try {
+    const [existing] = await db.execute(
+      'SELECT id FROM notifications WHERE id = ? AND user_id = ? LIMIT 1',
+      [req.params.notificationId, req.user.id]
+    );
+    if (!existing.length) return res.status(404).json({ success: false, message: 'Notification not found.' });
+    await db.execute(
+      'UPDATE notifications SET is_read = TRUE, read_at = NOW() WHERE id = ? AND user_id = ?',
+      [req.params.notificationId, req.user.id]
+    );
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Mark seeker notification read failed:', error.message);
+    return res.status(500).json({ success: false, message: 'Unable to update notification.' });
+  }
+}
+
+async function getSeekerUnreadMessageCount(req, res) {
+  try {
+    const [[row]] = await db.execute(
+      `SELECT COUNT(*) AS count
+       FROM messages m
+       JOIN conversations c ON c.id = m.conversation_id
+       WHERE c.job_seeker_id = ? AND m.receiver_id = ? AND m.sender_id <> ? AND m.is_read = FALSE`,
+      [req.user.id, req.user.id, req.user.id]
+    );
+    return res.json({ success: true, unreadCount: Number(row?.count || 0) });
+  } catch (error) {
+    console.error('Seeker unread messages lookup failed:', error.message);
+    return res.status(500).json({ success: false, message: 'Unable to load unread messages.' });
+  }
+}
+
 async function createApplication(req, res) {
   const { jobId, coverLetter = '' } = req.body || {};
   if (!jobId) return res.status(400).json({ success: false, message: 'jobId is required.' });
   const connection = await db.getConnection();
   try {
     await connection.beginTransaction();
-    const [[job]] = await connection.query("SELECT * FROM jobs WHERE id = ? AND LOWER(status) = 'active' AND is_approved = TRUE LIMIT 1", [jobId]);
+    const [[job]] = await connection.query("SELECT * FROM jobs WHERE id = ? AND LOWER(status) = 'active' AND approval_status = 'approved' LIMIT 1", [jobId]);
     if (!job) {
       await connection.rollback();
       return res.status(404).json({ success: false, message: 'This job is no longer available.' });
@@ -136,7 +193,7 @@ async function createApplication(req, res) {
 
 async function getApplicationMatchScore(req, res) {
   try {
-    const [[job]] = await db.query("SELECT j.*, COALESCE(j.company_name, cp.company_name, u.full_name, 'Company') AS company_name FROM jobs j JOIN users u ON u.id = j.employer_id LEFT JOIN company_profiles cp ON cp.employer_id = j.employer_id WHERE j.id = ? LIMIT 1", [req.params.jobId]);
+    const [[job]] = await db.query("SELECT j.*, COALESCE(j.company_name, cp.company_name, u.full_name, 'Company') AS company_name FROM jobs j JOIN users u ON u.id = j.employer_id LEFT JOIN company_profiles cp ON cp.employer_id = j.employer_id WHERE j.id = ? AND LOWER(j.status) IN ('active', 'published') AND j.approval_status = 'approved' LIMIT 1", [req.params.jobId]);
     if (!job) return res.status(404).json({ success: false, message: 'Job not found.' });
     const profile = await getCandidateProfile(req.user.id);
     const [requiredSkills] = await db.query('SELECT skill_name, skill_weight FROM job_required_skills WHERE job_id = ? ORDER BY id', [req.params.jobId]);
@@ -164,4 +221,13 @@ async function unsaveJob(req, res) {
   } catch (error) { return res.status(500).json({ success: false, message: 'Unable to remove saved job.' }); }
 }
 
-module.exports = { getMatchedJobs, createApplication, getApplicationMatchScore, saveJob, unsaveJob };
+module.exports = {
+  getMatchedJobs,
+  getSeekerNotifications,
+  markSeekerNotificationRead,
+  getSeekerUnreadMessageCount,
+  createApplication,
+  getApplicationMatchScore,
+  saveJob,
+  unsaveJob,
+};

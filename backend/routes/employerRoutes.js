@@ -1,9 +1,83 @@
 const express = require('express');
+const fs = require('fs');
+const multer = require('multer');
+const path = require('path');
+const crypto = require('crypto');
 const controller = require('../controllers/employerController');
 const db = require('../connection');
 const authenticate = require('../middleware/authMiddleware');
 
 const router = express.Router();
+const employerDocumentDir = path.resolve(__dirname, '..', 'private', 'employer-documents');
+fs.mkdirSync(employerDocumentDir, { recursive: true });
+const tinCertificateUpload = multer({
+  storage: multer.diskStorage({
+    destination: employerDocumentDir,
+    filename: (_req, file, callback) => {
+      callback(null, `${crypto.randomBytes(16).toString('hex')}${path.extname(file.originalname).toLowerCase()}`);
+    },
+  }),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, callback) => {
+    const extension = path.extname(file.originalname).toLowerCase();
+    const allowedFiles = {
+      '.pdf': 'application/pdf',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+    };
+    if (allowedFiles[extension] === file.mimetype) return callback(null, true);
+    return callback(new Error('Upload a PDF, JPG, or PNG certificate.'));
+  },
+});
+
+const tradeLicenseUpload = multer({
+  storage: multer.diskStorage({
+    destination: employerDocumentDir,
+    filename: (_req, file, callback) => {
+      callback(null, `${crypto.randomBytes(16).toString('hex')}${path.extname(file.originalname).toLowerCase()}`);
+    },
+  }),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, callback) => {
+    const extension = path.extname(file.originalname).toLowerCase();
+    const allowedFiles = {
+      '.pdf': 'application/pdf',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+    };
+    if (allowedFiles[extension] === file.mimetype) return callback(null, true);
+    return callback(new Error('Please upload a valid document (PDF, PNG, or JPG between 20KB and 10MB).'));
+  },
+});
+
+const parseTinCertificateUpload = (req, res, next) => {
+  tinCertificateUpload.single('certificate')(req, res, (error) => {
+    if (!error) return next();
+    const status = error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+    return res.status(status).json({ success: false, message: error.message || 'Unable to process the certificate upload.' });
+  });
+};
+
+const parseTradeLicenseUpload = (req, res, next) => {
+  tradeLicenseUpload.single('document')(req, res, async (error) => {
+    const validationMessage = 'Please upload a valid document (PDF, PNG, or JPG between 20KB and 10MB).';
+    if (error) {
+      const status = error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+      return res.status(status).json({ success: false, message: validationMessage });
+    }
+    if (!req.file) return res.status(400).json({ success: false, message: validationMessage });
+    if (req.file.size < 20 * 1024) {
+      await fs.promises.unlink(req.file.path).catch((unlinkError) => {
+        console.error('Unable to remove undersized trade-license document:', unlinkError.message);
+      });
+      return res.status(400).json({ success: false, message: validationMessage });
+    }
+    return next();
+  });
+};
+
 const employerOnly = async (req, res, next) => {
   const employerRoles = ['employer', 'company', 'recruiter'];
   if (employerRoles.includes(String(req.user.role || '').toLowerCase())) return next();
@@ -35,9 +109,14 @@ router.use((req, res, next) => {
     : next();
 });
 router.get('/employer/profile', controller.getCompanyProfile);
+router.get('/employer/profile/tin-certificate/:filename', controller.getTinCertificate);
+router.get('/employer/profile/trade-license/:filename', controller.getTradeLicense);
 router.put('/employer/profile', controller.updateCompanyProfile);
 router.post('/employer/profile', controller.updateCompanyProfile);
+router.post('/employer/profile/tin-certificate', parseTinCertificateUpload, controller.uploadTinCertificate);
+router.post('/employer/profile/trade-license', parseTradeLicenseUpload, controller.uploadTradeLicense);
 router.get('/employer/stats', controller.getDashboardStats);
+router.get('/employer/dashboard-stats', controller.getEmployerDashboardStats);
 router.get('/employer/dashboard', controller.getDashboardOverview);
 router.get('/employer/applications', controller.getEmployerApplications);
 router.patch('/employer/applications/:applicationId/status', controller.updateApplicationStatus);

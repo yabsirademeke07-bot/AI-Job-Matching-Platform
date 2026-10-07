@@ -10,17 +10,79 @@ async function removeFile(file) {
   if (file?.path) await fs.unlink(file.path).catch(() => {});
 }
 
+async function syncExtractedProfile(connection, userId, extracted, parsedText, fileUrl) {
+  const fullName = extracted.fullName || extracted.full_name || '';
+  const profileData = {
+    ...extracted,
+    fullName,
+    full_name: fullName,
+    rawCvText: parsedText,
+    cvUrl: fileUrl,
+    cvStatus: 'uploaded',
+    cvSkipped: false,
+    onboardingStep: 'personal_info',
+    onboardingStepCompleted: 'manual_profile',
+  };
+
+  await connection.execute(
+    `INSERT INTO job_seeker_profiles
+       (user_id, headline, location, education, skills, languages, raw_cv_text,
+        parsed_json_payload, cv_url, cv_status, cv_skipped, onboarding_step,
+        onboarding_step_completed)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'uploaded', FALSE, 'personal_info', 'manual_profile')
+     ON DUPLICATE KEY UPDATE
+       headline = COALESCE(NULLIF(VALUES(headline), ''), headline),
+       location = COALESCE(NULLIF(VALUES(location), ''), location),
+       education = VALUES(education),
+       skills = VALUES(skills),
+       languages = VALUES(languages),
+       raw_cv_text = VALUES(raw_cv_text),
+       parsed_json_payload = VALUES(parsed_json_payload),
+       cv_url = VALUES(cv_url),
+       cv_status = 'uploaded',
+       cv_skipped = FALSE,
+       onboarding_step = 'personal_info',
+       onboarding_step_completed = 'manual_profile',
+       updated_at = CURRENT_TIMESTAMP`,
+    [
+      userId,
+      extracted.professional_title || extracted.headline || null,
+      extracted.location || null,
+      JSON.stringify(extracted.education || []),
+      JSON.stringify(extracted.skills || []),
+      JSON.stringify(extracted.languages || []),
+      parsedText,
+      JSON.stringify(profileData),
+      fileUrl,
+    ]
+  );
+  await connection.execute(
+    `UPDATE users
+     SET full_name = COALESCE(NULLIF(?, ''), full_name),
+         email = COALESCE(NULLIF(?, ''), email),
+         phone = COALESCE(NULLIF(?, ''), phone),
+         cv_url = ?,
+         cv_status = 'uploaded',
+         onboarding_step_completed = 'manual_profile'
+     WHERE id = ?`,
+    [fullName, extracted.email || '', extracted.phone || '', fileUrl, userId]
+  );
+}
+
 async function getPublishedJobMatches(candidate) {
   const [jobs] = await db.execute(
     `SELECT j.id, j.title, j.company_name,
             COALESCE(cp.company_name, j.company_name, u.full_name, 'Company') AS employer_name,
             j.description, j.category, j.job_type, j.experience_level, j.location,
-            j.work_mode, j.salary_min, j.salary_max, j.currency, j.required_skills,
-            j.required_education, j.application_deadline, j.created_at
+            j.work_mode, j.salary_min, j.salary_max, j.currency, j.is_negotiable,
+            j.is_salary_negotiable, j.benefits, j.vacancies, j.required_skills,
+            j.required_education, j.min_experience, j.years_of_experience_min,
+            j.application_deadline, j.created_at
      FROM jobs j
      JOIN users u ON u.id = j.employer_id
      LEFT JOIN company_profiles cp ON cp.employer_id = j.employer_id
      WHERE LOWER(j.status) IN ('published', 'active')
+       AND j.approval_status = 'approved'
      ORDER BY j.created_at DESC`
   );
   if (!jobs.length) return [];

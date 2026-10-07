@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Award, BriefcaseBusiness, GraduationCap, Pencil, Plus, Trash2 } from 'lucide-react';
 
 function CollectionSection({ title, icon: Icon, items, emptyText, onAdd, onEdit, onDelete, renderItem }) {
-  return <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><h2 className="flex items-center gap-2 text-xl font-black text-slate-900"><Icon className="h-5 w-5 text-[var(--brand-deep)]" /> {title}</h2><button type="button" onClick={() => onAdd()} className="inline-flex min-h-11 items-center gap-1 text-sm font-bold text-[var(--brand-deep)]"><Plus className="h-4 w-4" /> Add</button></div>{items.length === 0 ? <p className="mt-4 rounded-xl bg-slate-50 p-5 text-sm text-slate-500">{emptyText}</p> : <div className="mt-4 space-y-3">{items.map((item) => <article key={item.id} className="rounded-xl border border-slate-100 p-4"><div>{renderItem(item)}</div><div className="mt-4 flex gap-3 border-t border-slate-100 pt-3"><button type="button" onClick={() => onEdit(item)} className="inline-flex min-h-11 items-center gap-1 text-sm font-bold text-[var(--brand-deep)]"><Pencil className="h-4 w-4" /> Edit</button><button type="button" onClick={() => onDelete(item)} className="inline-flex min-h-11 items-center gap-1 text-sm font-bold text-red-600"><Trash2 className="h-4 w-4" /> Delete</button></div></article>)}</div>}</section>;
+  return <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><h2 className="flex items-center gap-2 text-xl font-black text-slate-900"><Icon className="h-5 w-5 text-[var(--brand-deep)]" /> {title}</h2><button type="button" onClick={() => onAdd()} className="inline-flex min-h-11 items-center gap-1 text-sm font-bold text-[var(--brand-deep)]"><Plus className="h-4 w-4" /> Add</button></div>{items.length === 0 ? <p className="mt-4 rounded-xl bg-slate-50 p-5 text-sm text-slate-500">{emptyText}</p> : <div className="mt-4 space-y-3">{items.map((item, index) => <article key={item.id ?? `${title}-${index}`} className="rounded-xl border border-slate-100 p-4"><div>{renderItem(item)}</div><div className="mt-4 flex gap-3 border-t border-slate-100 pt-3"><button type="button" onClick={() => onEdit(item)} className="inline-flex min-h-11 items-center gap-1 text-sm font-bold text-[var(--brand-deep)]"><Pencil className="h-4 w-4" /> Edit</button><button type="button" onClick={() => onDelete(item)} className="inline-flex min-h-11 items-center gap-1 text-sm font-bold text-red-600"><Trash2 className="h-4 w-4" /> Delete</button></div></article>)}</div>}</section>;
 }
 
 export function EducationSection({ items = [], onAdd, onEdit, onDelete }) {
@@ -85,8 +85,8 @@ export function ExperienceSection({ items = [], onAdd, onEdit, onDelete }) {
               </p>
               {item.achievements?.length ? (
                 <ul className="mt-2 list-disc space-y-1 pl-4 text-sm text-slate-600">
-                  {item.achievements.map((achievement) => (
-                    <li key={achievement}>{achievement}</li>
+                  {item.achievements.map((achievement, index) => (
+                    <li key={`${achievement}-${index}`}>{achievement}</li>
                   ))}
                 </ul>
               ) : (

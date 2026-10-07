@@ -11,6 +11,7 @@ import {
 export const EmployerHeader = ({
   currentTabTitle = 'Employer Dashboard',
   breadcrumb = 'Home / Dashboard',
+  showSearch = true,
   unreadNotificationsCount = 0,
   onToggleSidebar,
   onSearchClick,
@@ -20,6 +21,7 @@ export const EmployerHeader = ({
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
+    if (!showSearch || !onSearchClick) return undefined;
     const handleKeyDown = (event) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
@@ -29,7 +31,7 @@ export const EmployerHeader = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onSearchClick]);
+  }, [onSearchClick, showSearch]);
 
   const toggleFullscreen = async () => {
     try {
@@ -49,7 +51,7 @@ export const EmployerHeader = ({
     <header className="sticky top-0 z-30 flex h-20 items-center justify-between border-b border-slate-200/80 bg-white/95 px-6 shadow-xs backdrop-blur-sm">
       <div className="w-0" aria-hidden="true" />
 
-      <div className="mx-8 hidden max-w-md flex-1 items-center md:flex">
+      {showSearch && <div className="mx-8 hidden max-w-md flex-1 items-center md:flex">
         <button
           type="button"
           onClick={onSearchClick}
@@ -63,7 +65,7 @@ export const EmployerHeader = ({
             Ctrl + K
           </span>
         </button>
-      </div>
+      </div>}
 
       <div className="flex items-center gap-3">
         <button

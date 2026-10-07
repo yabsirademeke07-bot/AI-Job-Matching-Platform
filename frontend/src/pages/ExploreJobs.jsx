@@ -334,11 +334,6 @@ function CleanJobCard({ job, saved, onToggleSave, onShare, onViewDetails }) {
             <span className="font-black text-slate-900">{job.company}</span>
             <span className="text-slate-500">•</span>
             <span className="font-semibold text-slate-700">{job.location}</span>
-            {job.aiMatchScore !== null && (
-              <span className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-black text-emerald-700">
-                {job.aiMatchScore}% CV skills match
-              </span>
-            )}
           </div>
         </div>
 
@@ -650,7 +645,7 @@ function JobDetailModal({
                     {job.salary}
                   </span>
                   <span className="block text-xs font-semibold text-slate-700 sm:text-sm">
-                    Negotiable Package
+                    {job.is_negotiable ? "Negotiable Package" : "Published salary range"}
                   </span>
                 </div>
 
@@ -683,6 +678,24 @@ function JobDetailModal({
                         {job.education}
                       </span>
                     </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-600 font-medium">
+                        Minimum Experience:
+                      </span>
+                      <span className="font-bold text-slate-900">
+                        {job.minimumExperienceLabel}
+                      </span>
+                    </div>
+                    {job.benefits && (
+                      <div className="flex items-start justify-between gap-4">
+                        <span className="shrink-0 text-slate-600 font-medium">
+                          Benefits:
+                        </span>
+                        <span className="text-right font-bold text-slate-900">
+                          {job.benefits}
+                        </span>
+                      </div>
+                    )}
                     <div className="flex items-center justify-between">
                       <span className="text-slate-600 font-medium">
                         Deadline:
@@ -862,7 +875,7 @@ function JobPostModal({ isOpen, onClose, onJobCreated }) {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                  Job Title *
+                  Job Title
                 </label>
                 <input
                   type="text"
@@ -875,7 +888,7 @@ function JobPostModal({ isOpen, onClose, onJobCreated }) {
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                  Company *
+                  Company
                 </label>
                 <input
                   type="text"
@@ -1195,8 +1208,29 @@ export default function ExploreJobsPage() {
 
     const normalizedSalaryMin = Number(job.salary_min ?? job.salaryMin ?? 0);
     const normalizedSalaryMax = Number(job.salary_max ?? job.salaryMax ?? 0);
+    const isNegotiable = [job.is_negotiable, job.is_salary_negotiable]
+      .some((value) => value === true || value === 1 || value === "1" || value === "true");
+    const minimumExperience = job.min_experience ?? job.years_of_experience_min;
+    const minimumExperienceLabels = {
+      0: "No Experience (Fresh Graduate)",
+      1: "1 Year",
+      2: "2 Years",
+      3: "3-5 Years",
+      5: "5-8 Years",
+      8: "8+ Years",
+    };
+    const educationLabels = {
+      any: "Any / Not Specified",
+      "high-school": "High School",
+      associate: "Diploma / TVET",
+      bachelor: "Bachelor's Degree (BSc/BA)",
+      master: "Master's Degree (MSc/MA)",
+      phd: "PhD / Doctorate",
+    };
     const priceText =
-      normalizedSalaryMin || normalizedSalaryMax
+      isNegotiable
+        ? "Negotiable"
+        : normalizedSalaryMin || normalizedSalaryMax
         ? `${job.currency || "ETB"} ${normalizedSalaryMin.toLocaleString()} - ${normalizedSalaryMax.toLocaleString()} / mo`
         : job.salary || "Compensation disclosed upon application";
 
@@ -1212,7 +1246,7 @@ export default function ExploreJobsPage() {
         job.experienceLevel ||
         job.experience_level ||
         "Mid-level",
-      education: job.education || job.required_education || "Any",
+      education: educationLabels[job.required_education] || job.education || job.required_education || "Any",
       sector: job.sector || job.category || "Other",
       gender: job.gender ||
         (job.gender_preference === "male"
@@ -1221,6 +1255,12 @@ export default function ExploreJobsPage() {
             ? "Female"
             : "Any Gender"),
       vacancies: Number(job.vacancies ?? job.vacancy_count ?? 1),
+      is_negotiable: isNegotiable,
+      benefits: job.benefits || "",
+      min_experience: minimumExperience ?? null,
+      minimumExperienceLabel: minimumExperience === null || minimumExperience === undefined
+        ? "Not specified"
+        : minimumExperienceLabels[minimumExperience] || `${minimumExperience}+ Years`,
       deadline: job.deadline || job.application_deadline || "No deadline",
       deadlineDate: job.deadlineDate || job.application_deadline || "",
       postedAt: job.postedAt || (job.created_at ? `Posted ${new Date(job.created_at).toLocaleDateString()}` : "Recently posted"),
@@ -1242,7 +1282,6 @@ export default function ExploreJobsPage() {
       requirements: Array.isArray(job.requirements)
         ? job.requirements
         : [],
-      benefits: Array.isArray(job.benefits) ? job.benefits : [],
     };
   };
 
@@ -1316,6 +1355,8 @@ export default function ExploreJobsPage() {
     };
   };
   const [jobs, setJobs] = useState([]);
+  const [jobsLoading, setJobsLoading] = useState(true);
+  const [jobsLoadError, setJobsLoadError] = useState("");
   const [activeSeekerProfile, setActiveSeekerProfile] = useState(readActiveSeekerProfile);
   const [search, setSearch] = useState("");
   useEffect(() => {
@@ -1328,11 +1369,20 @@ export default function ExploreJobsPage() {
         if (!mounted) return;
 
         const rawJobs = Array.isArray(data) ? data : data.jobs || [];
-        setJobs(rawJobs.map(normalizeApiJob));
+        setJobs(rawJobs
+          .filter((job) => String(job.approval_status || job.approvalStatus || '').toLowerCase() === 'approved')
+          .map(normalizeApiJob));
         setJobsLoadError("");
       } catch (error) {
         console.error("Unable to load jobs from API:", error);
-        if (mounted) setJobs([]);
+        if (mounted) {
+          setJobs([]);
+          setJobsLoadError(
+            error.response?.data?.message || "Unable to load jobs. Please try again.",
+          );
+        }
+      } finally {
+        if (mounted) setJobsLoading(false);
       }
     };
 
@@ -1355,8 +1405,7 @@ export default function ExploreJobsPage() {
     };
   }), [jobs, activeSeekerProfile]);
 
-  // Pagination / Limit State
-  const INITIAL_VISIBLE_COUNT = 4;
+  const INITIAL_VISIBLE_COUNT = 6;
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_COUNT);
 
   // Filter States
@@ -1400,24 +1449,6 @@ export default function ExploreJobsPage() {
   const [savedJobs, setSavedJobs] = useState([]);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
-
-  // Auto-reset visible count back to initial count when filters change
-  useEffect(() => {
-    setVisibleCount(INITIAL_VISIBLE_COUNT);
-  }, [
-    search,
-    selectedSector,
-    selectedLocation,
-    selectedJobTypes,
-    selectedWorkMode,
-    selectedExperience,
-    selectedEducation,
-    selectedGender,
-    minSalary,
-    currency,
-    datePosted,
-    sortBy,
-  ]);
 
   const selectJobType = (type) => {
     setSelectedJobTypes(type ? [type] : []);
@@ -1485,7 +1516,6 @@ export default function ExploreJobsPage() {
     setMinSalary(0);
     setDatePosted("all");
     setSortBy("newest");
-    setVisibleCount(INITIAL_VISIBLE_COUNT);
   };
 
   const activeFiltersCount = useMemo(() => {
@@ -1611,8 +1641,22 @@ export default function ExploreJobsPage() {
     sortBy,
   ]);
 
-  // Sliced Visible Jobs
+  useEffect(() => {
+    setVisibleCount(INITIAL_VISIBLE_COUNT);
+  }, [filteredJobs]);
+
   const visibleJobs = filteredJobs.slice(0, visibleCount);
+  const handleLoadMore = () => {
+    setVisibleCount((current) =>
+      Math.min(current + INITIAL_VISIBLE_COUNT, filteredJobs.length),
+    );
+  };
+  const handleLoadLess = () => {
+    setVisibleCount(INITIAL_VISIBLE_COUNT);
+    document
+      .getElementById("explore-job-list")
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   return (
     <div className="jobs-page min-h-screen bg-white text-slate-900 font-sans flex flex-col">
@@ -1727,7 +1771,7 @@ export default function ExploreJobsPage() {
         <div className="flex flex-col lg:flex-row items-start gap-4">
           {/* LEFT: FILTER SIDEBAR */}
           <aside
-            className={`brand-sidebar explore-sidebar fixed inset-y-0 right-0 w-72 shrink-0 overflow-y-auto overscroll-contain p-6 shadow-2xl transition-transform lg:sticky lg:top-6 lg:left-0 lg:right-auto lg:block lg:h-[calc(100vh-3rem)] lg:translate-x-0 lg:rounded-2xl lg:p-6 lg:shadow-2xs ${
+            className={`brand-sidebar explore-sidebar fixed inset-y-0 right-0 w-72 shrink-0 overflow-y-auto overscroll-contain p-6 shadow-2xl transition-transform lg:sticky lg:top-28 lg:left-0 lg:right-auto lg:block lg:h-[calc(100vh-8rem)] lg:translate-x-0 lg:rounded-2xl lg:p-6 lg:shadow-2xs ${
               mobileFiltersOpen
                 ? "translate-x-0"
                 : "translate-x-full lg:translate-x-0"
@@ -2147,7 +2191,7 @@ export default function ExploreJobsPage() {
 
           {/* RIGHT: JOB CARDS */}
           <main className="flex-1 min-w-0 w-full space-y-6">
-            <div className="jobs-results-header flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 pb-3.5 text-left">
+            <div className="jobs-results-header sticky top-20 sm:top-24 z-20 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 pb-3.5 text-left">
               <span className="text-lg sm:text-xl font-black text-[#2B73A4] border-b-2 border-[#56A2D8] pb-3.5 px-1 self-start">
                 All Jobs
               </span>
@@ -2207,7 +2251,7 @@ export default function ExploreJobsPage() {
               </div>
             ) : (
               <>
-                <div className="space-y-6">
+                <div id="explore-job-list" className="scroll-mt-28 space-y-6">
                   {visibleJobs.map((job) => (
                     <CleanJobCard
                       key={job.id}
@@ -2219,43 +2263,28 @@ export default function ExploreJobsPage() {
                     />
                   ))}
                 </div>
-
-                {/* ================= SHOW MORE / SHOW LESS BUTTONS ================= */}
                 {filteredJobs.length > INITIAL_VISIBLE_COUNT && (
-                  <div className="pt-8 pb-4 flex flex-col items-center justify-center gap-2">
+                  <div className="py-8 text-center">
+                    <p className="mb-3 text-xs font-medium text-slate-500">
+                      Showing {visibleJobs.length} of {filteredJobs.length} jobs
+                    </p>
                     {visibleCount < filteredJobs.length ? (
                       <button
                         type="button"
-                        onClick={() =>
-                          setVisibleCount((prev) =>
-                            Math.min(prev + 4, filteredJobs.length),
-                          )
-                        }
-                        className="px-8 py-3.5 rounded-2xl border-2 border-[#D0E5F5] bg-white hover:bg-[#F0F7FC] hover:border-[#56A2D8] text-[#2B73A4] text-base font-extrabold transition-all duration-200 shadow-xs hover:shadow-md cursor-pointer flex items-center gap-2.5 group"
+                        onClick={handleLoadMore}
+                        className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-6 py-2.5 text-sm font-semibold text-slate-700 shadow-xs transition-all hover:bg-slate-50"
                       >
-                        <span>
-                          Show More Jobs (+{filteredJobs.length - visibleCount}{" "}
-                          remaining)
-                        </span>
-                        <ChevronDown className="h-5 w-5 text-[#56A2D8] group-hover:translate-y-0.5 transition-transform" />
+                        Load More Jobs ↓
                       </button>
                     ) : (
                       <button
                         type="button"
-                        onClick={() => {
-                          setVisibleCount(INITIAL_VISIBLE_COUNT);
-                          window.scrollTo({ top: 150, behavior: "smooth" });
-                        }}
-                        className="px-7 py-3 rounded-2xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-sm font-extrabold transition-all duration-200 shadow-2xs cursor-pointer flex items-center gap-2"
+                        onClick={handleLoadLess}
+                        className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-6 py-2.5 text-sm font-semibold text-slate-700 shadow-xs transition-all hover:bg-slate-50"
                       >
-                        <span>Show Less</span>
-                        <ChevronUp className="h-4.5 w-4.5 text-slate-500" />
+                        Show Less ↑
                       </button>
                     )}
-                    <span className="text-xs font-semibold text-slate-500">
-                      Showing {visibleJobs.length} of {filteredJobs.length}{" "}
-                      positions
-                    </span>
                   </div>
                 )}
               </>

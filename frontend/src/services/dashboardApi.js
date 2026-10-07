@@ -89,7 +89,7 @@ export async function fetchRecentApplications() {
 }
 
 export async function fetchMatchedJobs() {
-  const { data } = await api.get('/seeker/matched-jobs');
+  const { data } = await api.get('/seeker/matched-jobs', { params: { all: 'true' } });
   return (data.jobs || []).map((job) => ({
     ...job,
     company: job.company || job.company_name,

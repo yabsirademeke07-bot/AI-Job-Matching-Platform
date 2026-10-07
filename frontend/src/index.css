@@ -90,9 +90,11 @@ body {
 }
 
 .navbar {
-  position: sticky;
+  position: fixed;
   top: 0;
-  z-index: 9999;
+  left: 0;
+  right: 0;
+  z-index: 50;
 }
 
 .admin-shell {
@@ -1054,4 +1056,62 @@ textarea {
   overflow-x: hidden;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+}
+
+@media (max-width: 639px) {
+  .navbar-main-grid {
+    min-width: 0;
+    gap: 0.5rem;
+  }
+
+  .navbar-brand-mark,
+  .navbar-brand-text {
+    min-width: 0;
+  }
+
+  .navbar-brand-tagline {
+    font-size: 0.58rem !important;
+    letter-spacing: 0.08em;
+  }
+
+  main table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .fixed[class*="min-w-[320px]"] {
+    left: auto;
+    right: 1rem;
+    width: calc(100vw - 2rem);
+    min-width: 0;
+    max-width: 24rem;
+  }
+
+  [role="dialog"] {
+    max-width: calc(100vw - 1.5rem);
+    max-height: calc(100dvh - 1.5rem);
+    overflow-y: auto;
+  }
+}
+
+@media (max-width: 359px) {
+  .navbar-main-grid {
+    padding-inline: 0.625rem;
+  }
+
+  .navbar-brand-image {
+    width: 2.25rem;
+    height: 2.25rem;
+  }
+
+  .navbar-brand-title {
+    font-size: 0.8rem !important;
+  }
+
+  .navbar-brand-tagline {
+    font-size: 0.5rem !important;
+    letter-spacing: 0.055em;
+  }
 }

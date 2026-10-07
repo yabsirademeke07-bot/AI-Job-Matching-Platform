@@ -120,17 +120,23 @@ const Login = () => {
           state: {
             email: data.email || formData.emailOrPhone.trim().toLowerCase(),
             message: data.message,
+            purpose: 'registration',
             intent: location.state?.intent,
           }
         });
+        if (data.emailDelivered === false) {
+          const fallbackCode = data.devOtp ? ` Development code: ${data.devOtp}` : '';
+          showError(`${data.emailError || data.message || 'OTP saved, but email delivery failed.'}${fallbackCode}`);
+        }
         return;
       }
 
-      if (res.status === 429 || data.requires_otp || data.message?.toLowerCase().includes('login code was already sent')) {
+      if (data.requires_otp || data.active_code || data.message?.toLowerCase().includes('login code was already sent')) {
         navigate('/verify-otp', {
           state: {
             email: data.email || formData.emailOrPhone.trim().toLowerCase(),
             message: data.message || 'A login code was already sent to your email. Please enter it below to continue.',
+            purpose: 'login',
             intent: location.state?.intent,
           }
         });
@@ -143,10 +149,16 @@ const Login = () => {
           state: {
             email: data.email || formData.emailOrPhone.trim().toLowerCase(),
             message: `We sent a verification code to ${(data.email || formData.emailOrPhone).trim().toLowerCase()}.`,
+            purpose: 'login',
             intent: location.state?.intent,
           }
         });
-        showSuccess('Verification code sent successfully.');
+        if (data.emailDelivered === false) {
+          const fallbackCode = data.devOtp ? ` Development code: ${data.devOtp}` : '';
+          showError(`${data.emailError || 'OTP saved, but email delivery failed.'}${fallbackCode}`);
+        } else {
+          showSuccess('Verification code sent successfully.');
+        }
         return;
       }
     } catch (error) {
@@ -157,10 +169,10 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen w-full bg-brand-soft bg-[radial-gradient(#d0e5f5_1px,transparent_1px)] bg-size-[16px_16px] flex items-center justify-center p-3 sm:p-4 md:p-6 lg:p-8 font-sans overflow-x-hidden">
+    <div className="min-h-screen w-full bg-brand-soft bg-[radial-gradient(#d0e5f5_1px,transparent_1px)] bg-size-[16px_16px] flex flex-col items-center justify-center gap-8 p-3 sm:p-4 md:p-6 lg:p-8 font-sans overflow-x-hidden">
 
       {/* Responsive Centered Card Container */}
-      <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-12 rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xl bg-white border border-slate-300 my-auto">
+      <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-12 rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xl bg-white border border-slate-300">
 
         {/* LEFT SIDE: Info Section (Hidden on ultra-small landscape or scaled smoothly) */}
         <div className="md:col-span-5 auth-brand-gradient p-4 sm:p-5 md:p-6 lg:p-7 flex flex-col justify-between relative overflow-hidden">

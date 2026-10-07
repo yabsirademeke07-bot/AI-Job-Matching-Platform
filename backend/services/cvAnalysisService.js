@@ -335,9 +335,16 @@ function scoreEducationMatcher(candidateEducation, requiredEducation) {
   return requiredRank <= bestCandidateRank ? 1 : Math.max(0.2, 1 - (requiredRank - bestCandidateRank) * 0.25);
 }
 
-function scoreExperienceMatcher(candidateYears, jobExperience) {
+function scoreExperienceMatcher(candidateYears, jobExperience, minimumExperience) {
   const candidateText = normalizeMatchText(candidateYears || '');
   const jobText = normalizeMatchText(jobExperience || '');
+  if (minimumExperience !== null && minimumExperience !== undefined) {
+    const candidateValue = Number((candidateText.match(/(\d+(?:\.\d+)?)/) || [])[0] || 0);
+    const requiredValue = Number(minimumExperience);
+    if (requiredValue <= 0) return 1;
+    if (candidateValue) return candidateValue >= requiredValue ? 1 : Math.max(0.2, candidateValue / requiredValue);
+    return candidateText.includes('senior') || candidateText.includes('expert') ? 0.9 : 0.7;
+  }
   if (!jobText || jobText === 'all' || jobText.includes('any')) return 1;
   const candidateValue = Number((candidateText.match(/(\d+(?:\.\d+)?)/) || [])[0] || 0);
   const requiredValue = Number((jobText.match(/(\d+(?:\.\d+)?)/) || [])[0] || 0);
@@ -382,7 +389,11 @@ function buildJobMatchBreakdown(profile, job) {
   const titleScore = titleTokens.size ? [...titleTokens].filter((token) => candidateTokens.has(token)).length / titleTokens.size : 0.5;
 
   const educationScore = scoreEducationMatcher(profile?.educationLevel || profile?.education || '', job.required_education || job.education || 'any');
-  const experienceScore = scoreExperienceMatcher(profile?.experienceLevel || profile?.experience || '', job.experienceLevel || '');
+  const experienceScore = scoreExperienceMatcher(
+    profile?.experienceLevel || profile?.experience || '',
+    job.experienceLevel || '',
+    job.min_experience ?? (Number(job.years_of_experience_min) > 0 ? job.years_of_experience_min : undefined),
+  );
   const locationScore = scoreLocationCompatibility(profile?.location || profile?.city || '', job.location || job.locationValue || '');
   const workModeScore = scoreWorkModeCompatibility(profile?.preferredWorkSetup || profile?.workSetup || '', job.workplace || job.work_mode || '');
 

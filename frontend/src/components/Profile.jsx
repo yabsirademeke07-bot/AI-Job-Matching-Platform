@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../hooks/useToast.js';
 import { notifyProfileUpdated } from '../utils/profileUpdateEvent';
 import { scrollToFeedback } from '../utils/scrollHelper.js';
+import SearchableSelect from './ui/SearchableSelect.jsx';
 
 const fieldClass = 'h-14 w-full rounded-xl border-[1.5px] border-slate-300 bg-slate-50/60 px-4 py-3.5 text-base font-medium leading-relaxed text-slate-900 not-italic placeholder:italic placeholder:font-normal placeholder:text-slate-400 dark:placeholder:text-slate-500 outline-none transition-all focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:placeholder:opacity-50';
 const labelClass = 'mb-3 block text-sm font-bold leading-relaxed text-slate-800';
@@ -98,9 +99,22 @@ const cleanCvLocation = (value) => {
   return location;
 };
 
+const isResumeBullet = (value) => {
+  const text = String(value || '').trim();
+  const textWithoutLeadingPunctuation = text.replace(/^[^a-z]+/i, '');
+  return /^(?:[•●▪◦·*-]|\d+[.)])\s*/.test(text)
+    || /^(?:participate|participated|participating|contribute|contributed|collaborate|collaborated|developed?|implemented?|worked|responsible for)\b/i.test(text)
+    || /^(?:participate|participated|participating|contribute|contributed|collaborate|collaborated|developed?|implemented?|worked|responsible for)\b/i.test(textWithoutLeadingPunctuation);
+};
+
+const cleanDesiredJobTitle = (value) => {
+  const title = String(value || '').trim();
+  return isResumeBullet(title) ? '' : title;
+};
+
 const isRecognizableJobTitle = (value) => {
   const title = String(value || '').trim().toLowerCase();
-  if (title.length < 3 || !/[a-z]/i.test(title)) return false;
+  if (title.length < 3 || !/[a-z]/i.test(title) || isResumeBullet(title)) return false;
   if (/(.)\1{4,}/.test(title) || /asdfghjkl|qwertyuiop|zxcvbnm/.test(title)) return false;
   if (/[bcdfghjklmnpqrstvwxyz]{5,}/i.test(title)) return false;
   const knownTitle = /developer|engineer|nurse|accountant|agronomist|manager|officer|teacher|designer|developer|analyst|administrator|supervisor|architect|consultant|technician|specialist|director|assistant|coordinator|lawyer|doctor|chef|driver|sales|marketing|human resources|hr\b|qa\b|ceo\b|ux\b|ui\b/i.test(title);
@@ -135,6 +149,7 @@ const validateProfile = (data) => {
 
   if (!String(data.city || '').trim()) errors.city = 'City or location is required.';
   if (!isRecognizableJobTitle(data.preferredJob)) errors.desiredPosition = invalidJobTitleMessage;
+  if (!Array.isArray(data.skills) || !data.skills.some((skill) => String(skill || '').trim())) errors.skills = 'Add at least one skill.';
   if (!jobCategories.includes(data.jobCategory)) errors.jobCategory = 'Select a primary job category.';
   if (!experienceLevels.includes(data.experienceLevel)) errors.experienceLevel = 'Select your experience level.';
   if (!workSetups.includes(data.preferredWorkSetup)) errors.workSetup = 'Select a work setup preference.';
@@ -220,7 +235,7 @@ const Profile = ({ userData = {}, onContinue }) => {
     linkedin: savedProfile?.linkedin || '',
     portfolio: savedProfile?.portfolio || '',
     jobCategory: savedProfile?.jobCategory || '',
-    preferredJob: savedProfile?.preferredJob || userData?.preferredJob || '',
+    preferredJob: cleanDesiredJobTitle(savedProfile?.preferredJob) || cleanDesiredJobTitle(userData?.preferredJob) || '',
     employmentType: savedProfile?.employmentType || '',
     jobType: savedProfile?.jobType || savedProfile?.preferred_job_type || savedProfile?.employmentType || '',
     salaryExpectation: formatSalaryRange(savedProfile?.salaryExpectation || userData?.salaryExpectation || '', savedProfile?.salaryExpectationMax || savedProfile?.expected_salary_max || userData?.salaryExpectationMax || ''),
@@ -250,7 +265,7 @@ const Profile = ({ userData = {}, onContinue }) => {
           fullName: saved.full_name || current.fullName,
           email: saved.email || current.email,
           phone: saved.phone || current.phone,
-          preferredJob: saved.headline || current.preferredJob,
+          preferredJob: cleanDesiredJobTitle(saved.headline) || cleanDesiredJobTitle(current.preferredJob),
           jobCategory: saved.job_category || current.jobCategory,
           experienceLevel: saved.experience_level || current.experienceLevel,
           educationLevel: saved.education_level || current.educationLevel,
@@ -277,7 +292,8 @@ const Profile = ({ userData = {}, onContinue }) => {
   }, []);
 
   const updateProfileField = (field, value) => {
-    setProfileData((current) => ({ ...current, [field]: value }));
+    const nextValue = field === 'preferredJob' ? cleanDesiredJobTitle(value) : value;
+    setProfileData((current) => ({ ...current, [field]: nextValue }));
     const errorFields = {
       preferredJob: 'desiredPosition',
       preferredWorkSetup: 'workSetup',
@@ -295,7 +311,7 @@ const Profile = ({ userData = {}, onContinue }) => {
   };
 
   const validateField = (field) => {
-    const nextErrors = validateProfile(profileData);
+    const nextErrors = validateProfile({ ...profileData, skills });
     setErrors((current) => ({ ...current, [field]: nextErrors[field] }));
   };
   const inputClass = (field) => `${fieldClass} ${errors[field] ? 'has-error animate-[fieldShake_0.35s_ease-in-out] border-rose-500 bg-rose-50/40 ring-4 ring-rose-400/60 focus:border-rose-600 focus:ring-rose-500/40' : ''}`;
@@ -365,10 +381,15 @@ const Profile = ({ userData = {}, onContinue }) => {
 
   // Handlers for Skills & Languages
   const handleAddSkill = () => {
-    if (newSkill.trim() && !skills.includes(newSkill.trim())) {
-      setSkills([...skills, newSkill.trim()]);
-      setNewSkill('');
-    }
+    const skill = newSkill.trim();
+    if (!skill) return;
+    if (!skills.some((currentSkill) => currentSkill.toLowerCase() === skill.toLowerCase())) setSkills((current) => [...current, skill]);
+    setNewSkill('');
+    setErrors((current) => {
+      const next = { ...current };
+      delete next.skills;
+      return next;
+    });
   };
 
   const handleRemoveSkill = (skillToRemove) => {
@@ -386,46 +407,9 @@ const Profile = ({ userData = {}, onContinue }) => {
     setLanguages(languages.filter((lang) => lang !== langToRemove));
   };
 
-  const useExistingInformation = () => {
-    try {
-      const existingProfile = JSON.parse(localStorage.getItem('userProfile') || '{}');
-      const existingUser = JSON.parse(localStorage.getItem('user') || '{}');
-      const nextData = {
-        fullName: existingProfile.fullName || existingProfile.full_name || existingUser.full_name || profileData.fullName,
-        firstName: existingProfile.firstName || existingProfile.first_name || (String(existingProfile.fullName || existingUser.full_name || '').split(/\s+/)[0] || ''),
-        lastName: existingProfile.lastName || existingProfile.last_name || (String(existingProfile.fullName || existingUser.full_name || '').split(/\s+/).slice(1).join(' ') || ''),
-        email: existingProfile.email || existingUser.email || profileData.email,
-        phone: existingProfile.phone || existingUser.phone || profileData.phone,
-        city: existingProfile.city || existingProfile.location || profileData.city,
-        country: existingProfile.country || profileData.country,
-        github: existingProfile.github || '',
-        linkedin: existingProfile.linkedin || '',
-        portfolio: existingProfile.portfolio || '',
-        jobCategory: existingProfile.jobCategory || existingProfile.job_category || '',
-        preferredJob: existingProfile.preferredJob || existingProfile.desiredPosition || existingProfile.headline || '',
-        jobType: existingProfile.jobType || existingProfile.preferred_job_type || existingProfile.employmentType || '',
-        salaryExpectation: existingProfile.salaryExpectation || formatSalaryRange(existingProfile.salaryExpectationMin || existingProfile.salary_expectation_min || '', existingProfile.salaryExpectationMax || existingProfile.salary_expectation_max || ''),
-        salaryExpectationMax: existingProfile.salaryExpectationMax || existingProfile.salary_expectation_max || '',
-        preferredCity: existingProfile.preferredCity || '',
-        preferredWorkSetup: existingProfile.preferredWorkSetup || existingProfile.workSetup || existingProfile.preferred_work_mode || '',
-        experienceLevel: existingProfile.experienceLevel || existingProfile.experience_level || '',
-        educationLevel: existingProfile.educationLevel || existingProfile.education_level || '',
-        bio: existingProfile.bio || '',
-      };
-      setProfileData((current) => ({ ...current, ...nextData }));
-      if (Array.isArray(existingProfile.education)) setEducationList(existingProfile.education);
-      if (Array.isArray(existingProfile.experience)) setExperienceList(existingProfile.experience);
-      setSkills(normalizeList(existingProfile.skills, ['skill_name', 'name']).filter((skill) => !excludedProfileSkills.has(skill.toLowerCase())));
-      setLanguages(normalizeList(existingProfile.languages, ['language_name', 'language', 'name']));
-      showSuccess('Existing information loaded.');
-    } catch (error) {
-      showError('No saved profile information is available yet.');
-    }
-  };
-
   // Profile Save Handler
   const handleSaveProfile = async (redirect = false) => {
-    const validationErrors = validateProfile(profileData);
+    const validationErrors = validateProfile({ ...profileData, skills });
     if (Object.keys(validationErrors).length) {
       setErrors(validationErrors);
       showError('Please complete the highlighted required fields before saving.');
@@ -444,7 +428,8 @@ const Profile = ({ userData = {}, onContinue }) => {
       fullName: String(profileData.fullName || '').trim(),
       expectedSalary: Number(String(profileData.salaryExpectation || '').match(salaryRangePattern)?.[1]?.replace(/,/g, '')) || null,
       expectedSalaryMax: Number(String(profileData.salaryExpectation || '').match(salaryRangePattern)?.[2]?.replace(/,/g, '')) || null,
-      desiredPosition: String(profileData.preferredJob || '').trim(),
+      preferredJob: cleanDesiredJobTitle(profileData.preferredJob),
+      desiredPosition: cleanDesiredJobTitle(profileData.preferredJob),
       workSetup: profileData.preferredWorkSetup || '',
       jobType: profileData.jobType || '',
       employmentType: profileData.jobType || '',
@@ -519,11 +504,8 @@ const Profile = ({ userData = {}, onContinue }) => {
 
   return (
     <div className="min-h-screen min-w-0 overflow-x-hidden bg-[#f8fbfd] text-slate-900 dark:bg-[#f8fbfd]">
-      <main className="information-page profile-readable mx-auto min-w-0 w-full max-w-3xl space-y-7 overflow-x-hidden px-5 py-10 pb-12 leading-relaxed sm:px-8 lg:px-10">
+      <main className="information-page profile-readable mx-auto min-w-0 w-full max-w-6xl space-y-7 overflow-x-hidden px-5 py-10 pb-12 leading-relaxed sm:px-8 lg:px-10">
         <header className="space-y-3 text-center">
-          <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-bold uppercase tracking-widest text-blue-700">
-            Your next opportunity
-          </span>
           <h1 className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">Personal Profile Setup</h1>
           <p className="mx-auto max-w-xl text-sm font-medium leading-6 text-slate-600 sm:text-base">
             Add your experience and preferences so we can find roles that fit your strengths.
@@ -531,16 +513,11 @@ const Profile = ({ userData = {}, onContinue }) => {
         </header>
 
         {isSaved && <div id="success-banner" role="status" className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-bold text-emerald-700"><CheckCircle2 className="h-5 w-5" />your profile saved succussfuly</div>}
-      <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
-        <div className="mb-2 flex items-center justify-between text-sm font-bold text-slate-800"><span>Profile Completion</span><span className="text-blue-700">{completionPercentage}%</span></div>
-        <div className="h-2 overflow-hidden rounded-full bg-white"><div className="h-full rounded-full bg-blue-600 transition-all duration-500" style={{ width: `${completionPercentage}%` }} /></div>
-      </div>
 
       {/* Personal Information */}
       <div className="space-y-6 rounded-3xl border border-slate-200/80 bg-white p-6 shadow-xl transition-shadow duration-300 hover:shadow-2xl dark:border-slate-800 dark:bg-white sm:p-10">
-        <div className="flex flex-col items-center gap-3 border-b pb-4 text-center">
+        <div className="flex flex-col items-center border-b-2 border-slate-300 pb-4 text-center">
           <h3 className="text-lg font-bold text-slate-800">Personal Information</h3>
-          <button type="button" onClick={useExistingInformation} className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-black uppercase tracking-wide text-slate-700 transition hover:bg-slate-50 hover:text-blue-700">Use Existing Information</button>
         </div>
 
         <div className="grid grid-cols-1 gap-6 text-sm md:grid-cols-2">
@@ -604,16 +581,13 @@ const Profile = ({ userData = {}, onContinue }) => {
 
           <div className="hidden">
             <label className={labelClass}>Gender <span className="italic font-normal text-slate-500">(Optional)</span></label>
-            <select 
-              value={profileData.gender} 
-              onChange={(e) => setProfileData({ ...profileData, gender: e.target.value })}
-              className={`${fieldClass} !bg-white ${!profileData.gender ? 'italic text-slate-400' : ''}`}
-            >
-              <option value="" disabled className="italic">Select gender</option>
-              <option value="Male">Male</option>
-              <option value="Female">Female</option>
-              <option value="Other">Other</option>
-            </select>
+            <SearchableSelect
+              value={profileData.gender}
+              onChange={(value) => setProfileData({ ...profileData, gender: value })}
+              options={['Male', 'Female', 'Other']}
+              placeholder="Select gender"
+              className={`${fieldClass} !bg-white`}
+            />
           </div>
 
           <div>
@@ -623,41 +597,30 @@ const Profile = ({ userData = {}, onContinue }) => {
           </div>
         </div>
 
-      </div>
-
-      <div className="space-y-6 rounded-3xl border border-slate-200/80 bg-white p-6 shadow-xl transition-shadow duration-300 hover:shadow-2xl dark:border-slate-800 dark:bg-white sm:p-10">
+      <div className="space-y-6 rounded-2xl p-5 sm:ml-4 sm:p-7">
         <div className="border-b border-slate-200 pb-3 text-center">
           <h3 className="text-lg font-bold text-slate-800">Job Preferences</h3>
           <p className="mt-1 text-sm text-slate-500">These details help us calculate accurate job matches.</p>
         </div>
         <div className="grid grid-cols-1 gap-6 text-sm md:grid-cols-2">
           <div>
-            <label className={labelClass}>Target Role / Desired Position</label>
-            <input data-profile-field="desiredPosition" aria-invalid={Boolean(errors.desiredPosition)} type="text" placeholder="e.g. Agronomist, Nurse, Accountant, Teacher, or Developer" value={profileData.preferredJob} onChange={(e) => updateProfileField('preferredJob', e.target.value)} onBlur={() => validateField('desiredPosition')} className={inputClass('desiredPosition')} />
+            <label className={labelClass}>Desired Job Title</label>
+            <input data-profile-field="desiredPosition" aria-invalid={Boolean(errors.desiredPosition)} type="text" placeholder="e.g. Frontend Developer, Software Engineer..." value={cleanDesiredJobTitle(profileData.preferredJob) || ""} onChange={(e) => updateProfileField('preferredJob', e.target.value)} onBlur={() => validateField('desiredPosition')} className={inputClass('desiredPosition')} />
             <FieldError message={errors.desiredPosition} />
           </div>
           <div>
             <label className={labelClass}>Primary Job Category</label>
-            <select data-profile-field="jobCategory" aria-invalid={Boolean(errors.jobCategory)} value={profileData.jobCategory} onChange={(e) => updateProfileField('jobCategory', e.target.value)} onBlur={() => validateField('jobCategory')} className={`${inputClass('jobCategory')} profile-job-preference-select !text-sm !font-normal ${!profileData.jobCategory ? '!italic !text-slate-400' : ''}`}>
-              <option value="" disabled hidden>Select a primary job category</option>
-              {jobCategories.map((category) => <option key={category} value={category}>{category}</option>)}
-            </select>
+            <SearchableSelect data-profile-field="jobCategory" aria-invalid={Boolean(errors.jobCategory)} value={profileData.jobCategory} onChange={(value) => updateProfileField('jobCategory', value)} onBlur={() => validateField('jobCategory')} options={jobCategories} placeholder="Select a primary job category" className={`${inputClass('jobCategory')} profile-job-preference-select !text-sm`} />
             <FieldError message={errors.jobCategory} />
           </div>
           <div>
             <label className={labelClass}>Experience Level</label>
-            <select data-profile-field="experienceLevel" aria-invalid={Boolean(errors.experienceLevel)} value={profileData.experienceLevel} onChange={(e) => updateProfileField('experienceLevel', e.target.value)} onBlur={() => validateField('experienceLevel')} className={`${inputClass('experienceLevel')} profile-job-preference-select !text-sm !font-normal ${!profileData.experienceLevel ? '!italic !text-slate-400' : ''}`}>
-              <option value="" disabled hidden>Select experience level</option>
-              {experienceLevels.map((level) => <option key={level} value={level}>{level === 'Entry level' ? 'Entry level (0-1 yrs)' : level === 'Junior' ? 'Junior (1-3 yrs)' : level === 'Intermediate' ? 'Intermediate (3-5 yrs)' : level === 'Senior' ? 'Senior (5+ yrs)' : 'Expert (8+ yrs)'}</option>)}
-            </select>
+            <SearchableSelect data-profile-field="experienceLevel" aria-invalid={Boolean(errors.experienceLevel)} value={profileData.experienceLevel} onChange={(value) => updateProfileField('experienceLevel', value)} onBlur={() => validateField('experienceLevel')} options={experienceLevels.map((level) => ({ value: level, label: level === 'Entry level' ? 'Entry level (0-1 yrs)' : level === 'Junior' ? 'Junior (1-3 yrs)' : level === 'Intermediate' ? 'Intermediate (3-5 yrs)' : level === 'Senior' ? 'Senior (5+ yrs)' : 'Expert (8+ yrs)' }))} placeholder="Select experience level" className={`${inputClass('experienceLevel')} profile-job-preference-select !text-sm`} />
             <FieldError message={errors.experienceLevel} />
           </div>
           <div>
             <label className={labelClass}>Work Setup Preference</label>
-            <select data-profile-field="workSetup" aria-invalid={Boolean(errors.workSetup)} value={profileData.preferredWorkSetup} onChange={(e) => updateProfileField('preferredWorkSetup', e.target.value)} onBlur={() => validateField('workSetup')} className={`${inputClass('workSetup')} profile-job-preference-select !text-sm !font-normal ${!profileData.preferredWorkSetup ? '!italic !text-slate-400' : ''}`}>
-              <option value="" disabled hidden>Select work setup</option>
-              {workSetups.map((setup) => <option key={setup} value={setup}>{setup}</option>)}
-            </select>
+            <SearchableSelect data-profile-field="workSetup" aria-invalid={Boolean(errors.workSetup)} value={profileData.preferredWorkSetup} onChange={(value) => updateProfileField('preferredWorkSetup', value)} onBlur={() => validateField('workSetup')} options={workSetups} placeholder="Select work setup" className={`${inputClass('workSetup')} profile-job-preference-select !text-sm`} />
             <FieldError message={errors.workSetup} />
           </div>
           <div>
@@ -667,13 +630,10 @@ const Profile = ({ userData = {}, onContinue }) => {
           </div>
           <div>
             <label className={labelClass}>Education Level</label>
-            <select value={profileData.educationLevel} onChange={(e) => updateProfileField('educationLevel', e.target.value)} className={`${fieldClass} profile-job-preference-select !text-sm !font-normal ${!profileData.educationLevel ? '!italic !text-slate-400' : ''}`}>
-              <option value="" disabled hidden>Select education level</option>
-              {educationLevels.map((level) => <option key={level} value={level}>{level}</option>)}
-            </select>
+            <SearchableSelect value={profileData.educationLevel} onChange={(value) => updateProfileField('educationLevel', value)} options={educationLevels} placeholder="Select education level" className={`${fieldClass} profile-job-preference-select !text-sm`} />
           </div>
           <div className="md:col-span-2 pt-5">
-            <label className={labelClass}>Skills <span className="italic font-normal text-slate-500">(Optional)</span></label>
+            <label className={labelClass}>Skills</label>
             <div className="mb-3 flex flex-wrap gap-2">
               {skills.map((skill, index) => (
                 <span key={`${skill}-${index}`} className="flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
@@ -682,8 +642,9 @@ const Profile = ({ userData = {}, onContinue }) => {
               ))}
             </div>
             <div className="flex gap-4">
-              <input type="text" placeholder="Add a skill (e.g. React, Accounting)" value={newSkill} onChange={(e) => setNewSkill(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddSkill())} className={`${fieldClass} flex-1`} />
+              <input data-profile-field="skills" aria-invalid={Boolean(errors.skills)} type="text" placeholder="Add a skill (e.g. React, Accounting)" value={newSkill} onChange={(e) => setNewSkill(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddSkill())} onBlur={() => validateField('skills')} className={`${fieldClass} flex-1`} />
             </div>
+            <FieldError message={errors.skills} />
           </div>
 
           <div className="md:col-span-2 pt-5">
@@ -702,17 +663,16 @@ const Profile = ({ userData = {}, onContinue }) => {
 
           <div className="md:col-span-2 pt-5">
             <label className={labelClass}>Job Type / Employment Type * :</label>
-            <select
+            <SearchableSelect
               data-profile-field="jobType"
               aria-invalid={Boolean(errors.jobType)}
               value={profileData.jobType}
-              onChange={(e) => updateProfileField('jobType', e.target.value)}
+              onChange={(value) => updateProfileField('jobType', value)}
               onBlur={() => validateField('jobType')}
-              className={`${inputClass('jobType')} ${!profileData.jobType ? '!italic !text-slate-400' : ''}`}
-            >
-              <option value="" disabled hidden>Select job type</option>
-              {jobTypes.map((type) => <option key={type} value={type}>{type}</option>)}
-            </select>
+              options={jobTypes}
+              placeholder="Select job type"
+              className={inputClass('jobType')}
+            />
             <FieldError message={errors.jobType} />
           </div>
 
@@ -740,6 +700,7 @@ const Profile = ({ userData = {}, onContinue }) => {
         </div>
       </div>
 
+      </div>
 
       {/* Portfolio Links */}
       <div className="hidden bg-slate-50/90 rounded-2xl border border-slate-200/80 p-5 space-y-3 shadow-sm">
@@ -777,7 +738,6 @@ const Profile = ({ userData = {}, onContinue }) => {
           </div>
         </div>
       </div>
-
       {/* Job Preferences */}
       <div className="hidden space-y-6 rounded-2xl border border-slate-200/80 bg-slate-50/90 p-8 shadow-sm">
         <h3 className="text-sm font-bold text-slate-800 border-b pb-2 border-slate-200">Job Preferences <span className="italic font-normal text-slate-500">(Optional)</span></h3>
@@ -807,17 +767,13 @@ const Profile = ({ userData = {}, onContinue }) => {
 
           <div>
             <label className={labelClass}>Employment Type</label>
-            <select 
-              value={profileData.employmentType} 
-              onChange={(e) => setProfileData({ ...profileData, employmentType: e.target.value })}
-              className={`${fieldClass} !bg-white ${!profileData.employmentType ? 'italic text-slate-400' : ''}`}
-            >
-              <option value="" disabled className="italic">Select employment type</option>
-              <option value="Full-Time">Full-Time</option>
-              <option value="Part-Time">Part-Time</option>
-              <option value="Contract">Contract</option>
-              <option value="Internship">Internship</option>
-            </select>
+            <SearchableSelect
+              value={profileData.employmentType}
+              onChange={(value) => setProfileData({ ...profileData, employmentType: value })}
+              options={['Full-Time', 'Part-Time', 'Contract', 'Internship']}
+              placeholder="Select employment type"
+              className={`${fieldClass} !bg-white`}
+            />
           </div>
 
           <div>
@@ -844,16 +800,13 @@ const Profile = ({ userData = {}, onContinue }) => {
 
           <div>
             <label className={labelClass}>Work Setup</label>
-            <select 
-              value={profileData.preferredWorkSetup} 
-              onChange={(e) => setProfileData({ ...profileData, preferredWorkSetup: e.target.value })}
-              className={`${fieldClass} !bg-white ${!profileData.preferredWorkSetup ? '!italic !text-slate-400' : ''}`}
-            >
-              <option value="" disabled hidden className="italic">Select work setup</option>
-              <option value="Remote">Remote</option>
-              <option value="Hybrid">Hybrid</option>
-              <option value="On-site">On-site</option>
-            </select>
+            <SearchableSelect
+              value={profileData.preferredWorkSetup}
+              onChange={(value) => setProfileData({ ...profileData, preferredWorkSetup: value })}
+              options={['Remote', 'Hybrid', 'On-site']}
+              placeholder="Select work setup"
+              className={`${fieldClass} !bg-white`}
+            />
           </div>
         </div>
       </div>

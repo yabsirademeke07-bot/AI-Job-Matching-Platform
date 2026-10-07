@@ -32,6 +32,9 @@ const JobCard = ({ job, isAuthenticated }) => {
         {job.category && (
           <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">{job.category}</span>
         )}
+        {job.vacancies && (
+          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">{job.vacancies} {Number(job.vacancies) === 1 ? 'position' : 'positions'}</span>
+        )}
       </div>
 
       <div className="mt-4">
@@ -53,7 +56,11 @@ const JobCard = ({ job, isAuthenticated }) => {
 
       <div className="mt-4 flex items-center justify-between gap-4">
         <p className="text-sm font-medium text-slate-900">
-          {job.currency} {job.salary_min?.toLocaleString()} - {job.currency} {job.salary_max?.toLocaleString()}
+          {job.is_negotiable || job.is_salary_negotiable
+            ? 'Negotiable'
+            : job.salary_min || job.salary_max
+              ? `${job.currency || 'ETB'} ${Number(job.salary_min || 0).toLocaleString()} - ${job.currency || 'ETB'} ${Number(job.salary_max || 0).toLocaleString()}`
+              : 'Compensation disclosed upon application'}
         </p>
 
         <Link
