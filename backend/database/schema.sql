@@ -790,12 +790,13 @@ CREATE TABLE IF NOT EXISTS job_analytics (
 );
 
 -- Contact Messages
+
 CREATE TABLE IF NOT EXISTS user_rate_limits (
-    user_id VARCHAR(255) PRIMARY KEY,
+    user_id INT PRIMARY KEY,
     message_count INT NOT NULL DEFAULT 0,
-    first_message_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    is_restricted BOOLEAN NOT NULL DEFAULT FALSE,
-    restricted_until TIMESTAMP NULL
+    first_message_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS contact_messages (
