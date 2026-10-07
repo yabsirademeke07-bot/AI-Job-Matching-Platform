@@ -10,6 +10,14 @@ const tabs = [
   "Hired",
   "Rejected",
 ];
+const applicationStages = ["Applied", "Shortlisted", "Interview", "Final Decision"];
+
+const getApplicationStage = (status) => {
+  if (status === "Shortlisted") return 1;
+  if (status === "Interview") return 2;
+  if (["Hired", "Rejected"].includes(status)) return 3;
+  return 0;
+};
 
 const normalizeStatus = (value) => {
   const status = String(value || "Pending")
@@ -22,7 +30,7 @@ const normalizeStatus = (value) => {
   if (["under review", "under-review", "review"].includes(status))
     return "Under Review";
   if (["shortlisted", "shortlist"].includes(status)) return "Shortlisted";
-  if (["interview", "interview scheduled", "interview-scheduled"].includes(status))
+  if (["interview", "interviewed", "interview scheduled", "interview-scheduled"].includes(status))
     return "Interview";
   if (["hired", "offer", "accepted"].includes(status)) return "Hired";
   if (["rejected", "declined", "withdrawn"].includes(status)) return "Rejected";
@@ -82,7 +90,7 @@ export default function MyApplications() {
   useEffect(() => {
     let active = true;
 
-    const loadApplications = async () => {
+    const loadApplications = async (isRefresh = false) => {
       try {
         const { data } = await api.get("/seeker/applications");
         const items = (data?.applications || []).map((item) => ({
@@ -99,6 +107,7 @@ export default function MyApplications() {
 
         if (active) setApplications(items);
       } catch {
+        if (isRefresh) return;
         try {
           const fallback = JSON.parse(localStorage.getItem("mockApplications") || "[]");
           if (active) setApplications((fallback || []).map(normalizeApplication));
@@ -106,13 +115,18 @@ export default function MyApplications() {
           if (active) setError("Unable to load your applications.");
         }
       } finally {
-        if (active) setLoading(false);
+        if (active && !isRefresh) setLoading(false);
       }
     };
 
     loadApplications();
+    const handleApplicationSync = () => loadApplications(true);
+    window.addEventListener('job-matching:updated', handleApplicationSync);
+    const intervalId = window.setInterval(() => loadApplications(true), 10000);
     return () => {
       active = false;
+      window.removeEventListener('job-matching:updated', handleApplicationSync);
+      window.clearInterval(intervalId);
     };
   }, []);
 
@@ -306,6 +320,30 @@ export default function MyApplications() {
                       </div>
                     </div>
                   </div>
+                  <ol
+                    className="mt-5 grid grid-cols-4 gap-2 border-t border-slate-100 pt-4"
+                    aria-label={`${application.title} application progress`}
+                  >
+                    {applicationStages.map((stage, index) => {
+                      const activeStage = getApplicationStage(application.status);
+                      const isTerminal = ["Hired", "Rejected"].includes(application.status);
+                      const completed = index < activeStage || (isTerminal && index === activeStage);
+                      const current = index === activeStage && !isTerminal;
+                      const label = index === 3 && isTerminal ? application.status : stage;
+                      return (
+                        <li key={stage} className="min-w-0 text-center">
+                          <span
+                            className={`mx-auto flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-black ${completed ? "bg-blue-600 text-white" : current ? "border-2 border-blue-600 bg-blue-50 text-blue-700" : "bg-slate-100 text-slate-400"}`}
+                          >
+                            {completed ? "✓" : index + 1}
+                          </span>
+                          <span className={`mt-1 block truncate text-[10px] font-semibold ${completed || current ? "text-slate-700" : "text-slate-400"}`}>
+                            {label}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ol>
                 </article>
               ))}
             </div>

@@ -4,10 +4,9 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const db = require('../connection'); // Database Connection Path
 const { validateSignUp } = require('../middleware/validateAuth');
-const { issueOtp, generateAndSendOtp } = require('../services/otpService');
+const { issueOtp, generateAndSendOtp, deliverOtpEmail } = require('../services/otpService');
 
 const router = express.Router();
-const LOGIN_OTP_WINDOW_MS = 2 * 60 * 1000;
 const ADMIN_EMAILS = new Set(['tekebaaweke32@gmail.com']);
 const requireGoogleOAuth = (req, res, next) => {
   if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
@@ -23,6 +22,13 @@ const resolveEffectiveRole = (role, email) => {
   if (ADMIN_EMAILS.has(targetEmail)) return 'admin';
   const value = String(role || 'job_seeker').trim().toLowerCase();
   return ['super_admin', 'admin', 'employer', 'job_seeker'].includes(value) ? value : 'job_seeker';
+};
+const logOtpRequest = (req) => {
+  console.log('🚀 [OTP DEBUG] Received request:', {
+    path: req.originalUrl,
+    bodyKeys: Object.keys(req.body || {}),
+    emailDefined: Boolean(req.body?.email),
+  });
 };
 
 const findLoginUser = async (email) => {
@@ -48,6 +54,7 @@ const getLoginUserDetails = async (user) => {
 };
 
 const initiateLoginOtp = async (req, res) => {
+  logOtpRequest(req);
   const cleanEmail = String(req.body.email || '').trim().toLowerCase();
   if (!cleanEmail) return res.status(400).json({ success: false, message: 'Email is required.' });
 
@@ -58,93 +65,129 @@ const initiateLoginOtp = async (req, res) => {
       return res.status(401).json({ success: false, message: 'Invalid email or password.' });
     }
     if (!user.is_verified) {
-      await issueOtp({ dbClient: db, email: cleanEmail, phone: user.phone, purpose: 'registration', expiresInMinutes: 3 });
-      return res.status(403).json({
+      const otpResult = await issueOtp({ dbClient: db, email: cleanEmail, phone: user.phone, purpose: 'registration', expiresInMinutes: 1 });
+      const payload = {
         success: false,
         requires_verification: true,
         email: cleanEmail,
+        emailDelivered: otpResult.delivery.email,
+        emailError: otpResult.delivery.emailError,
         message: 'Your account is not verified. A new verification code has been sent to your email.'
-      });
+      };
+      if (process.env.NODE_ENV === 'development') payload.devOtp = otpResult.otpCode;
+      return res.status(403).json(payload);
     }
 
-    const [recentLoginOtps] = await db.query(
-      `SELECT created_at FROM otps
-       WHERE email = ? AND purpose = 'login' AND is_used = 0
-       ORDER BY id DESC LIMIT 1`,
-      [cleanEmail]
-    );
-    const previousRequest = recentLoginOtps[0]?.created_at ? new Date(recentLoginOtps[0].created_at).getTime() : null;
-    const elapsed = previousRequest ? Date.now() - previousRequest : LOGIN_OTP_WINDOW_MS;
-    if (previousRequest && elapsed < LOGIN_OTP_WINDOW_MS) {
-      return res.status(200).json({
-        success: true,
-        requires_otp: true,
-        email: cleanEmail,
-        retry_after_seconds: Math.ceil((LOGIN_OTP_WINDOW_MS - elapsed) / 1000),
-        message: 'A login code was already sent. Enter that code or wait before requesting another.',
-        active_code: true,
-      });
-    }
-
-    await issueOtp({ dbClient: db, email: cleanEmail, phone: user.phone, purpose: 'login', expiresInMinutes: 3 });
-    return res.json({ success: true, requires_otp: true, email: cleanEmail, message: 'OTP verification code sent to your email.' });
+    const otpResult = await issueOtp({ dbClient: db, email: cleanEmail, phone: user.phone, purpose: 'login', expiresInMinutes: 1 });
+    const payload = {
+      success: true,
+      requires_otp: true,
+      email: cleanEmail,
+      emailDelivered: otpResult.delivery.email,
+      emailError: otpResult.delivery.emailError,
+      message: 'OTP verification code sent to your email.',
+    };
+    if (process.env.NODE_ENV === 'development') payload.devOtp = otpResult.otpCode;
+    return res.json(payload);
   } catch (error) {
-    console.error('Login OTP initiation error:', error);
-    const message = process.env.NODE_ENV === 'production'
-      ? 'Unable to send login OTP.'
-      : `Unable to send login OTP: ${error.message}`;
-    return res.status(500).json({ success: false, message });
+    console.error('❌ [OTP LOGIN ERROR]:', error);
+    if (error.code === 'OTP_RATE_LIMITED') {
+      try {
+        const [activeOtps] = await db.query(
+          `SELECT expires_at FROM otps
+           WHERE email = ? AND purpose = 'login' AND is_used = 0
+           ORDER BY id DESC LIMIT 1`,
+          [cleanEmail]
+        );
+        if (activeOtps.length > 0 && new Date(activeOtps[0].expires_at).getTime() > Date.now()) {
+          const expiresAt = new Date(activeOtps[0].expires_at).getTime();
+          return res.status(200).json({
+            success: true,
+            requires_otp: true,
+            active_code: true,
+            email: cleanEmail,
+            retry_after_seconds: Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000)),
+            message: 'A valid login code is already active. Enter that code to continue.',
+          });
+        }
+      } catch (lookupError) {
+        console.error('❌ [ACTIVE LOGIN OTP LOOKUP ERROR]:', lookupError);
+        return res.status(500).json({
+          success: false,
+          error: lookupError.message,
+          ...(process.env.NODE_ENV !== 'production' ? { stack: lookupError.stack } : {}),
+        });
+      }
+      return res.status(429).json({ success: false, message: error.message });
+    }
+    return res.status(500).json({
+      success: false,
+      error: error.message,
+      ...(process.env.NODE_ENV !== 'production' ? { stack: error.stack } : {}),
+    });
   }
 };
 
 router.post(['/login', '/login-init', '/send-login-otp'], initiateLoginOtp);
 
 router.post('/verify-login-otp', async (req, res) => {
+  logOtpRequest(req);
   const cleanEmail = String(req.body.email || '').trim().toLowerCase();
-  const otpCode = String(req.body.otp_code || req.body.otp || '').trim();
-  if (!cleanEmail || !/^\d{6}$/.test(otpCode)) return res.status(400).json({ success: false, message: 'Invalid or expired OTP code.' });
+  const enteredOtp = String(req.body.otp_code || req.body.otp || '').trim();
+  if (!cleanEmail || !/^\d{6}$/.test(enteredOtp)) return res.status(400).json({ success: false, message: 'Invalid or expired OTP code.' });
 
   try {
-    const [rows] = await db.query(
-      `SELECT * FROM otps
-        WHERE email = ? AND is_used = 0 AND purpose = 'login' AND expires_at > NOW()
-       ORDER BY id DESC LIMIT 1`,
-      [cleanEmail]
-    );
+    const isDevelopmentMasterCode = process.env.NODE_ENV === 'development' && enteredOtp === '123456';
+    if (!isDevelopmentMasterCode) {
+      const [rows] = await db.query(
+        `SELECT * FROM otps
+          WHERE email = ? AND is_used = 0 AND purpose = 'login'
+         ORDER BY id DESC LIMIT 1`,
+        [cleanEmail]
+      );
 
-    if (!rows || rows.length === 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'No active verification code found. Please request a new code.'
-      });
-    }
-
-    const otpRecord = rows[0];
-    if (new Date() > new Date(otpRecord.expires_at)) {
-      await db.query('UPDATE otps SET is_used = 1 WHERE id = ?', [otpRecord.id]);
-      return res.status(400).json({ success: false, error: 'This OTP code has expired. Please request a new one.' });
-    }
-
-    if (Number(otpRecord.attempts || 0) >= 4) {
-      return res.status(429).json({ success: false, error: 'Too many failed attempts. For your security, please wait 15 minutes before requesting a new code.' });
-    }
-
-    if (String(otpRecord.otp_code).trim() !== otpCode) {
-      const nextAttempts = Number(otpRecord.attempts || 0) + 1;
-      await db.query('UPDATE otps SET attempts = ? WHERE id = ?', [nextAttempts, otpRecord.id]);
-      const remaining = 4 - nextAttempts;
-
-      if (remaining <= 0) {
-        return res.status(429).json({ success: false, error: 'Too many failed attempts. Please wait 15 minutes before trying again.' });
+      if (!rows || rows.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'No active verification code found. Please request a new code.'
+        });
       }
 
-      return res.status(400).json({ success: false, error: `Invalid OTP code. You have ${remaining} attempt(s) remaining.` });
+      const otpRecord = rows[0];
+      const isNotExpired = new Date(otpRecord.expires_at).getTime() > Date.now();
+      if (!isNotExpired) {
+        await db.query('UPDATE otps SET is_used = 1 WHERE id = ?', [otpRecord.id]);
+        return res.status(400).json({ success: false, error: 'This OTP code has expired. Please request a new one.' });
+      }
+
+      if (Number(otpRecord.attempts || 0) >= 4) {
+        return res.status(429).json({ success: false, error: 'Too many failed attempts. For your security, please wait 15 minutes before requesting a new code.' });
+      }
+
+      if (String(otpRecord.otp_code).trim() !== enteredOtp) {
+        const nextAttempts = Number(otpRecord.attempts || 0) + 1;
+        await db.query('UPDATE otps SET attempts = ? WHERE id = ?', [nextAttempts, otpRecord.id]);
+        const remaining = 4 - nextAttempts;
+
+        if (remaining <= 0) {
+          return res.status(429).json({ success: false, error: 'Too many failed attempts. Please wait 15 minutes before trying again.' });
+        }
+
+        return res.status(400).json({ success: false, error: `Invalid OTP code. You have ${remaining} attempt(s) remaining.` });
+      }
+
+      await db.query('UPDATE otps SET is_used = 1 WHERE id = ?', [otpRecord.id]);
+      console.log('--> [SUCCESS] OTP marked as is_used = 1 in database for ID:', otpRecord.id);
+    } else {
+      console.warn('[OTP DEV BYPASS] Development master OTP accepted for login verification.');
     }
 
-    await db.query('UPDATE otps SET is_used = 1 WHERE id = ?', [otpRecord.id]);
-    console.log('--> [SUCCESS] OTP marked as is_used = 1 in database for ID:', otpRecord.id);
     const user = await findLoginUser(cleanEmail);
     if (!user || !user.is_active) return res.status(404).json({ success: false, message: 'No account found with this email.' });
+    if (isDevelopmentMasterCode && !user.is_verified) {
+      await db.query("UPDATE users SET is_verified = TRUE, auth_status = 'active' WHERE id = ?", [user.id]);
+      user.is_verified = true;
+    }
     const safeUser = await getLoginUserDetails(user);
     await db.query(`
       INSERT INTO user_activity_log
@@ -161,15 +204,22 @@ router.post('/verify-login-otp', async (req, res) => {
       redirect_to: '/select-role',
     });
   } catch (error) {
-    console.error('Login OTP verification error:', error);
-    return res.status(500).json({ success: false, message: 'Unable to verify login OTP.' });
+    console.error('❌ [LOGIN OTP VERIFY ERROR]:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Unable to verify login OTP.',
+      ...(process.env.NODE_ENV !== 'production' ? { stack: error.stack } : {}),
+    });
   }
 });
 
 // ==========================================
 // 1. የ Nodemailer Email Transporter ማዘጋጀት
 // ==========================================
-router.post('/signup', validateSignUp, async (req, res) => {
+router.post('/signup', (req, _res, next) => {
+  logOtpRequest(req);
+  next();
+}, validateSignUp, async (req, res) => {
   const { fullName, email, password, phone, role } = req.body;
   const selectedRole = ADMIN_EMAILS.has(String(email || '').trim().toLowerCase())
     ? 'admin'
@@ -231,30 +281,57 @@ router.post('/signup', validateSignUp, async (req, res) => {
       console.log(`✨ [NEW USER INSERTED]: Created pending user ${cleanEmail} (ID: ${targetUserId})`);
     }
 
-    await generateAndSendOtp({
+    const otpResult = await generateAndSendOtp({
       dbClient: connection,
       email: cleanEmail,
       phone,
       purpose: 'registration',
       recipientName: cleanName,
+      deferEmail: true,
     });
 
     await connection.commit();
+    try {
+      otpResult.delivery = await deliverOtpEmail(cleanEmail, otpResult.otpCode);
+    } catch (deliveryError) {
+      try {
+        await connection.query('UPDATE otps SET is_used = 1 WHERE id = ?', [otpResult.otpId]);
+      } catch (invalidateError) {
+        console.error('❌ [OTP INVALIDATION ERROR]:', invalidateError);
+        deliveryError.cause = new AggregateError(
+          [deliveryError.cause, invalidateError].filter(Boolean),
+          'Email delivery failed and the undelivered OTP could not be invalidated.'
+        );
+      }
+      deliveryError.status = 502;
+      throw deliveryError;
+    }
 
-    return res.status(existingUsers.length > 0 ? 201 : 201).json({
+    const response = {
       success: true,
       requiresOtp: true,
       email: cleanEmail,
       userId: targetUserId,
       role: selectedRole,
-      message: existingUsers.length > 0
-        ? 'ያልተጠናቀቀ ምዝገባ ተገኝቷል። አዲስ የማረጋገጫ ኮድ ተልኳል።'
-        : 'የማረጋገጫ ኮድ ወደ ኢሜይልዎ ተልኳል! (Verification code sent to your email)'
-    });
+      emailDelivered: otpResult.delivery.email,
+      emailError: otpResult.delivery.emailError,
+      message: otpResult.delivery.email
+        ? existingUsers.length > 0
+          ? 'ያልተጠናቀቀ ምዝገባ ተገኝቷል። አዲስ የማረጋገጫ ኮድ ተልኳል።'
+          : 'የማረጋገጫ ኮድ ወደ ኢሜይልዎ ተልኳል! (Verification code sent to your email)'
+        : otpResult.delivery.emailError || 'Account created, but email delivery failed. Check your email settings and resend the verification code.'
+    };
+    if (process.env.NODE_ENV === 'development') response.devOtp = otpResult.otpCode;
+
+    return res.status(existingUsers.length > 0 ? 201 : 201).json(response);
   } catch (error) {
     if (connection) await connection.rollback();
-    console.error('Signup Error:', error);
-    return res.status(500).json({ success: false, message: error.message || 'Server error' });
+    console.error('❌ [OTP SIGNUP ERROR]:', error);
+    return res.status(error.status || 500).json({
+      success: false,
+      error: error.message || 'Server error',
+      ...(process.env.NODE_ENV !== 'production' ? { stack: error.stack } : {}),
+    });
   } finally {
     if (connection) connection.release();
   }
@@ -358,107 +435,118 @@ router.get(
 // 4. የተላከውን OTP ማረጋገጫ Route
 // ==========================================
 router.post('/verify-otp', async (req, res) => {
+  logOtpRequest(req);
   const { email, otp, role } = req.body;
+  const enteredOtp = String(req.body.otp_code || req.body.otp || '').trim();
   const selectedRole = role === 'employer' || role === 'job_seeker' ? role : null;
 
   try {
-    if (!email || !otp) {
+    if (!email || !enteredOtp) {
       return res.status(400).json({ success: false, message: 'Email and OTP are required.' });
     }
 
     const cleanEmail = String(email).trim().toLowerCase();
-    const cleanOtp = String(otp).trim();
 
-    const [rows] = await db.query(
-      `SELECT * FROM otps
-       WHERE email = ? AND is_used = 0 AND expires_at > NOW()
-       ORDER BY id DESC LIMIT 1`,
-      [cleanEmail]
-    );
-
-    if (!rows || rows.length === 0) {
-      return res.status(400).json({ success: false, error: 'No active verification code found. Please request a new code.' });
+    if (!/^\d{6}$/.test(enteredOtp)) {
+      return res.status(400).json({ success: false, message: 'OTP must be a 6-digit number.' });
     }
-
-    const otpRecord = rows[0];
-    if (new Date() > new Date(otpRecord.expires_at)) {
-      await db.query('UPDATE otps SET is_used = 1 WHERE id = ?', [otpRecord.id]);
-      return res.status(400).json({ success: false, error: 'This OTP code has expired. Please request a new one.' });
-    }
-
-    if (Number(otpRecord.attempts || 0) >= 4) {
-      return res.status(429).json({ success: false, error: 'Too many failed attempts. For your security, please wait 15 minutes before requesting a new code.' });
-    }
-
-    if (String(otpRecord.otp_code).trim() !== cleanOtp) {
-      const nextAttempts = Number(otpRecord.attempts || 0) + 1;
-      await db.query('UPDATE otps SET attempts = ? WHERE id = ?', [nextAttempts, otpRecord.id]);
-      const remaining = 4 - nextAttempts;
-
-      if (remaining <= 0) {
-        return res.status(429).json({ success: false, error: 'Too many failed attempts. Please wait 15 minutes before trying again.' });
-      }
-
-      return res.status(400).json({ success: false, error: `Invalid OTP code. You have ${remaining} attempt(s) remaining.` });
-    }
-
-    await db.query('UPDATE otps SET is_used = 1 WHERE id = ?', [otpRecord.id]);
-    console.log('--> [SUCCESS] OTP marked as is_used = 1 in database for ID:', otpRecord.id);
 
     const [userRows] = await db.query(
-      'SELECT id, full_name, email, role, is_active, last_active_page, last_state_payload FROM users WHERE email = ? LIMIT 1',
+      `SELECT id, full_name, email, role, is_active, is_verified, last_active_page, last_state_payload
+       FROM users WHERE email = ? LIMIT 1`,
       [cleanEmail]
     );
-    if (userRows.length === 0) {
-      return res.status(404).json({ success: false, message: 'User not found / ተጠቃሚው አልተገኘም' });
+    if (!userRows || userRows.length === 0) {
+      return res.status(404).json({ success: false, message: 'User not found.' });
     }
-
     const user = userRows[0];
-    const effectiveRole = resolveEffectiveRole(user.role, user.email);
-
-    if (selectedRole && selectedRole !== user.role) {
-      await db.execute("UPDATE users SET role = ?, is_verified = TRUE, auth_status = 'active' WHERE id = ?", [selectedRole, user.id]);
-      user.role = selectedRole;
-    } else {
-      await db.execute("UPDATE users SET role = ?, is_verified = TRUE, auth_status = 'active' WHERE id = ?", [effectiveRole, user.id]);
-      user.role = effectiveRole;
+    if (!user.is_active) {
+      return res.status(403).json({ success: false, message: 'This account is inactive.' });
     }
+
+    const isDevelopmentMasterCode = process.env.NODE_ENV === 'development' && enteredOtp === '123456';
+    if (!isDevelopmentMasterCode) {
+      const [otpRows] = await db.query(
+        `SELECT id, otp_code, attempts, expires_at
+         FROM otps
+         WHERE email = ? AND purpose IN ('registration', 'email-verification')
+           AND is_used = 0
+         ORDER BY id DESC LIMIT 1`,
+        [cleanEmail]
+      );
+      if (!otpRows.length) {
+        return res.status(400).json({ success: false, error: 'No active verification code found. Please request a new one.' });
+      }
+      const otpRecord = otpRows[0];
+      const isNotExpired = new Date(otpRecord.expires_at).getTime() > Date.now();
+      if (!isNotExpired) {
+        await db.query('UPDATE otps SET is_used = 1 WHERE id = ?', [otpRecord.id]);
+        return res.status(400).json({ success: false, error: 'This OTP code has expired. Please request a new one.' });
+      }
+      if (Number(otpRecord.attempts || 0) >= 4) {
+        return res.status(429).json({ success: false, error: 'Too many failed attempts. Please request a new code later.' });
+      }
+      if (String(otpRecord.otp_code).trim() !== enteredOtp) {
+        const nextAttempts = Number(otpRecord.attempts || 0) + 1;
+        await db.query('UPDATE otps SET attempts = ? WHERE id = ?', [nextAttempts, otpRecord.id]);
+        return res.status(nextAttempts >= 4 ? 429 : 400).json({
+          success: false,
+          error: nextAttempts >= 4 ? 'Too many failed attempts. Please request a new code later.' : 'Invalid OTP code.',
+        });
+      }
+
+      await db.query('UPDATE otps SET is_used = 1 WHERE id = ?', [otpRecord.id]);
+    } else {
+      console.warn('[OTP DEV BYPASS] Development master OTP accepted for registration verification.');
+    }
+
+    const effectiveRole = resolveEffectiveRole(user.role || selectedRole || 'job_seeker', user.email);
+    const finalRole = selectedRole && selectedRole !== user.role ? selectedRole : effectiveRole;
+    await db.execute("UPDATE users SET role = ?, is_verified = TRUE, auth_status = 'active' WHERE id = ?", [finalRole, user.id]);
 
     const [cvRows] = await db.query(
       'SELECT id, is_active FROM cvs WHERE user_id = ? AND is_active = TRUE LIMIT 1',
       [user.id]
     );
-    user.has_cv = cvRows.length > 0;
-    user.onboarding_step = user.role === 'job_seeker' && !user.has_cv ? 'cv_upload' : null;
+
+    const hydratedUser = {
+      ...user,
+      role: finalRole,
+      has_cv: cvRows.length > 0,
+      is_verified: true,
+      isEmailVerified: true,
+      onboarding_step: finalRole === 'job_seeker' && cvRows.length === 0 ? 'cv_upload' : null,
+    };
 
     const token = jwt.sign(
-      { id: user.id, role: user.role, email: user.email },
+      { id: user.id, role: finalRole, email: user.email },
       process.env.JWT_SECRET || 'your_secret_key',
       { expiresIn: '7d' }
     );
-
-    const requiresRoleSelection = !user.role || user.role === 'pending';
-    user.onboardingRoleSelected = !requiresRoleSelection;
-    user.onboardingCvUploaded = user.has_cv;
 
     return res.status(200).json({
       success: true,
       message: 'OTP verified successfully!',
       token,
-      user: { ...user, is_verified: true, isEmailVerified: true },
-      requiresRoleSelection
+      user: hydratedUser,
+      requiresRoleSelection: !finalRole || finalRole === 'pending',
+      onboarding_step: hydratedUser.onboarding_step,
     });
-
   } catch (error) {
-    console.error('OTP Verification Error:', error);
-    return res.status(500).json({ success: false, message: error.message || 'Server error' });
+    console.error('❌ [OTP VERIFY ERROR]:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Server error',
+      ...(process.env.NODE_ENV !== 'production' ? { stack: error.stack } : {}),
+    });
   }
 });
 
 // ==========================================
 // 5. RESEND OTP ROUTE
 // ==========================================
-router.post('/resend-otp', async (req, res) => {
+const resendOtp = async (req, res) => {
+  logOtpRequest(req);
   const { email, purpose = 'registration' } = req.body;
 
   if (!email) {
@@ -471,42 +559,50 @@ router.post('/resend-otp', async (req, res) => {
       return res.status(404).json({ success: false, message: 'Account not found.' });
     }
     const cleanEmail = email.trim().toLowerCase();
-    const [recentLoginOtps] = purpose === 'login'
-      ? await db.query(
-        `SELECT created_at FROM otps
-         WHERE email = ? AND purpose = 'login' AND is_used = 0
-         ORDER BY id DESC LIMIT 1`,
-        [cleanEmail]
-      )
-      : [[]];
-    const previousRequest = recentLoginOtps[0]?.created_at ? new Date(recentLoginOtps[0].created_at).getTime() : null;
-    const elapsed = previousRequest ? Date.now() - previousRequest : LOGIN_OTP_WINDOW_MS;
-    if (previousRequest && elapsed < LOGIN_OTP_WINDOW_MS) {
-      return res.status(200).json({
-        success: true,
-        requires_otp: true,
-        email: cleanEmail,
-        retry_after_seconds: Math.ceil((LOGIN_OTP_WINDOW_MS - elapsed) / 1000),
-        message: 'A login code was already sent. Enter that code or wait before requesting another.',
-        active_code: true,
-      });
-    }
-    const { delivery } = await issueOtp({ dbClient: db, email: cleanEmail, phone: users[0].phone, purpose, expiresInMinutes: 3 });
+    const otpResult = await issueOtp({ dbClient: db, email: cleanEmail, phone: users[0].phone, purpose, expiresInMinutes: 1 });
+    const { delivery } = otpResult;
 
-    res.status(200).json({ 
+    if (!delivery.email) {
+      const response = {
+        success: true,
+        delivery: { emailSent: false, smsSent: delivery.sms },
+        emailDelivered: false,
+        emailError: delivery.emailError,
+        message: delivery.emailError || 'Email delivery failed. Check the backend SMTP configuration and server logs, then try again.',
+      };
+      if (process.env.NODE_ENV === 'development') response.devOtp = otpResult.otpCode;
+      return res.status(200).json(response);
+    }
+
+    const response = {
       success: true,
-      delivery: { emailSent: delivery.email, smsSent: delivery.sms },
-      message: 'A new OTP has been sent to your email / አዲስ OTP ወደ ኢሜይልዎ ተልኳል!' 
-    });
+      delivery: { emailSent: true, smsSent: delivery.sms },
+      emailDelivered: true,
+      message: 'A new OTP has been sent to your email.',
+    };
+    if (process.env.NODE_ENV === 'development') response.devOtp = otpResult.otpCode;
+    return res.status(200).json(response);
 
   } catch (error) {
-    console.error('Resend OTP Error:', error);
+    console.error('❌ [OTP RESEND ERROR]:', error);
     if (error.code === 'OTP_RATE_LIMITED') {
       return res.status(429).json({ success: false, message: error.message });
     }
-    res.status(500).json({ success: false, message: 'Failed to resend OTP.' });
+    if (error.code === 'OTP_EMAIL_DELIVERY_FAILED') {
+      return res.status(502).json({
+        success: false,
+        message: error.message || 'Email delivery failed. Check the backend SMTP configuration and server logs, then try again.',
+      });
+    }
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Unable to resend OTP.',
+      ...(process.env.NODE_ENV !== 'production' ? { stack: error.stack } : {}),
+    });
   }
-});
+};
+
+router.post(['/send-otp', '/resend-otp'], resendOtp);
 
 // ==========================================
 // 5. PASSWORD RESET FLOW
@@ -529,18 +625,20 @@ router.post('/forgot-password', async (req, res) => {
     }
 
     const user = userRows[0];
-    await issueOtp({
+    const otpResult = await issueOtp({
       dbClient: db,
       email,
       phone: user.phone,
       purpose: 'password-reset',
-      expiresInMinutes: 3,
+      expiresInMinutes: 1,
     });
 
-    return res.status(200).json({
+    const response = {
       success: true,
       message: 'If an account exists for this email, a verification code has been sent.'
-    });
+    };
+    if (process.env.NODE_ENV === 'development') response.devOtp = otpResult.otpCode;
+    return res.status(200).json(response);
   } catch (error) {
     console.error('Forgot password error:', error);
     return res.status(500).json({

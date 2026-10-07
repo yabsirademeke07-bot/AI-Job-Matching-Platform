@@ -89,7 +89,6 @@ CREATE TABLE IF NOT EXISTS job_seeker_profiles (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    INDEX idx_email (email),
     INDEX idx_location (location),
     INDEX idx_availability (is_available)
 );
@@ -104,7 +103,7 @@ CREATE TABLE IF NOT EXISTS cvs (
     file_name VARCHAR(255) NOT NULL,
     file_url VARCHAR(255) NOT NULL,
     file_size INT,
-    mime_type VARCHAR(50),
+    mime_type VARCHAR(100),
     is_primary BOOLEAN DEFAULT FALSE,
     is_active BOOLEAN DEFAULT TRUE,
     upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -152,9 +151,15 @@ CREATE TABLE IF NOT EXISTS company_profiles (
     employer_type VARCHAR(50) NOT NULL DEFAULT 'company',
     work_email VARCHAR(255) DEFAULT NULL,
     phone VARCHAR(50) DEFAULT NULL,
-    tin_number VARCHAR(50),
+    tin_number VARCHAR(10),
+    tin_certificate_url VARCHAR(255) DEFAULT NULL,
+    tin_certificate_name VARCHAR(255) DEFAULT NULL,
     trade_license_number VARCHAR(100) DEFAULT NULL,
     trade_license_url VARCHAR(255) DEFAULT NULL,
+    trade_license_name VARCHAR(255) DEFAULT NULL,
+    trade_license_size_bytes INT UNSIGNED DEFAULT NULL,
+    trade_license_uploaded_at TIMESTAMP NULL DEFAULT NULL,
+    trade_license_official_document BOOLEAN NULL DEFAULT NULL,
     company_registration_number VARCHAR(100) UNIQUE DEFAULT NULL,
     industry VARCHAR(100) DEFAULT NULL,
     company_size VARCHAR(50) DEFAULT NULL,
@@ -186,7 +191,6 @@ CREATE TABLE IF NOT EXISTS company_profiles (
 CREATE TABLE IF NOT EXISTS employers (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL UNIQUE,
-    employer_type VARCHAR(50) DEFAULT 'company',
     full_name VARCHAR(255) DEFAULT NULL,
     job_title VARCHAR(150) DEFAULT NULL,
     phone_number VARCHAR(50) DEFAULT NULL,
@@ -266,23 +270,6 @@ CREATE TABLE IF NOT EXISTS talent_pool (
     INDEX idx_talent_pool_employer (employerId)
 );
 
-CREATE TABLE IF NOT EXISTS job_invitations (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    employerId INT NOT NULL,
-    candidateId INT NOT NULL,
-    jobId INT NOT NULL,
-    message TEXT,
-    status ENUM('invited', 'accepted', 'declined', 'expired') DEFAULT 'invited',
-    sentAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (employerId) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (candidateId) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (jobId) REFERENCES jobs(id) ON DELETE CASCADE,
-    UNIQUE KEY unique_job_invitation (employerId, candidateId, jobId),
-    INDEX idx_invitation_status (status),
-    INDEX idx_invitation_candidate (candidateId)
-);
-
 CREATE TABLE IF NOT EXISTS employer_settings (
     id INT AUTO_INCREMENT PRIMARY KEY,
     userId INT NOT NULL UNIQUE,
@@ -320,22 +307,6 @@ CREATE TABLE IF NOT EXISTS employer_messages (
     FOREIGN KEY (employerId) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (candidateId) REFERENCES users(id) ON DELETE CASCADE,
     INDEX idx_employer_message_participants (employerId, candidateId, isRead)
-);
-
-CREATE TABLE IF NOT EXISTS offers (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    applicationId INT NOT NULL UNIQUE,
-    employerId INT NOT NULL,
-    candidateId INT NOT NULL,
-    offeredSalary DECIMAL(12,2),
-    startDate DATE,
-    offerLetterUrl VARCHAR(255),
-    status ENUM('draft', 'sent', 'accepted', 'declined') DEFAULT 'draft',
-    sentAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (applicationId) REFERENCES applications(id) ON DELETE CASCADE,
-    FOREIGN KEY (employerId) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (candidateId) REFERENCES users(id) ON DELETE CASCADE,
-    INDEX idx_offers_employer (employerId)
 );
 
 CREATE TABLE IF NOT EXISTS onboarding_tasks (
@@ -380,28 +351,32 @@ CREATE TABLE IF NOT EXISTS jobs (
     description LONGTEXT NOT NULL,
     category VARCHAR(100),
     sector VARCHAR(150),
-    job_type ENUM('full-time', 'part-time', 'contract', 'temporary', 'internship', 'freelance', 'self-employed') NOT NULL,
+    job_type VARCHAR(50) NOT NULL DEFAULT 'full-time',
     experience_level ENUM('entry-level', 'mid-level', 'senior-level', 'executive') DEFAULT 'mid-level',
     location VARCHAR(100),
     country VARCHAR(100),
     city VARCHAR(100),
     state_province VARCHAR(100),
-    work_mode ENUM('on-site', 'remote', 'hybrid') DEFAULT 'hybrid',
-    gender_preference ENUM('any', 'male', 'female') DEFAULT 'any',
+    work_mode VARCHAR(50) DEFAULT 'hybrid',
+    gender_preference VARCHAR(100) DEFAULT 'any',
     salary_min INT,
     salary_max INT,
     currency VARCHAR(5) DEFAULT 'USD',
     salary_period ENUM('hourly', 'monthly', 'yearly') DEFAULT 'yearly',
     is_salary_negotiable BOOLEAN DEFAULT TRUE,
+    is_negotiable BOOLEAN NOT NULL DEFAULT TRUE,
     benefits TEXT,
+    vacancies INT NOT NULL DEFAULT 1,
     required_skills TEXT,
-    required_education ENUM('high-school', 'associate', 'bachelor', 'master', 'phd', 'any') DEFAULT 'bachelor',
+    required_education VARCHAR(100) DEFAULT 'bachelor',
+    min_experience INT DEFAULT NULL,
     years_of_experience_min INT DEFAULT 0,
     years_of_experience_max INT DEFAULT 20,
     application_deadline DATE,
     scheduled_date DATETIME NULL,
     is_urgent BOOLEAN DEFAULT FALSE,
     status VARCHAR(30) NOT NULL DEFAULT 'pending_approval',
+    approval_status ENUM('pending', 'approved', 'rejected') NOT NULL DEFAULT 'pending',
     is_approved BOOLEAN NOT NULL DEFAULT FALSE,
     rejection_reason TEXT,
     approved_by INT NULL,
@@ -421,6 +396,23 @@ CREATE TABLE IF NOT EXISTS jobs (
     INDEX idx_country_city (country, city),
     INDEX idx_salary (salary_min, salary_max),
     FULLTEXT INDEX ft_title_desc (title, description)
+);
+
+CREATE TABLE IF NOT EXISTS job_invitations (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    employerId INT NOT NULL,
+    candidateId INT NOT NULL,
+    jobId INT NOT NULL,
+    message TEXT,
+    status ENUM('invited', 'accepted', 'declined', 'expired') DEFAULT 'invited',
+    sentAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (employerId) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (candidateId) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (jobId) REFERENCES jobs(id) ON DELETE CASCADE,
+    UNIQUE KEY unique_job_invitation (employerId, candidateId, jobId),
+    INDEX idx_invitation_status (status),
+    INDEX idx_invitation_candidate (candidateId)
 );
 
 -- Job Required Skills
@@ -506,6 +498,22 @@ CREATE TABLE IF NOT EXISTS applications (
     INDEX idx_ai_score (ai_match_score),
     INDEX idx_job_ai_match_score (job_id, ai_match_score DESC),
     UNIQUE KEY unique_application_candidate_job (job_id, job_seeker_id)
+);
+
+CREATE TABLE IF NOT EXISTS offers (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    applicationId INT NOT NULL UNIQUE,
+    employerId INT NOT NULL,
+    candidateId INT NOT NULL,
+    offeredSalary DECIMAL(12,2),
+    startDate DATE,
+    offerLetterUrl VARCHAR(255),
+    status ENUM('draft', 'sent', 'accepted', 'declined') DEFAULT 'draft',
+    sentAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (applicationId) REFERENCES applications(id) ON DELETE CASCADE,
+    FOREIGN KEY (employerId) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (candidateId) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_offers_employer (employerId)
 );
 
 -- Skill Gaps

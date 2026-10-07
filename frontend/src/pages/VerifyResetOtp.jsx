@@ -13,7 +13,7 @@ const VerifyResetOtp = () => {
 
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [isLoading, setIsLoading] = useState(false);
-  const [otpTimer, setOtpTimer] = useState(60);
+  const [otpTimer, setOtpTimer] = useState(600);
   const [resendCount, setResendCount] = useState(() => Number(sessionStorage.getItem('ai_job_reset_resend_count') || 0));
   const [error, setError] = useState('');
 
@@ -123,7 +123,7 @@ const VerifyResetOtp = () => {
       sessionStorage.setItem('ai_job_reset_resend_count', String(nextResendCount));
       setResendCount(nextResendCount);
       setOtp(['', '', '', '', '', '']);
-      setOtpTimer(60);
+      setOtpTimer(600);
       showSuccess('If an account exists for this email, a new verification code has been sent.');
       window.setTimeout(() => otpInputRefs.current[0]?.focus(), 0);
     } catch (err) {

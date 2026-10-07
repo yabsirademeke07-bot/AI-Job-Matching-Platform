@@ -5,13 +5,12 @@ import { useToast } from '../hooks/useToast.js';
 import { scrollToFeedback } from '../utils/scrollHelper.js';
 import { clearUserWorkspace } from '../utils/authSession';
 import GoogleAuthButton from '../components/GoogleAuthButton';
-import {
-  ShieldCheck, Lock,
-  ArrowRight, Eye, EyeOff, User, Briefcase, RefreshCw, ArrowLeft
-} from 'lucide-react';
+import { ShieldCheck, Lock, ArrowRight, Eye, EyeOff, User, Briefcase, RefreshCw, ArrowLeft } from 'lucide-react';
 import EmailInputWithDomains from '../components/EmailInputWithDomains';
 import logoImage from './images/logo1.png';
 import registrationImage from './images/images (3).jpg';
+
+const OTP_EXPIRY_SECONDS = 60;
 
 const Register = () => {
   const navigate = useNavigate();
@@ -33,7 +32,7 @@ const Register = () => {
 
   // OTP State
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
-  const [otpTimer, setOtpTimer] = useState(180);
+  const [otpTimer, setOtpTimer] = useState(OTP_EXPIRY_SECONDS);
   const canResendOtp = otpTimer === 0;
 
   // UI States
@@ -44,6 +43,7 @@ const Register = () => {
   const [apiError, setApiError] = useState('');
   const [apiSuccess, setApiSuccess] = useState(location.state?.message || '');
   const [emailSuggestion, setEmailSuggestion] = useState('');
+  const [emailDeliveryFailed, setEmailDeliveryFailed] = useState(false);
 
   const API_URL = import.meta.env.VITE_BACKEND_URL || '/api';
 
@@ -141,6 +141,7 @@ const Register = () => {
     if (!validateForm()) return;
 
     setApiError('');
+    setEmailDeliveryFailed(false);
     setIsLoading(true);
 
     try {
@@ -186,12 +187,25 @@ const Register = () => {
           });
           return;
         }
-        throw new Error(Object.values(fieldErrors)[0] || data.message || `Unable to create your account (HTTP ${response.status}).`);
+        throw new Error(Object.values(fieldErrors)[0] || data.message || data.error || `Unable to create your account (HTTP ${response.status}).`);
       }
 
-      setStep(2);
-      setOtpTimer(60);
-      showSuccess('Verification code sent successfully.');
+      const emailDeliveryFailed = data.emailDelivered === false;
+      navigate('/verify-otp', {
+        state: {
+          email: formData.email.trim().toLowerCase(),
+          role: data.role || formData.role || 'job_seeker',
+          purpose: 'registration',
+          ...(emailDeliveryFailed ? {
+            emailDeliveryError: data.emailError || data.message || 'Account created, but email delivery failed. Please check the email configuration and resend your verification code.',
+            devOtp: data.devOtp,
+          } : {}),
+        },
+      });
+      if (!emailDeliveryFailed) {
+        showSuccess('Verification code sent successfully.');
+      }
+      return;
     } catch (error) {
       console.error('Registration Error:', error);
       const isNetworkError = error instanceof TypeError && /fetch|network|failed/i.test(error.message || '');
@@ -208,20 +222,16 @@ const Register = () => {
 
   // Helper: Send OTP
   const sendOtpRequest = async (email) => {
-    try {
-      const res = await fetch(`${API_URL.replace(/\/$/, '')}/auth/resend-otp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setApiError(data.message || 'Failed to send OTP.');
-      }
-    } catch (otpErr) {
-      console.warn("OTP Send Error:", otpErr);
-      setApiError('Failed to send OTP code. Please try again.');
+    const response = await fetch(`${API_URL.replace(/\/$/, '')}/auth/resend-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, purpose: 'registration' }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.success) {
+      throw new Error(data.message || data.error || 'Failed to send OTP.');
     }
+    return data;
   };
 
   // STEP 2: Verify OTP
@@ -267,7 +277,7 @@ const Register = () => {
         setSession({ token: data.token, user: verifiedUser });
         navigate('/select-role');
       } else {
-        setApiError(data.message || 'Invalid or expired OTP code.');
+        setApiError(data.message || data.error || 'Invalid or expired OTP code.');
       }
     } catch (err) {
       console.error('OTP Verification Error:', err);
@@ -283,10 +293,26 @@ const Register = () => {
     setIsLoading(true);
     setApiError('');
     setApiSuccess('');
-    await sendOtpRequest(formData.email.trim());
-    setOtpTimer(180);
-    setOtp(['', '', '', '', '', '']);
-    setIsLoading(false);
+    try {
+      const data = await sendOtpRequest(formData.email.trim());
+      setEmailDeliveryFailed(data.emailDelivered === false);
+      setOtpTimer(data.emailDelivered === false ? 0 : OTP_EXPIRY_SECONDS);
+      setOtp(['', '', '', '', '', '']);
+      if (data.emailDelivered === false) {
+        const fallbackCode = data.devOtp ? ` Development code: ${data.devOtp}` : '';
+        const deliveryMessage = `${data.emailError || data.message || 'Email delivery failed. Please check your email settings and try again.'}${fallbackCode}`;
+        setApiError(deliveryMessage);
+        showError(deliveryMessage);
+      } else {
+        showSuccess('A new verification code was sent to your email.');
+      }
+    } catch (error) {
+      setEmailDeliveryFailed(true);
+      setApiError(error.message || 'Email delivery failed. Please check your email settings and try again.');
+      showError(error.message || 'Email delivery failed. Please check your email settings and try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // STEP 3: Complete Registration with Selected Role
@@ -312,7 +338,7 @@ const Register = () => {
 
       setFormData((prev) => ({ ...prev, role: normalizedRole }));
       setStep(2);
-      setOtpTimer(60);
+      setOtpTimer(600);
     } catch (err) {
       console.error('Registration error:', err);
       setApiError(err.message || 'Unable to create your account. Please try again.');
@@ -322,8 +348,8 @@ const Register = () => {
   };
 
   return (
-    <div className="min-h-screen w-full bg-brand-soft bg-[radial-gradient(#d0e5f5_1px,transparent_1px)] bg-size-[16px_16px] flex items-center justify-center p-3 sm:p-4 md:p-6 lg:p-8 font-sans overflow-x-hidden">
-      <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-12 rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xl bg-white border border-slate-300 my-auto">
+    <div className="min-h-screen w-full bg-brand-soft bg-[radial-gradient(#d0e5f5_1px,transparent_1px)] bg-size-[16px_16px] flex flex-col items-center justify-center gap-8 p-3 sm:p-4 md:p-6 lg:p-8 font-sans overflow-x-hidden">
+      <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-12 rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xl bg-white border border-slate-300">
 
         {/* LEFT SIDE: Info Section */}
         <div className="md:col-span-5 auth-brand-gradient p-6 sm:p-8 flex flex-col justify-between relative overflow-hidden">
@@ -503,7 +529,9 @@ const Register = () => {
 
               <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">Enter Verification Code</h2>
               <p className="text-xs sm:text-sm font-semibold text-slate-500 mt-1 mb-6">
-                We sent a 6-digit code to <span className="text-blue-600 font-bold">{formData.email}</span>
+                {emailDeliveryFailed ? 'We could not send the code to ' : 'We sent a 6-digit code to '}
+                <span className="text-blue-600 font-bold">{formData.email}</span>
+                {emailDeliveryFailed ? '. Check the email service configuration, then resend your code.' : ''}
               </p>
 
               <form onSubmit={handleVerifyOtp} className="space-y-6">
@@ -526,7 +554,7 @@ const Register = () => {
                     <p>Resend code in <span className="text-blue-600 font-bold">{formatOtpTime(otpTimer)}</span></p>
                   ) : (
                     <span className="inline-flex items-center gap-1.5 text-red-600 font-bold italic">
-                      OTP expired —
+                      {emailDeliveryFailed ? 'No code received —' : 'OTP expired —'}
                       <button
                         type="button"
                         onClick={handleResendOtp}

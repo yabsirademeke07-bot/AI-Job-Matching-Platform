@@ -1,112 +1,167 @@
-const twilio = require('twilio');
 const crypto = require('crypto');
 const { sendEmailOtp } = require('./notificationService');
 
 const MAX_RESENDS_PER_HOUR = 5;
+const OTP_EXPIRY_MINUTES = 1;
 
-const smsClient = process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN
-  ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
-  : null;
+const createOtp = () => crypto.randomInt(100000, 1000000).toString();
 
-console.log('[OTP SMS CONFIGURED]:', Boolean(smsClient && process.env.TWILIO_PHONE_NUMBER));
+const getEmailDeliveryMessage = (error) => {
+  const errorCode = String(error.code || '').toUpperCase();
+  const errorDetails = `${error.message || ''} ${error.response || ''}`.toLowerCase();
 
-const escapeHtml = (value) => String(value)
-  .replace(/&/g, '&amp;')
-  .replace(/</g, '&lt;')
-  .replace(/>/g, '&gt;')
-  .replace(/"/g, '&quot;')
-  .replace(/'/g, '&#039;');
-
-const sendOtpSms = async (phone, otpCode) => {
-  if (!phone) return false;
-  if (!smsClient || !process.env.TWILIO_PHONE_NUMBER) {
-    console.warn('Twilio credentials are not configured; SMS was not sent.');
-    return false;
+  if (errorCode === 'SMTP_CONFIG_MISSING' || /credentials are missing|credentials.*not configured|credentials.*placeholder|backend\/\.env/.test(errorDetails)) {
+    return 'Email is not configured. Add EMAIL_USER and EMAIL_APP_PASSWORD (a Google App Password) to backend/.env, then restart the backend.';
   }
-
-  await smsClient.messages.create({
-    body: `Your Job Matching AI verification code is ${otpCode}. It expires in 3 minutes.`,
-    from: process.env.TWILIO_PHONE_NUMBER,
-    to: phone,
-  });
-  return true;
+  if (errorCode === 'EAUTH' || /535|534|username and password not accepted|application-specific password/.test(errorDetails)) {
+    return 'Gmail rejected the SMTP credentials. Check that EMAIL_USER is the matching Gmail address and EMAIL_APP_PASSWORD is a valid Google App Password.';
+  }
+  if (/timeout|timed out|etimedout/.test(`${errorCode} ${errorDetails}`)) {
+    return 'Gmail could not be reached before the connection timed out. Check your network/firewall and try again.';
+  }
+  if (/econnrefused|econnreset|enotfound|ehostunreach|enetunreach|esocket/.test(`${errorCode} ${errorDetails}`)) {
+    return 'Could not connect to Gmail SMTP. Check your network/firewall and SMTP settings, then try again.';
+  }
+  return 'Email delivery failed. Check the backend SMTP configuration and server logs, then try again.';
 };
 
-const issueOtp = async ({ dbClient, email, phone, purpose = 'registration', expiresInMinutes = 3 }) => {
-  const cleanEmail = email.trim().toLowerCase();
-  const client = dbClient;
-  const [recentRows] = await client.execute(
-    `SELECT COUNT(*) AS request_count
-     FROM otps
-     WHERE email = ? AND created_at >= DATE_SUB(NOW(), INTERVAL 1 HOUR)`,
-    [cleanEmail]
-  );
-  if (Number(recentRows[0]?.request_count || 0) >= MAX_RESENDS_PER_HOUR) {
-    const error = new Error('Too many OTP requests. Please try again later.');
-    error.code = 'OTP_RATE_LIMITED';
-    throw error;
-  }
-  const otpCode = crypto.randomInt(100000, 1000000).toString();
-  console.log(`--> [OTP ATTEMPT] Email: ${cleanEmail} | Generated Code: ${otpCode}`);
-  const safeExpiry = Number.isInteger(expiresInMinutes) && expiresInMinutes > 0 ? expiresInMinutes : 3;
-
+const deliverOtpEmail = async (email, otpCode) => {
   try {
-    await client.query('UPDATE otps SET is_used = 1 WHERE email = ? AND is_used = 0', [cleanEmail]);
+    await sendEmailOtp(email, otpCode);
+    console.log(`✅ OTP email dispatched to ${email}.`);
+    return { email: true, emailError: null };
   } catch (error) {
-    console.warn('--> [WARN] Failed to invalidate old OTPs:', error.message);
+    console.error('❌ [EMAIL SEND ERROR] SMTP delivery failed:', error);
+    console.warn('⚠️ Email send skipped, proceeding in local development mode.');
+    return {
+      email: false,
+      emailError: getEmailDeliveryMessage(error),
+    };
+  }
+};
+
+const issueOtp = async ({ dbClient, email, phone, purpose = 'registration', expiresInMinutes = OTP_EXPIRY_MINUTES, deferEmail = false }) => {
+  const cleanEmail = String(email || '').trim().toLowerCase();
+  if (!cleanEmail) {
+    throw new Error('Email is required to generate OTP.');
   }
 
-  const insertSql = `
-    INSERT INTO otps (email, otp_code, purpose, is_used, attempts, expires_at, created_at)
-    VALUES (?, ?, ?, 0, 0, DATE_ADD(NOW(), INTERVAL ${safeExpiry} MINUTE), NOW())
-  `;
+  console.log('💾 [OTP DEBUG] Attempting to save OTP to database for:', cleanEmail);
+  const ownsConnection = typeof dbClient.getConnection === 'function';
+  const client = ownsConnection ? await dbClient.getConnection() : dbClient;
+  let transactionStarted = false;
+  let otpId;
+  let otp;
+  let expiresAt;
 
-  let insertResult;
   try {
-    [insertResult] = await client.query(insertSql, [cleanEmail, otpCode, purpose]);
+    if (ownsConnection) {
+      await client.beginTransaction();
+      transactionStarted = true;
+    }
+
+    if (process.env.NODE_ENV === 'production') {
+      let recentRows;
+      [recentRows] = await client.execute(
+        `SELECT COUNT(*) AS request_count
+         FROM otps
+         WHERE email = ? AND created_at >= DATE_SUB(NOW(), INTERVAL 1 HOUR)`,
+        [cleanEmail]
+      );
+
+      if (Number(recentRows[0]?.request_count || 0) >= MAX_RESENDS_PER_HOUR) {
+        const error = new Error('Too many OTP requests. Please try again later.');
+        error.code = 'OTP_RATE_LIMITED';
+        throw error;
+      }
+    }
+
+    otp = createOtp();
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔐 [AFRIWORK-STYLE OTP]:', otp);
+    }
+    const safeExpiry = Number.isInteger(expiresInMinutes) && expiresInMinutes > 0 ? expiresInMinutes : OTP_EXPIRY_MINUTES;
+    expiresAt = new Date(Date.now() + safeExpiry * 60 * 1000);
+
+    await client.query('UPDATE otps SET is_used = 1 WHERE email = ? AND is_used = 0', [cleanEmail]);
+    const insertSql = `
+      INSERT INTO otps (email, otp_code, purpose, is_used, attempts, expires_at, created_at)
+      VALUES (?, ?, ?, 0, 0, ?, NOW())
+    `;
+
+    const [insertResult] = await client.query(insertSql, [cleanEmail, otp, purpose, expiresAt]);
     if (!insertResult.insertId) {
       throw new Error('MySQL did not return an OTP insert ID.');
     }
-    console.log(`--> [DATABASE SUCCESS] OTP inserted into MySQL otps table! Insert ID: ${insertResult.insertId}`);
+    otpId = insertResult.insertId;
+
+    const [savedRows] = await client.execute(
+      `SELECT email, otp_code, is_used, expires_at
+       FROM otps
+       WHERE id = ?
+       LIMIT 1`,
+      [otpId]
+    );
+    const savedOtp = savedRows[0];
+    const savedExpiryTime = new Date(savedOtp?.expires_at).getTime();
+    if (
+      !savedOtp
+      || String(savedOtp.email).trim().toLowerCase() !== cleanEmail
+      || String(savedOtp.otp_code).trim() !== otp
+      || Number(savedOtp.is_used) !== 0
+      || !Number.isFinite(savedExpiryTime)
+      || savedExpiryTime <= Date.now()
+    ) {
+      throw new Error('OTP database verification failed: the saved code is missing, used, or expired.');
+    }
+
+    console.log(`--> [DATABASE SUCCESS] Active OTP record verified for ${cleanEmail}.`);
+    if (ownsConnection) {
+      await client.commit();
+      transactionStarted = false;
+    }
   } catch (dbError) {
-    console.error('--> [FATAL MYSQL INSERT ERROR on otps table]:', dbError.message);
-    console.error(dbError);
+    if (ownsConnection && transactionStarted) {
+      try {
+        await client.rollback();
+      } catch (rollbackError) {
+        console.error('❌ [OTP TRANSACTION ROLLBACK ERROR]:', rollbackError);
+        dbError = new AggregateError([dbError, rollbackError], 'OTP transaction failed and rollback was unsuccessful.');
+      }
+    }
+    console.error('❌ [DATABASE ERROR]:', dbError);
     throw dbError;
+  } finally {
+    if (ownsConnection) client.release();
   }
 
-  if (process.env.NODE_ENV !== 'production') {
-    console.log(`[DEV ONLY] OTP for ${cleanEmail}: ${otpCode}`);
-  }
-  const [emailResult, smsResult] = await Promise.allSettled([
-    sendEmailOtp(cleanEmail, otpCode),
-    sendOtpSms(phone, otpCode),
-  ]);
-  if (emailResult.status === 'fulfilled') {
-    console.log(`✅ OTP email sent for ${cleanEmail}.`);
+  let delivery;
+  if (deferEmail) {
+    delivery = { email: false, emailError: null, deferred: true };
   } else {
-    console.error(`❌ OTP email delivery failed for ${cleanEmail}:`, emailResult.reason?.message || emailResult.reason);
-  }
-  if (smsResult.status === 'rejected') {
-    console.error('OTP SMS delivery failed:', smsResult.reason?.message || smsResult.reason);
+    delivery = await deliverOtpEmail(cleanEmail, otp);
   }
 
   return {
-    otpCode,
+    otpCode: otp,
+    ...(process.env.NODE_ENV === 'development' ? { devOtp: otp } : {}),
+    otpId,
+    expiresAt,
     delivery: {
-      email: emailResult.status === 'fulfilled',
-      sms: smsResult.status === 'fulfilled' && smsResult.value === true,
+      ...delivery,
+      sms: false,
     },
   };
 };
 
-const generateAndSendOtp = async ({ email, phone, purpose = 'registration', dbClient, recipientName }) => {
+const generateAndSendOtp = async ({ email, phone, purpose = 'registration', dbClient, recipientName, deferEmail = false }) => {
   const cleanEmail = String(email || '').trim().toLowerCase();
   if (!cleanEmail) {
     throw new Error('Email is required to generate OTP.');
   }
 
   const client = dbClient || require('../connection');
-  const result = await issueOtp({ dbClient: client, email: cleanEmail, phone, purpose });
+  const result = await issueOtp({ dbClient: client, email: cleanEmail, phone, purpose, expiresInMinutes: OTP_EXPIRY_MINUTES, deferEmail });
 
   return {
     success: true,
@@ -114,8 +169,12 @@ const generateAndSendOtp = async ({ email, phone, purpose = 'registration', dbCl
     purpose,
     recipientName,
     otpCode: result.otpCode,
+    ...(process.env.NODE_ENV === 'development' ? { devOtp: result.otpCode } : {}),
+    otpId: result.otpId,
     delivery: result.delivery,
+    emailError: result.delivery.emailError,
+    expiresAt: result.expiresAt,
   };
 };
 
-module.exports = { issueOtp, generateAndSendOtp };
+module.exports = { issueOtp, generateAndSendOtp, deliverOtpEmail, getEmailDeliveryMessage };

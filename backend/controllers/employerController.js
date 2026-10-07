@@ -1,5 +1,19 @@
 const db = require('../connection');
+const fs = require('fs');
+const path = require('path');
+const employerDocumentDir = path.resolve(__dirname, '..', 'private', 'employer-documents');
 const { createNotification } = require('../services/databaseNotificationService');
+
+const normalizeApplicationStatus = (value) => {
+  const status = String(value || '').trim().toLowerCase().replace(/_/g, ' ');
+  if (['pending', 'pending review', 'applied', 'new'].includes(status)) return 'pending';
+  if (['review', 'under review', 'under-review', 'in review'].includes(status)) return 'review';
+  if (status === 'shortlisted') return 'shortlisted';
+  if (['interview', 'interviewed', 'interview scheduled', 'interview-scheduled'].includes(status)) return 'interviewed';
+  if (['hired', 'accepted', 'offer'].includes(status)) return 'hired';
+  if (['rejected', 'declined'].includes(status)) return 'rejected';
+  return status;
+};
 
 const recordProfileActivity = async (req, { userId, description, oldValues, newValues }) => {
   try {
@@ -18,6 +32,16 @@ const normalizeList = (value) => {
   return String(value || '').split(',').map((item) => item.trim()).filter(Boolean);
 };
 
+const parseJsonValue = (value, fallback) => {
+  if (value === null || value === undefined || value === '') return fallback;
+  if (typeof value === 'object') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+};
+
 const normalizeNullableText = (value) => {
   if (value === null || value === undefined) return null;
   const text = String(value).trim();
@@ -30,47 +54,28 @@ const normalizeOptionalNumber = (value) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
+const normalizeBoolean = (value, fallback = false) => {
+  if (value === undefined || value === null || value === '') return fallback;
+  if (typeof value === 'string') return value.toLowerCase() === 'true' || value === '1';
+  return Boolean(value);
+};
+
 const normalizeOptionalDate = (value) => {
   const text = normalizeNullableText(value);
   return text && text.length >= 8 ? text : null;
 };
 
-const normalizeApplicationStatus = (value) => {
-  const raw = String(value ?? '').trim().toLowerCase();
-  if (!raw) return 'pending';
-
-  const aliases = {
-    pending: 'pending',
-    applied: 'pending',
-    submitted: 'pending',
-    new: 'pending',
-    review: 'review',
-    'under-review': 'review',
-    'under review': 'review',
-    'in-review': 'review',
-    'in review': 'review',
-    shortlisted: 'shortlisted',
-    interview: 'interviewed',
-    interviewed: 'interviewed',
-    'interview-scheduled': 'interviewed',
-    'interview scheduled': 'interviewed',
-    hired: 'hired',
-    accepted: 'hired',
-    offer: 'hired',
-    rejected: 'rejected',
-    declined: 'rejected',
-    withdrawn: 'rejected',
-  };
-
-  return aliases[raw] || raw;
+const normalizeScheduledDate = (value) => {
+  const text = normalizeNullableText(value);
+  if (!text) return null;
+  const date = new Date(text);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 19).replace('T', ' ');
 };
 
 const normalizeJobPayload = (body = {}) => ({
   title: normalizeNullableText(body.title || body.jobTitle) || '',
   description: normalizeNullableText(body.description) || 'No description provided.',
-  status: ['draft', 'scheduled'].includes(String(body.status || '').toLowerCase())
-    ? String(body.status).toLowerCase()
-    : 'pending_approval',
+  status: body.isScheduled === true || body.isScheduled === 'true' ? 'scheduled' : normalizeNullableText(body.status) || 'draft',
   category: normalizeNullableText(body.category || body.department || body.sector || body.categoryName) || 'General',
   job_type: normalizeNullableText(body.job_type || body.jobType || body.job_type_name) || 'full-time',
   experience_level: normalizeNullableText(body.experience_level || body.experienceLevel || body.experience_level_name) || 'mid-level',
@@ -88,15 +93,18 @@ const normalizeJobPayload = (body = {}) => ({
   gender_preference: normalizeNullableText(body.gender_preference || body.genderPreference || body.gender) || 'any',
   salary_min: normalizeOptionalNumber(body.salary_min ?? body.salaryMin ?? body.minimumSalary),
   salary_max: normalizeOptionalNumber(body.salary_max ?? body.salaryMax ?? body.maximumSalary),
+  min_experience: normalizeOptionalNumber(body.min_experience ?? body.minExperience),
+  is_negotiable: normalizeBoolean(body.is_negotiable ?? body.is_salary_negotiable, true),
+  vacancies: normalizeOptionalNumber(body.vacancies ?? body.vacancy_count ?? body.positions) ?? 1,
   currency: normalizeNullableText(body.currency || body.compensation || body.compensationCurrency) || 'ETB',
   salary_period: normalizeNullableText(body.salary_period || body.salaryPeriod) || 'monthly',
-  is_salary_negotiable: body.is_salary_negotiable !== false,
+  is_salary_negotiable: normalizeBoolean(body.is_negotiable ?? body.is_salary_negotiable, true),
   benefits: normalizeNullableText(body.benefits),
-  required_education: normalizeNullableText(body.required_education || body.education) || 'bachelor',
-  years_of_experience_min: normalizeOptionalNumber(body.years_of_experience_min ?? body.yearsOfExperienceMin) ?? 0,
+  required_education: normalizeNullableText(body.required_education || body.requiredEducation || body.education) || 'any',
+  years_of_experience_min: normalizeOptionalNumber(body.min_experience ?? body.minExperience ?? body.years_of_experience_min ?? body.yearsOfExperienceMin) ?? 0,
   years_of_experience_max: normalizeOptionalNumber(body.years_of_experience_max ?? body.yearsOfExperienceMax) ?? 20,
   application_deadline: normalizeOptionalDate(body.application_deadline ?? body.applicationDeadline ?? body.deadline),
-  scheduled_date: normalizeOptionalDate(body.scheduled_date ?? body.scheduledDate ?? body.scheduledAt),
+  scheduled_date: normalizeScheduledDate(body.scheduledAt ?? body.scheduledDate ?? body.scheduled_date),
   is_urgent: Boolean(body.is_urgent || body.isUrgent),
   required_skills: normalizeList(body.required_skills ?? body.requiredSkills ?? body.skills).map((skill) => typeof skill === 'string' ? { skill_name: skill } : skill),
   required_languages: normalizeList(body.required_languages || body.requiredLanguages).map((language) => typeof language === 'string' ? { language_name: language } : language),
@@ -122,6 +130,130 @@ exports.getCompanyProfile = async (req, res) => {
   }
 };
 
+exports.uploadTinCertificate = async (req, res) => {
+  if (!req.file) return res.status(400).json({ success: false, message: 'A certificate file is required.' });
+  const certificateUrl = `/api/employer/profile/tin-certificate/${path.basename(req.file.filename)}`;
+  const certificateName = path.basename(req.file.originalname).replace(/[^\w.\- ]/g, '').slice(0, 255) || 'TIN certificate';
+  try {
+    const [result] = await db.execute(
+      'UPDATE company_profiles SET tin_certificate_url = ?, tin_certificate_name = ? WHERE employer_id = ?',
+      [certificateUrl, certificateName, req.user.id]
+    );
+    if (!result.affectedRows) {
+      await fs.promises.unlink(req.file.path).catch((error) => {
+        console.error('Unable to remove unassociated TIN certificate:', error.message);
+      });
+      return res.status(404).json({ success: false, message: 'Save the company profile before uploading its certificate.' });
+    }
+    return res.status(201).json({ success: true, url: certificateUrl, fileName: certificateName });
+  } catch (error) {
+    await fs.promises.unlink(req.file.path).catch((unlinkError) => {
+      console.error('Unable to remove failed TIN certificate upload:', unlinkError.message);
+    });
+    console.error('TIN certificate upload failed:', error);
+    return res.status(500).json({ success: false, message: 'Unable to save the TIN certificate.' });
+  }
+};
+
+exports.getTinCertificate = async (req, res) => {
+  const filename = path.basename(req.params.filename || '');
+  const certificateUrl = `/api/employer/profile/tin-certificate/${filename}`;
+  try {
+    const [rows] = await db.execute(
+      'SELECT tin_certificate_url FROM company_profiles WHERE employer_id = ? AND tin_certificate_url = ? LIMIT 1',
+      [req.user.id, certificateUrl]
+    );
+    if (!rows.length) return res.status(404).json({ success: false, message: 'Certificate not found.' });
+    return res.sendFile(filename, { root: employerDocumentDir });
+  } catch (error) {
+    console.error('TIN certificate retrieval failed:', error);
+    return res.status(500).json({ success: false, message: 'Unable to load the TIN certificate.' });
+  }
+};
+
+exports.uploadTradeLicense = async (req, res) => {
+  if (!req.file) return res.status(400).json({ success: false, message: 'A document file is required.' });
+  const documentUrl = `/api/employer/profile/trade-license/${path.basename(req.file.filename)}`;
+  const documentName = path.basename(req.file.originalname).replace(/[^\w.\- ]/g, '').slice(0, 255) || 'Business registration document';
+  let officialDocument = null;
+  let textExtracted = false;
+  if (path.extname(req.file.originalname).toLowerCase() === '.pdf') {
+    try {
+      const { extractText } = require('../services/cvAnalysisService');
+      const documentText = await extractText(req.file);
+      textExtracted = Boolean(documentText.trim());
+      const officialKeywords = [
+        'ንግድ ፈቃድ',
+        'የንግድ',
+        'trade license',
+        'commercial registration',
+        'ministry of trade',
+        'የንግድ ሚኒስቴር',
+        'tin',
+        'taxpayer',
+        'revenue',
+        'certificate of registration',
+        'business license',
+        'fdre',
+        'federal democratic republic',
+      ];
+      if (textExtracted) {
+        officialDocument = officialKeywords.some((keyword) =>
+          documentText.toLowerCase().includes(keyword.toLowerCase())
+        );
+      }
+    } catch (error) {
+      console.warn('Unable to extract text from uploaded trade-license PDF:', error.message);
+    }
+  }
+  try {
+    const [result] = await db.execute(
+      `UPDATE company_profiles
+       SET trade_license_url = ?, trade_license_name = ?, trade_license_size_bytes = ?,
+           trade_license_uploaded_at = NOW(), trade_license_official_document = ?
+       WHERE employer_id = ?`,
+      [documentUrl, documentName, req.file.size, officialDocument, req.user.id]
+    );
+    if (!result.affectedRows) {
+      await fs.promises.unlink(req.file.path).catch((error) => {
+        console.error('Unable to remove unassociated trade-license document:', error.message);
+      });
+      return res.status(404).json({ success: false, message: 'Save the company profile before uploading its document.' });
+    }
+    return res.status(201).json({
+      success: true,
+      url: documentUrl,
+      fileName: documentName,
+      fileSize: req.file.size,
+      uploadedAt: new Date().toISOString(),
+      officialDocument,
+      textExtracted,
+    });
+  } catch (error) {
+    await fs.promises.unlink(req.file.path).catch((unlinkError) => {
+      console.error('Unable to remove failed trade-license upload:', unlinkError.message);
+    });
+    console.error('Trade-license document upload failed:', error);
+    return res.status(500).json({ success: false, message: 'Unable to save the business document.' });
+  }
+};
+
+exports.getTradeLicense = async (req, res) => {
+  const filename = path.basename(req.params.filename || '');
+  const documentUrl = `/api/employer/profile/trade-license/${filename}`;
+  try {
+    const [rows] = await db.execute(
+      'SELECT trade_license_url FROM company_profiles WHERE employer_id = ? AND trade_license_url = ? LIMIT 1',
+      [req.user.id, documentUrl]
+    );
+    if (!rows.length) return res.status(404).json({ success: false, message: 'Document not found.' });
+    return res.sendFile(filename, { root: employerDocumentDir });
+  } catch (error) {
+    console.error('Trade-license document retrieval failed:', error);
+    return res.status(500).json({ success: false, message: 'Unable to load the business document.' });
+  }
+};
+
 exports.updateCompanyProfile = async (req, res) => {
   const nullable = (value) => {
     const text = String(value ?? '').trim();
@@ -133,14 +265,15 @@ exports.updateCompanyProfile = async (req, res) => {
     const employerType = data.employerType || data.employer_type || 'company';
     const fullName = nullable(data.fullName || data.representative_name || data.representativeName);
     const workEmail = nullable(data.workEmail || data.work_email || data.email);
-    const phone = nullable(data.phone || data.phoneNumber);
+    const phone = nullable(data.phone || `${data.phoneCountryCode || ''}${data.phoneNumber || ''}`);
 
     if (employerType === 'individual') {
       console.log('--> Saving Household Profile for User:', userId);
       const householdName = nullable(data.householdName || data.companyName);
+      const householdSize = nullable(data.householdMembers || data.companySize || data.company_size);
       const residenceLocation = nullable(data.residenceLocation || data.headquarters || data.headquartersLocation);
-      if (!fullName || !phone || !householdName || !residenceLocation) {
-        return res.status(400).json({ success: false, message: 'Household name, representative name, phone, and residence are required.' });
+      if (!fullName || !phone || !householdName || !householdSize || !residenceLocation) {
+        return res.status(400).json({ success: false, message: 'Household name, representative name, phone, household size, and residence are required.' });
       }
       let previousHousehold = {};
       try {
@@ -159,9 +292,10 @@ exports.updateCompanyProfile = async (req, res) => {
           household_members = VALUES(household_members), residence_location = VALUES(residence_location),
           about_household = VALUES(about_household), updated_at = NOW()`,
         [userId, fullName, nullable(data.roleRelationship), workEmail, phone, householdName,
-          nullable(data.industry) || 'Domestic & Home Services', nullable(data.householdMembers || data.companySize) || '1-2 People',
+          nullable(data.industry) || 'Domestic & Home Services', householdSize,
           residenceLocation, nullable(data.aboutHousehold || data.aboutCompany)]
       );
+      await db.execute('UPDATE users SET phone = ? WHERE id = ?', [phone, userId]);
       const householdValues = { full_name: fullName, phone_number: phone, household_name: householdName, industry: nullable(data.industry) || 'Domestic & Home Services', residence_location: residenceLocation };
       const changedHouseholdFields = Object.keys(householdValues).filter((key) => String(previousHousehold[key] ?? '') !== String(householdValues[key] ?? ''));
       await recordProfileActivity(req, { userId, description: `Updated household profile${changedHouseholdFields.length ? `: ${changedHouseholdFields.join(', ')}` : ''}`, oldValues: previousHousehold, newValues: householdValues });
@@ -177,18 +311,25 @@ exports.updateCompanyProfile = async (req, res) => {
     const jobTitle = nullable(data.jobTitle || data.position || data.representative_title);
     const companyPhone = phone;
     const tinNumber = nullable(data.tinNumber || data.tin_number || data.taxId);
+    if (!tinNumber || !/^\d{10}$/.test(tinNumber) || /^(\d)\1{9}$/.test(tinNumber) || tinNumber === '1234567890') {
+      return res.status(422).json({ success: false, message: 'Please enter a valid 10-digit Tax Identification Number (TIN).' });
+    }
     const companyRegistrationNumber = nullable(data.companyRegistrationNumber || data.company_registration_number);
     const tradeLicenseNumber = nullable(data.tradeLicenseNumber || data.trade_license_number || companyRegistrationNumber);
-    const tradeLicenseUrl = nullable(data.tradeLicenseUrl || data.trade_license_url || data.licenseDocumentUrl || data.license_document_url);
+    const tradeLicenseUrl = nullable(data.tradeLicenseUrl ?? data.trade_license_url ?? data.licenseDocumentUrl ?? data.license_document_url);
+    const tradeLicenseName = nullable(data.trade_license_name || data.tradeLicenseName);
+    const tradeLicenseSize = Number.isInteger(Number(data.trade_license_size_bytes)) ? Number(data.trade_license_size_bytes) || null : null;
+    const tradeLicenseUploadedAt = nullable(data.trade_license_uploaded_at);
+    const tradeLicenseOfficialDocument = typeof data.trade_license_official_document === 'boolean' ? data.trade_license_official_document : null;
     const tradeDoc = tradeLicenseUrl || tradeLicenseNumber;
     const industry = nullable(data.industry);
-    const companySize = nullable(data.companySize || data.company_size) || '11-50';
+    const companySize = nullable(data.companySize || data.company_size);
     const headquarters = nullable(data.headquarters || data.headquartersLocation || data.location);
     const website = nullable(data.website);
     const socialMedia = data.socialMedia || data.social_media_urls ? JSON.stringify(data.socialMedia || data.social_media_urls) : null;
     const aboutCompany = nullable(data.aboutCompany || data.description || data.company_summary);
-    if (!companyName || !fullName || !companyPhone || !industry || !headquarters) {
-      return res.status(400).json({ success: false, message: 'Company name, representative, phone, industry, and headquarters are required.' });
+    if (!companyName || !fullName || !companyPhone || !companySize || !industry || !headquarters) {
+      return res.status(400).json({ success: false, message: 'Company name, representative, phone, company size, industry, and headquarters are required.' });
     }
     let previousCompany = {};
     try {
@@ -215,25 +356,35 @@ exports.updateCompanyProfile = async (req, res) => {
     await db.execute(
       `INSERT INTO company_profiles (
         employer_id, company_name, representative_name, representative_title, employer_type,
-        work_email, phone, tin_number, company_registration_number, trade_license_number, trade_license_url, industry,
+        work_email, phone, tin_number, tin_certificate_url, tin_certificate_name, company_registration_number, trade_license_number, trade_license_url,
+        trade_license_name, trade_license_size_bytes, trade_license_uploaded_at, trade_license_official_document, industry,
         company_size, website, description, company_summary, location, social_media_urls,
         hiring_volume, linkedin, onboarding_completed, verification_status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, 'pending')
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, 'pending')
       ON DUPLICATE KEY UPDATE
         company_name = VALUES(company_name), representative_name = VALUES(representative_name),
         representative_title = VALUES(representative_title), employer_type = VALUES(employer_type),
         work_email = VALUES(work_email), phone = VALUES(phone), tin_number = VALUES(tin_number),
+        tin_certificate_url = VALUES(tin_certificate_url), tin_certificate_name = VALUES(tin_certificate_name),
         company_registration_number = VALUES(company_registration_number),
         trade_license_number = VALUES(trade_license_number), trade_license_url = VALUES(trade_license_url),
+        trade_license_name = VALUES(trade_license_name), trade_license_size_bytes = VALUES(trade_license_size_bytes),
+        trade_license_uploaded_at = VALUES(trade_license_uploaded_at),
+        trade_license_official_document = VALUES(trade_license_official_document),
         industry = VALUES(industry), company_size = VALUES(company_size), website = VALUES(website),
         description = VALUES(description), company_summary = VALUES(company_summary), location = VALUES(location),
         social_media_urls = VALUES(social_media_urls), hiring_volume = VALUES(hiring_volume),
         linkedin = VALUES(linkedin), onboarding_completed = TRUE, verification_status = 'pending', updated_at = NOW()` ,
       [userId, companyName, fullName, jobTitle, employerType, workEmail, companyPhone, tinNumber,
-        companyRegistrationNumber, tradeLicenseNumber, tradeLicenseUrl,
+        nullable(data.tin_certificate_url),
+        nullable(data.tin_certificate_name),
+        companyRegistrationNumber, tradeLicenseNumber, tradeLicenseUrl, tradeLicenseName,
+        tradeLicenseSize, tradeLicenseUploadedAt, tradeLicenseOfficialDocument,
         industry, companySize, website, aboutCompany, aboutCompany, headquarters, socialMedia,
         nullable(data.hiringVolume || data.hiring_volume), nullable(data.linkedin)]
     );
+    await db.execute('UPDATE users SET phone = ? WHERE id = ?', [companyPhone, userId]);
+    await db.execute("INSERT INTO user_activity_log (user_id, activity_type) VALUES (?, 'profile-update')", [req.user.id]).catch(() => {});
     const companyValues = { company_name: companyName, representative_name: fullName, phone: companyPhone, industry, location: headquarters, website, description: aboutCompany };
     const changedCompanyFields = Object.keys(companyValues).filter((key) => String(previousCompany[key] ?? '') !== String(companyValues[key] ?? ''));
     await recordProfileActivity(req, { userId: req.user.id, description: `Updated company profile${changedCompanyFields.length ? `: ${changedCompanyFields.join(', ')}` : ''}`, oldValues: previousCompany, newValues: companyValues });
@@ -255,6 +406,62 @@ exports.getDashboardStats = async (req, res) => {
   } catch (error) {
     console.error('Employer Stats Error:', error);
     return res.status(500).json({ success: false, message: 'Failed to retrieve dashboard metrics.' });
+  }
+};
+
+exports.getEmployerDashboardStats = async (req, res) => {
+  try {
+    const [rows] = await db.execute(
+      `SELECT
+         (SELECT COUNT(*) FROM jobs j
+          WHERE j.employer_id = ?
+            AND (LOWER(j.status) = 'active' OR j.application_deadline >= NOW())) AS active_jobs,
+         (SELECT COUNT(*) FROM applications a
+          JOIN jobs j ON j.id = a.job_id
+          WHERE j.employer_id = ?) AS total_applicants,
+         (SELECT COUNT(*) FROM applications a
+          JOIN jobs j ON j.id = a.job_id
+          WHERE j.employer_id = ? AND a.ai_match_score >= 80) AS high_ai_matches,
+         (SELECT COUNT(*) FROM applications a
+          JOIN jobs j ON j.id = a.job_id
+          WHERE j.employer_id = ?
+            AND LOWER(REPLACE(a.status, '_', '-')) IN ('pending', 'applied', 'new')) AS pending_review,
+         (SELECT COUNT(*) FROM applications a
+          JOIN jobs j ON j.id = a.job_id
+          WHERE j.employer_id = ? AND LOWER(a.status) = 'shortlisted') AS shortlisted,
+         (SELECT COUNT(*) FROM applications a
+          JOIN jobs j ON j.id = a.job_id
+          WHERE j.employer_id = ?
+            AND LOWER(REPLACE(a.status, '_', '-')) IN ('interview', 'interviewed', 'interview-scheduled')) AS interviews_scheduled,
+         (SELECT COUNT(*) FROM applications a
+          JOIN jobs j ON j.id = a.job_id
+          WHERE j.employer_id = ?
+            AND LOWER(REPLACE(a.status, '_', '-')) IN ('hired', 'accepted', 'offer')) AS hired,
+         (SELECT COUNT(*) FROM applications a
+          JOIN jobs j ON j.id = a.job_id
+          WHERE j.employer_id = ?
+            AND a.applied_at >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)
+            AND a.applied_at < DATE_ADD(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY)) AS new_this_week`,
+      Array(8).fill(req.user.id),
+    );
+
+    const row = rows[0] || {};
+    return res.json({
+      success: true,
+      stats: {
+        active_jobs: normalizePipelineCounts(row.active_jobs),
+        total_applicants: normalizePipelineCounts(row.total_applicants),
+        high_ai_matches: normalizePipelineCounts(row.high_ai_matches),
+        pending_review: normalizePipelineCounts(row.pending_review),
+        shortlisted: normalizePipelineCounts(row.shortlisted),
+        interviews_scheduled: normalizePipelineCounts(row.interviews_scheduled),
+        hired: normalizePipelineCounts(row.hired),
+        new_this_week: normalizePipelineCounts(row.new_this_week),
+      },
+    });
+  } catch (error) {
+    console.error('Employer Dashboard Stats Error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to retrieve employer dashboard stats.' });
   }
 };
 
@@ -316,16 +523,25 @@ exports.createJob = async (req, res) => {
   try {
     const job = normalizeJobPayload(req.body);
     if (!job.title || !job.description || !job.application_deadline) return res.status(400).json({ success: false, message: 'Title, description, and application deadline are required.' });
+    if (job.salary_min !== null && job.salary_min < 0 || job.salary_max !== null && job.salary_max < 0) {
+      return res.status(400).json({ success: false, message: 'Salary amounts cannot be negative.' });
+    }
+    if (!Number.isInteger(job.vacancies) || job.vacancies < 1) return res.status(400).json({ success: false, message: 'Vacancies must be a whole number of at least 1.' });
+    if (job.min_experience !== null && (!Number.isInteger(job.min_experience) || job.min_experience < 0)) return res.status(400).json({ success: false, message: 'Minimum experience must be a non-negative whole number.' });
+    if (job.salary_min !== null && job.salary_max !== null && job.salary_max < job.salary_min) {
+      return res.status(400).json({ success: false, message: 'Maximum salary must be greater than or equal to minimum salary.' });
+    }
+    if (job.status === 'scheduled' && !job.scheduled_date) return res.status(400).json({ success: false, message: 'A valid scheduledAt ISO timestamp is required for scheduled jobs.' });
     await connection.beginTransaction();
-    const requiredSkills = job.required_skills.map((skill) => skill.skill_name).filter(Boolean).join(', ');
-    const [result] = await connection.execute(`INSERT INTO jobs (employer_id, title, description, category, job_type, vacancy_level, location, work_mode, gender_preference, salary_min, salary_max, compensation_currency, application_deadline, scheduled_date, required_skills, status, is_approved) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE)`, [req.user.id, job.title, job.description, job.category, job.job_type, job.experience_level, job.location, job.work_mode, job.gender_preference, job.salary_min, job.salary_max, job.currency, job.application_deadline, job.scheduled_date, requiredSkills, job.status]);
+    const slug = `${job.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}-${Date.now()}`;
+    const [result] = await connection.execute(`INSERT INTO jobs (employer_id, title, slug, description, category, job_type, experience_level, location, country, city, work_mode, gender_preference, salary_min, salary_max, currency, salary_period, is_salary_negotiable, is_negotiable, benefits, required_education, min_experience, years_of_experience_min, years_of_experience_max, vacancies, application_deadline, scheduled_date, is_urgent, status, approval_status, published_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`, [req.user.id, job.title, slug, job.description, job.category, job.job_type, job.experience_level, job.location, job.country, job.city, job.work_mode, job.gender_preference, job.salary_min, job.salary_max, job.currency, job.salary_period, job.is_salary_negotiable, job.is_negotiable, job.benefits, job.required_education, job.min_experience, job.years_of_experience_min, job.years_of_experience_max, job.vacancies, job.application_deadline, job.scheduled_date, job.is_urgent, job.status || 'draft', job.status === 'published' ? new Date() : null]);
     const jobId = result.insertId;
     for (const skill of job.required_skills) if (skill.skill_name) await connection.execute('INSERT INTO job_required_skills (job_id, skill_name, proficiency_level, is_must_have) VALUES (?, ?, ?, ?)', [jobId, String(skill.skill_name).trim(), skill.proficiency_level || 'intermediate', Boolean(skill.is_must_have)]);
     for (const language of job.required_languages) if (language.language_name) await connection.execute('INSERT INTO job_required_languages (job_id, language_name, proficiency, is_must_have) VALUES (?, ?, ?, ?)', [jobId, String(language.language_name).trim(), language.proficiency || 'professional-working', Boolean(language.is_must_have)]);
     await connection.execute('INSERT INTO job_analytics (job_id) VALUES (?)', [jobId]);
     await connection.commit();
-    const [rows] = await connection.execute('SELECT * FROM jobs WHERE id = ?', [jobId]);
-    return res.status(201).json({ success: true, ...rows[0], job: rows[0], jobId, id: jobId });
+    const [rows] = await connection.execute("SELECT *, DATE_FORMAT(scheduled_date, '%Y-%m-%dT%H:%i:%sZ') AS scheduledAt FROM jobs WHERE id = ?", [jobId]);
+    return res.status(201).json({ success: true, ...rows[0], isScheduled: job.status === 'scheduled', jobId, id: jobId, slug });
   } catch (error) {
     await connection.rollback();
     const sqlError = error?.sqlMessage || error?.message || 'Unknown database error';
@@ -337,80 +553,43 @@ exports.createJob = async (req, res) => {
 
 exports.getEmployerJobs = async (req, res) => {
   try {
-    const currentUserId = req.user?.id || req.user?.userId || req.user?.user_id || req.user?.sub;
-    if (!currentUserId) return res.status(401).json({ success: false, message: 'Authenticated employer id is missing.' });
-
-    const [rows] = await db.execute(
-      `SELECT
-         j.id,
-         j.employer_id AS employerId,
-         j.title,
-         j.description,
-         j.category,
-         j.sector,
-         j.job_type,
-         j.vacancy_level,
-         j.location,
-         j.work_mode,
-         j.gender_preference,
-         j.salary_min,
-         j.salary_max,
-         j.compensation_currency,
-         j.application_deadline,
-         j.scheduled_date,
-         j.required_skills,
-         j.status,
-         j.is_approved AS isApproved,
-         j.rejection_reason AS rejectionReason,
-         j.reviewed_at AS reviewedAt,
-         j.reviewed_by AS reviewedBy,
-         j.created_at,
-         j.updated_at,
-         COUNT(a.id) AS applicantsCount,
-         COALESCE(SUM(a.status = 'shortlisted'), 0) AS shortlisted
+    const [jobs] = await db.execute(
+      `SELECT j.*, DATE_FORMAT(j.scheduled_date, '%Y-%m-%dT%H:%i:%sZ') AS scheduledAt,
+              COUNT(a.id) AS applicantsCount,
+              COALESCE(SUM(a.status = 'pending' OR a.status = 'applied' OR a.status = 'pending_review'), 0) AS pendingCount,
+              COALESCE(SUM(a.status = 'shortlisted'), 0) AS shortlisted,
+              COALESCE(SUM(a.status = 'interviewed' OR a.status = 'interview'), 0) AS interviewCount,
+              COALESCE(SUM(a.status = 'hired'), 0) AS hiredCount
        FROM jobs j
        LEFT JOIN applications a ON a.job_id = j.id
        WHERE j.employer_id = ?
        GROUP BY j.id
        ORDER BY j.created_at DESC`,
-      [currentUserId]
+      [req.user.id],
     );
-
-    const jobs = rows.map((job) => ({
-      ...job,
-      employer_id: job.employerId,
-      employerId: String(job.employerId),
-      isApproved: Boolean(job.isApproved),
-      sector: job.sector || job.category || 'General',
-      category: job.category || job.sector || 'General',
-      experienceLevel: job.vacancy_level || 'mid-level',
-      level: job.vacancy_level || 'mid-level',
-      type: job.job_type || 'full-time',
-      workMode: job.work_mode || 'hybrid',
-      salary: job.salary_min || job.salary_max
-        ? `${job.compensation_currency || 'ETB'} ${job.salary_min || ''}${job.salary_min && job.salary_max ? ' - ' : ''}${job.salary_max || ''}`
-        : 'Negotiable',
-      deadline: job.application_deadline || 'No deadline',
-      createdAt: job.created_at,
-      applicantsCount: Number(job.applicantsCount || 0),
-      applicantCount: Number(job.applicantsCount || 0),
-    }));
-
-    console.log(`Employer ${currentUserId}: found ${jobs.length} jobs.`);
-    return res.json({ success: true, count: jobs.length, jobs, data: jobs });
+    return res.json({ success: true, jobs: jobs.map((job) => ({ ...job, isScheduled: String(job.status).toLowerCase() === 'scheduled' && Boolean(job.scheduledAt) })) });
   } catch (error) {
-    console.error('Failed to retrieve employer jobs:', error.message);
-    return res.status(500).json({ success: false, message: 'Failed to retrieve jobs.', error: error.message });
+    console.error('Get Employer Jobs Error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to retrieve jobs.' });
   }
 };
 
 exports.updateJob = async (req, res) => {
   const job = normalizeJobPayload(req.body);
+  if (job.salary_min !== null && job.salary_min < 0 || job.salary_max !== null && job.salary_max < 0) {
+    return res.status(400).json({ success: false, message: 'Salary amounts cannot be negative.' });
+  }
+  if (!Number.isInteger(job.vacancies) || job.vacancies < 1) return res.status(400).json({ success: false, message: 'Vacancies must be a whole number of at least 1.' });
+  if (job.min_experience !== null && (!Number.isInteger(job.min_experience) || job.min_experience < 0)) return res.status(400).json({ success: false, message: 'Minimum experience must be a non-negative whole number.' });
+  if (job.salary_min !== null && job.salary_max !== null && job.salary_max < job.salary_min) {
+    return res.status(400).json({ success: false, message: 'Maximum salary must be greater than or equal to minimum salary.' });
+  }
+  if (job.status === 'scheduled' && !job.scheduled_date) return res.status(400).json({ success: false, message: 'A valid scheduledAt ISO timestamp is required for scheduled jobs.' });
   try {
-    const [result] = await db.execute(`UPDATE jobs SET title = ?, description = ?, category = ?, job_type = ?, vacancy_level = ?, location = ?, work_mode = ?, gender_preference = ?, salary_min = ?, salary_max = ?, compensation_currency = ?, application_deadline = ? WHERE id = ? AND employer_id = ?`, [job.title, job.description, job.category, job.job_type, job.experience_level, job.location, job.work_mode, job.gender_preference, job.salary_min, job.salary_max, job.currency, job.application_deadline, req.params.jobId, req.user.id]);
+    const [result] = await db.execute(`UPDATE jobs SET title = ?, description = ?, category = ?, job_type = ?, experience_level = ?, location = ?, work_mode = ?, gender_preference = ?, salary_min = ?, salary_max = ?, currency = ?, is_salary_negotiable = ?, is_negotiable = ?, benefits = ?, required_education = ?, min_experience = ?, years_of_experience_min = ?, vacancies = ?, application_deadline = ?, scheduled_date = ?, status = 'pending_approval', approval_status = 'pending', is_approved = FALSE, approved_at = NULL, approved_by = NULL WHERE id = ? AND employer_id = ?`, [job.title, job.description, job.category, job.job_type, job.experience_level, job.location, job.work_mode, job.gender_preference, job.salary_min, job.salary_max, job.currency, job.is_salary_negotiable, job.is_negotiable, job.benefits, job.required_education, job.min_experience, job.years_of_experience_min, job.vacancies, job.application_deadline, job.scheduled_date, req.params.jobId, req.user.id]);
     if (!result.affectedRows) return res.status(404).json({ success: false, message: 'Job not found.' });
-    const [rows] = await db.execute('SELECT * FROM jobs WHERE id = ?', [req.params.jobId]);
-    return res.json({ success: true, ...rows[0] });
+    const [rows] = await db.execute("SELECT *, DATE_FORMAT(scheduled_date, '%Y-%m-%dT%H:%i:%sZ') AS scheduledAt FROM jobs WHERE id = ?", [req.params.jobId]);
+    return res.json({ success: true, ...rows[0], isScheduled: String(rows[0]?.status).toLowerCase() === 'scheduled' && Boolean(rows[0]?.scheduledAt) });
   } catch (error) { return res.status(500).json({ success: false, message: 'Failed to update job.' }); }
 };
 
@@ -419,7 +598,7 @@ exports.setJobStatus = async (req, res) => {
   const status = ['draft', 'scheduled', 'closed'].includes(requestedStatus) ? requestedStatus : 'pending_approval';
   try {
     const scheduledDate = req.body.scheduledDate || req.body.scheduled_date || null;
-    const [result] = await db.execute('UPDATE jobs SET status = ?, scheduled_date = COALESCE(?, scheduled_date), is_approved = FALSE, approved_at = NULL, approved_by = NULL WHERE id = ? AND employer_id = ?', [status, scheduledDate, req.params.jobId, req.user.id]);
+    const [result] = await db.execute(`UPDATE jobs SET status = CASE WHEN ? IN ('published', 'active') AND approval_status = 'approved' THEN 'active' WHEN ? IN ('published', 'active') THEN 'pending_approval' ELSE ? END, scheduled_date = COALESCE(?, scheduled_date) WHERE id = ? AND employer_id = ?`, [requestedStatus, requestedStatus, status, scheduledDate, req.params.jobId, req.user.id]);
     if (!result.affectedRows) return res.status(404).json({ success: false, message: 'Job not found.' });
     const [rows] = await db.execute('SELECT * FROM jobs WHERE id = ? AND employer_id = ?', [req.params.jobId, req.user.id]);
     return res.json({ success: true, status, job: rows[0] || null, ...(rows[0] || {}) });
@@ -435,9 +614,86 @@ exports.getJobApplicants = async (req, res) => {
   try {
     const [job] = await db.execute('SELECT id, title, status FROM jobs WHERE id = ? AND employer_id = ?', [req.params.jobId, req.user.id]);
     if (!job.length) return res.status(404).json({ success: false, message: 'Job not found.' });
-    const [applicants] = await db.execute(`SELECT a.id application_id, a.job_id, a.job_seeker_id, a.status, a.ai_match_score, a.skills_match_score, a.experience_match_score, a.seeker_cover_letter, a.applied_at, u.full_name, u.email, u.avatar_url, jsp.headline, c.id cv_id, c.file_name, c.file_url, i.id interview_id, i.scheduled_at interview_scheduled_at, i.interview_status, i.interview_type, i.interview_url FROM applications a JOIN jobs j ON j.id = a.job_id JOIN users u ON u.id = a.job_seeker_id LEFT JOIN job_seeker_profiles jsp ON jsp.user_id = u.id LEFT JOIN cvs c ON c.id = a.cv_id LEFT JOIN interviews i ON i.application_id = a.id WHERE a.job_id = ? ORDER BY a.ai_match_score DESC, a.applied_at DESC`, [req.params.jobId]);
-    return res.json({ success: true, job: job[0], applicants });
-  } catch (error) { return res.status(500).json({ success: false, message: 'Failed to retrieve applicants.' }); }
+    const [requiredSkillRows] = await db.execute(
+      'SELECT skill_name FROM job_required_skills WHERE job_id = ? ORDER BY skill_name ASC',
+      [req.params.jobId],
+    );
+    const [applicants] = await db.execute(
+      `SELECT a.id AS application_id, a.job_id, a.job_seeker_id, a.status,
+              a.ai_match_score, a.skills_match_score, a.experience_match_score,
+              a.education_match_score, a.location_match_score, a.seeker_cover_letter,
+              a.resume_snapshot, a.applied_at,
+              u.full_name, u.email, u.phone, u.avatar_url,
+              jsp.headline, jsp.location AS candidate_location, jsp.skills AS profile_skills,
+              jsp.experience_level, jsp.education AS profile_education,
+              jsp.education_level,
+              c.id AS cv_id, c.file_name, c.file_url, c.ai_extracted_data,
+              ca.extracted_skills, ca.extracted_experience, ca.extracted_education,
+              i.id AS interview_id, i.scheduled_at AS interview_scheduled_at,
+              i.interview_status, i.interview_type, i.interview_url
+       FROM applications a
+       JOIN jobs j ON j.id = a.job_id
+       JOIN users u ON u.id = a.job_seeker_id
+       LEFT JOIN job_seeker_profiles jsp ON jsp.user_id = u.id
+       LEFT JOIN cvs c ON c.id = COALESCE(
+         a.cv_id,
+         (SELECT cv.id FROM cvs cv WHERE cv.user_id = u.id AND cv.is_primary = TRUE ORDER BY cv.upload_date DESC LIMIT 1)
+       )
+       LEFT JOIN cv_analysis ca ON ca.cv_id = c.id
+       LEFT JOIN interviews i ON i.application_id = a.id
+       WHERE a.job_id = ?
+       ORDER BY a.ai_match_score DESC, a.applied_at DESC`,
+      [req.params.jobId],
+    );
+    const requiredSkills = requiredSkillRows.map((row) => row.skill_name);
+    const enrichedApplicants = applicants.map((applicant) => {
+      const resumeSnapshot = parseJsonValue(applicant.resume_snapshot, {});
+      const extractedData = parseJsonValue(
+        applicant.ai_extracted_data,
+        resumeSnapshot.extractedData || {},
+      );
+      const profileSkills = parseJsonValue(applicant.profile_skills, []);
+      const cvSkills = parseJsonValue(
+        applicant.extracted_skills,
+        extractedData.skills || [],
+      );
+      const candidateSkills = [...new Set(
+        [...(Array.isArray(profileSkills) ? profileSkills : []), ...(Array.isArray(cvSkills) ? cvSkills : [])]
+          .map((skill) => typeof skill === 'string' ? skill : skill?.skill_name || skill?.name)
+          .filter(Boolean),
+      )];
+      const matchedSkills = requiredSkills.filter((required) =>
+        candidateSkills.some((skill) => skill.toLowerCase() === required.toLowerCase()),
+      );
+      const missingSkills = requiredSkills.filter((required) =>
+        !matchedSkills.some((matched) => matched.toLowerCase() === required.toLowerCase()),
+      );
+
+      return {
+        ...applicant,
+        candidateName: applicant.full_name,
+        candidateId: applicant.job_seeker_id,
+        candidateLocation: applicant.candidate_location,
+        aiMatchScore: Number(applicant.ai_match_score || 0),
+        matchScore: Number(applicant.ai_match_score || 0),
+        matchedSkills,
+        missingSkills,
+        experience: parseJsonValue(
+          applicant.extracted_experience,
+          extractedData.experience || [],
+        ),
+        education: parseJsonValue(
+          applicant.extracted_education,
+          extractedData.education || parseJsonValue(applicant.profile_education, []),
+        ),
+        resumeUrl: applicant.file_url || null,
+      };
+    });
+    return res.json({ success: true, job: job[0], applicants: enrichedApplicants });
+  } catch (error) {
+    console.error('Get Employer Job Applicants Error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to retrieve applicants.' });
+  }
 };
 
 exports.getTopCandidates = async (req, res) => {
@@ -504,51 +760,85 @@ exports.saveTalentPoolCandidate = async (req, res) => {
 
 exports.updateApplicationStatus = async (req, res) => {
   const validStatuses = ['pending', 'review', 'shortlisted', 'interviewed', 'hired', 'rejected'];
-  const requestedStatus = normalizeApplicationStatus(req.body.status || 'pending');
+  const requestedStatus = normalizeApplicationStatus(req.body.status);
 
   if (!validStatuses.includes(requestedStatus)) {
     return res.status(400).json({
       success: false,
-      message: 'Invalid application status. Use one of: Pending, Review, Shortlisted, Interviewed, Hired, Rejected.',
+      message: 'Invalid application status. Use one of: Pending, Review, Shortlisted, Interview, Hired, Rejected.',
+    });
+  }
+  if (requestedStatus === 'interviewed') {
+    return res.status(400).json({
+      success: false,
+      message: 'Schedule an interview with a date and time before setting this status.',
     });
   }
 
+  const connection = await db.getConnection();
+  let transactionStarted = false;
   try {
-    const [result] = await db.execute(
-      'UPDATE applications a JOIN jobs j ON j.id = a.job_id SET a.status = ?, a.employer_notes = COALESCE(?, a.employer_notes) WHERE a.id = ? AND j.employer_id = ?',
-      [requestedStatus, req.body.employer_notes || null, req.params.applicationId, req.user.id],
+    await connection.beginTransaction();
+    transactionStarted = true;
+    const [applicationRows] = await connection.execute(
+      `SELECT a.status, a.job_id AS jobId, a.job_seeker_id AS candidateId,
+              j.title AS jobTitle,
+              COALESCE(
+                NULLIF(j.company_name, ''),
+                (SELECT NULLIF(cp.company_name, '') FROM company_profiles cp WHERE cp.employer_id = j.employer_id LIMIT 1),
+                (SELECT NULLIF(ep.company_name, '') FROM employers ep WHERE ep.user_id = j.employer_id OR ep.userId = j.employer_id LIMIT 1),
+                employer.full_name,
+                'the company'
+              ) AS companyName,
+              employer.full_name AS employerName
+       FROM applications a
+       JOIN jobs j ON j.id = a.job_id
+       JOIN users employer ON employer.id = j.employer_id
+       WHERE a.id = ? AND j.employer_id = ?
+       FOR UPDATE`,
+      [req.params.applicationId, req.user.id],
     );
-
-    if (!result.affectedRows) {
+    const application = applicationRows[0];
+    if (!application) {
+      await connection.rollback();
       return res.status(404).json({ success: false, message: 'Application not found.' });
     }
 
-    const [[details]] = await db.execute(
-      `SELECT a.job_id AS jobId, a.job_seeker_id AS candidateId, u.full_name AS candidateName, j.title AS jobTitle
-       FROM applications a JOIN jobs j ON j.id = a.job_id JOIN users u ON u.id = a.job_seeker_id
-       WHERE a.id = ? AND j.employer_id = ?`,
-      [req.params.applicationId, req.user.id]
+    await connection.execute(
+      'UPDATE applications SET status = ?, employer_notes = COALESCE(?, employer_notes) WHERE id = ?',
+      [requestedStatus, req.body.employer_notes || null, req.params.applicationId],
     );
-    if (details && ['shortlisted', 'hired'].includes(requestedStatus)) {
+    if (normalizeApplicationStatus(application.status) !== requestedStatus) {
+      const companyName = application.companyName || application.employerName || 'the company';
+      const statusLabel = requestedStatus.charAt(0).toUpperCase() + requestedStatus.slice(1);
+      const message = requestedStatus === 'shortlisted'
+        ? `Your application for ${application.jobTitle} has been Shortlisted!`
+        : requestedStatus === 'hired'
+          ? `Congratulations! You have been marked as Hired at ${companyName}`
+          : `Your application for ${application.jobTitle} has been ${statusLabel}.`;
       await createNotification({
-        userId: details.candidateId,
-        type: requestedStatus === 'hired' ? 'HIRING' : 'SHORTLIST',
-        title: requestedStatus === 'hired' ? 'You have been hired' : 'Candidate Shortlisted',
-        message: requestedStatus === 'hired'
-          ? `You have been hired for ${details.jobTitle}.`
-          : `You have been shortlisted for ${details.jobTitle}.`,
-        referenceType: requestedStatus === 'hired' ? 'HIRING' : 'SHORTLIST',
-        referenceId: details.jobId,
-        jobId: details.jobId,
+        executor: connection,
+        userId: application.candidateId,
+        type: requestedStatus === 'hired' ? 'HIRING' : requestedStatus === 'shortlisted' ? 'SHORTLIST' : 'APPLICATION',
+        title: `Application update: ${statusLabel}`,
+        message,
+        referenceType: 'APPLICATION_STATUS',
+        referenceId: req.params.applicationId,
+        jobId: application.jobId,
         applicationId: req.params.applicationId,
         relatedUserId: req.user.id,
       });
     }
 
+    await connection.commit();
+    transactionStarted = false;
     return res.json({ success: true, status: requestedStatus });
   } catch (error) {
+    if (transactionStarted) await connection.rollback();
     console.error('Update Application Status Error:', error);
     return res.status(500).json({ success: false, message: 'Failed to update application.' });
+  } finally {
+    connection.release();
   }
 };
 
@@ -765,26 +1055,76 @@ exports.finalizeEmployerEmployee = async (req, res) => {
 exports.scheduleInterview = async (req, res) => {
   const { applicationId, application_id, scheduledDate, scheduledTime, scheduled_at, interviewType, interview_type, meetingLink, interview_url, duration_minutes, notes } = req.body;
   const targetApplication = applicationId || application_id;
-  const scheduledAt = scheduled_at || `${scheduledDate}T${scheduledTime}`;
-  if (!targetApplication || !scheduledAt) return res.status(400).json({ success: false, message: 'Application and schedule are required.' });
+  const scheduledAt = scheduledDate && scheduledTime
+    ? `${scheduledDate} ${scheduledTime}:00`
+    : String(scheduled_at || '').replace('T', ' ').replace(/Z$/, '');
+  const parsedSchedule = scheduledAt ? new Date(scheduledAt.replace(' ', 'T')) : null;
+  if (!targetApplication || !scheduledAt || Number.isNaN(parsedSchedule?.getTime())) {
+    return res.status(400).json({ success: false, message: 'A valid application, date, and time are required.' });
+  }
+  const connection = await db.getConnection();
+  let transactionStarted = false;
   try {
-    const [owned] = await db.execute('SELECT a.id, a.job_id AS jobId, a.job_seeker_id AS candidateId, u.full_name AS candidateName, j.title AS jobTitle FROM applications a JOIN jobs j ON j.id = a.job_id JOIN users u ON u.id = a.job_seeker_id WHERE a.id = ? AND j.employer_id = ?', [targetApplication, req.user.id]);
-    if (!owned.length) return res.status(404).json({ success: false, message: 'Application not found.' });
-    await db.execute(`INSERT INTO interviews (application_id, interview_type, scheduled_at, duration_minutes, interview_url, interview_status, interviewer_id, notes) VALUES (?, ?, ?, ?, ?, 'scheduled', ?, ?) ON DUPLICATE KEY UPDATE interview_type = VALUES(interview_type), scheduled_at = VALUES(scheduled_at), duration_minutes = VALUES(duration_minutes), interview_url = VALUES(interview_url), interview_status = 'scheduled', notes = VALUES(notes)`, [targetApplication, interview_type || interviewType || 'video', scheduledAt, duration_minutes || 60, interview_url || meetingLink || null, req.user.id, notes || null]);
-    await db.execute("UPDATE applications SET status = 'interview' WHERE id = ?", [targetApplication]);
+    await connection.beginTransaction();
+    transactionStarted = true;
+    const [owned] = await connection.execute(
+      `SELECT a.id, a.job_id AS jobId, a.job_seeker_id AS candidateId,
+              j.title AS jobTitle,
+              COALESCE(
+                NULLIF(j.company_name, ''),
+                (SELECT NULLIF(cp.company_name, '') FROM company_profiles cp WHERE cp.employer_id = j.employer_id LIMIT 1),
+                (SELECT NULLIF(ep.company_name, '') FROM employers ep WHERE ep.user_id = j.employer_id OR ep.userId = j.employer_id LIMIT 1),
+                employer.full_name,
+                'the company'
+              ) AS companyName,
+              employer.full_name AS employerName
+       FROM applications a
+       JOIN jobs j ON j.id = a.job_id
+       JOIN users employer ON employer.id = j.employer_id
+       WHERE a.id = ? AND j.employer_id = ?
+       FOR UPDATE`,
+      [targetApplication, req.user.id],
+    );
+    if (!owned.length) {
+      await connection.rollback();
+      return res.status(404).json({ success: false, message: 'Application not found.' });
+    }
+    await connection.execute(
+      `INSERT INTO interviews
+        (application_id, interview_type, scheduled_at, duration_minutes, interview_url, interview_status, interviewer_id, notes)
+       VALUES (?, ?, ?, ?, ?, 'scheduled', ?, ?)
+       ON DUPLICATE KEY UPDATE interview_type = VALUES(interview_type),
+         scheduled_at = VALUES(scheduled_at), duration_minutes = VALUES(duration_minutes),
+         interview_url = VALUES(interview_url), interview_status = 'scheduled', notes = VALUES(notes)`,
+      [targetApplication, interview_type || interviewType || 'video', scheduledAt, duration_minutes || 60, interview_url || meetingLink || null, req.user.id, notes || null],
+    );
+    await connection.execute("UPDATE applications SET status = 'interview' WHERE id = ?", [targetApplication]);
+    const dateLabel = new Date(
+      `${scheduledDate || scheduledAt.slice(0, 10)}T${scheduledTime || scheduledAt.slice(11, 16)}`,
+    ).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+    const companyName = owned[0].companyName || owned[0].employerName || 'the company';
     await createNotification({
+      executor: connection,
       userId: owned[0].candidateId,
       type: 'INTERVIEW',
-      title: 'Interview Scheduled',
-      message: `An interview has been scheduled with ${owned[0].candidateName} for ${owned[0].jobTitle}.`,
-      referenceType: 'INTERVIEW',
+      title: 'Interview Invitation',
+      message: `Interview Invitation from ${companyName} for ${owned[0].jobTitle} on ${dateLabel}`,
+      referenceType: 'APPLICATION_STATUS',
       referenceId: targetApplication,
       jobId: owned[0].jobId,
       applicationId: targetApplication,
       relatedUserId: req.user.id,
     });
+    await connection.commit();
+    transactionStarted = false;
     return res.json({ success: true, message: 'Interview scheduled.' });
-  } catch (error) { return res.status(500).json({ success: false, message: 'Failed to schedule interview.' }); }
+  } catch (error) {
+    if (transactionStarted) await connection.rollback();
+    console.error('Schedule Interview Error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to schedule interview.' });
+  } finally {
+    connection.release();
+  }
 };
 
 exports.getUpcomingInterviews = async (req, res) => {
@@ -857,7 +1197,7 @@ exports.sendEmployerMessage = async (req, res) => {
       }
     }
     const [[conversation]] = await db.execute('SELECT id, job_seeker_id AS candidateId FROM conversations WHERE id = ? AND employer_id = ?', [conversationId, req.user.id]);
-    const [result] = await db.execute('INSERT INTO messages (conversation_id, sender_id, receiver_id, message_text, is_read) VALUES (?, ?, ?, ?, TRUE)', [conversationId, req.user.id, conversation.candidateId, body]);
+    const [result] = await db.execute('INSERT INTO messages (conversation_id, sender_id, receiver_id, message_text, is_read) VALUES (?, ?, ?, ?, FALSE)', [conversationId, req.user.id, conversation.candidateId, body]);
     await db.execute('UPDATE conversations SET last_message_at = NOW(), updated_at = NOW() WHERE id = ?', [conversationId]);
     await createNotification({ userId: conversation.candidateId, type: 'MESSAGE', title: 'New Message', message: 'You received a new message from an employer.', referenceType: 'MESSAGE', referenceId: result.insertId, relatedUserId: req.user.id });
     return res.status(201).json({ success: true, messageId: result.insertId, conversationId });
@@ -923,7 +1263,7 @@ exports.sendConversationMessage = async (req, res) => {
     if (message.length > 5000) return res.status(400).json({ success: false, message: 'Message is too large.' });
     const [[conversation]] = await db.execute('SELECT id, job_seeker_id AS candidateId FROM conversations WHERE id = ? AND employer_id = ? AND status <> \'archived\'', [req.params.conversationId, req.user.id]);
     if (!conversation) return res.status(404).json({ success: false, message: 'Conversation not found.' });
-    const [result] = await db.execute('INSERT INTO messages (conversation_id, sender_id, receiver_id, message_text, is_read) VALUES (?, ?, ?, ?, TRUE)', [conversation.id, req.user.id, conversation.candidateId, message]);
+    const [result] = await db.execute('INSERT INTO messages (conversation_id, sender_id, receiver_id, message_text, is_read) VALUES (?, ?, ?, ?, FALSE)', [conversation.id, req.user.id, conversation.candidateId, message]);
     await db.execute('UPDATE conversations SET last_message_at = NOW(), updated_at = NOW() WHERE id = ? AND employer_id = ?', [conversation.id, req.user.id]);
     await createNotification({ userId: conversation.candidateId, type: 'MESSAGE', title: 'New Message', message: 'You received a new message from an employer.', referenceType: 'MESSAGE', referenceId: result.insertId, relatedUserId: req.user.id });
     const [[saved]] = await db.execute('SELECT id, conversation_id AS conversationId, sender_id AS senderId, receiver_id AS receiverId, message_text AS message, is_read AS isRead, created_at AS createdAt FROM messages WHERE id = ?', [result.insertId]);

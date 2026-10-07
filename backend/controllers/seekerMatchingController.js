@@ -1,93 +1,19 @@
 const db = require('../config/db');
-const { calculateMatchScore } = require('../services/matchScoreService');
-const { createNotification } = require('../services/databaseNotificationService');
+const { calculateJobMatches } = require('../services/cvAnalysisService');
 
-const normalize = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9+#.]+/g, ' ').trim();
-const tokens = (value) => normalize(value).split(' ').filter((token) => token.length > 2);
 const parseJson = (value, fallback = {}) => {
   if (!value) return fallback;
   if (typeof value === 'object') return value;
   try { return JSON.parse(value); } catch { return fallback; }
 };
-const asArray = (value) => Array.isArray(value) ? value : [];
-const skillName = (skill) => typeof skill === 'string' ? skill : skill?.skill_name || skill?.name || '';
-const relatedSkill = (candidate, required) => candidate === required || candidate.split(' ').some((term) => term.length > 2 && required.includes(term));
-
-function calculateMatch(job, profile) {
-  const candidateSkills = new Set(profile.skills.map((skill) => normalize(skillName(skill))).filter(Boolean));
-  const requiredSkills = job.requiredSkills.map((skill) => skill.name);
-  const matchedSkills = requiredSkills.filter((skill) => candidateSkills.has(normalize(skill)));
-  const missingSkills = requiredSkills.filter((skill) => !candidateSkills.has(normalize(skill)));
-  const totalWeight = job.requiredSkills.reduce((sum, skill) => sum + Number(skill.weight || 1), 0);
-  const matchedWeight = job.requiredSkills.filter((skill) => {
-    const required = normalize(skill.name);
-    return [...candidateSkills].some((candidate) => relatedSkill(candidate, required) || relatedSkill(required, candidate));
-  }).reduce((sum, skill) => sum + Number(skill.weight || 1), 0);
-  const skillScore = totalWeight ? matchedWeight / totalWeight : 0.45;
-
-  const desiredTerms = new Set([
-    ...tokens(profile.profile?.headline),
-    ...tokens(profile.profile?.job_category),
-    ...tokens(profile.profile?.education_level),
-    ...tokens(profile.user?.bio),
-    ...profile.experience.flatMap((item) => tokens(item.job_title)),
-    ...tokens(profile.cv?.professional_title),
-  ]);
-  const titleTerms = tokens(job.title);
-  const categoryTerms = tokens(job.category);
-  const titleScore = titleTerms.length && [...desiredTerms].some((term) => titleTerms.includes(term) || categoryTerms.includes(term) || titleTerms.some((title) => title.includes(term))) ? 1 : 0.4;
-
-  const preferredMode = normalize(profile.profile?.preferred_work_mode);
-  const preferredCity = normalize(profile.profile?.city || profile.profile?.location);
-  const modeMatches = preferredMode && normalize(job.work_mode) === preferredMode;
-  const cityMatches = preferredCity && (normalize(job.city || job.location).includes(preferredCity) || normalize(job.location).includes(preferredCity));
-  const locationScore = modeMatches ? (cityMatches ? 1 : 0.8) : (preferredMode === 'any' ? 0.75 : 0.3);
-  const preferredJobType = normalize(profile.profile?.preferred_job_type || profile.profile?.job_type);
-  const jobTypeScore = preferredJobType && normalize(job.job_type) === preferredJobType ? 1 : preferredJobType ? 0.3 : 0.6;
-  const expectedMin = Number(profile.profile?.salary_expectation_min || profile.profile?.expected_salary || 0);
-  const expectedMax = Number(profile.profile?.salary_expectation_max || profile.profile?.expectedSalaryMax || 0);
-  const salaryMin = Number(job.salary_min || 0);
-  const salaryMax = Number(job.salary_max || 0);
-  const salaryScore = !expectedMin || (!salaryMin && !salaryMax) ? 0.6 : ((salaryMax >= expectedMin && (!expectedMax || !salaryMin || salaryMin <= expectedMax)) ? 1 : 0.15);
-  const experienceTerms = tokens(profile.profile?.experience_level).concat(profile.experience.flatMap((item) => tokens(item.role || item.job_title)));
-  const seniorityScore = experienceTerms.some((term) => tokens(job.experience_level).includes(term)) ? 1 : 0.55;
-  const affinity = skillScore * 0.4 + titleScore * 0.2 + seniorityScore * 0.15 + locationScore * 0.15 + jobTypeScore * 0.05 + salaryScore * 0.05;
-  const score = Math.round(68 + Math.max(0, Math.min(1, affinity)) * 27);
-
-  return {
-    matchScore: Math.max(0, Math.min(100, score)),
-    matchedSkills,
-    missingSkills,
-    skillsScore: Math.round(skillScore * 100),
-    experienceScore: Math.round(seniorityScore * 100),
-    educationScore: titleScore ? 100 : 55,
-    locationScore: Math.round(locationScore * 100),
-    salaryScore,
-    jobTypeScore,
-  };
-}
 
 async function getCandidateProfile(userId) {
-  const [[user], [profile], [skills], [candidateProfiles], [cvRows]] = await Promise.all([
-    db.execute('SELECT id, full_name FROM users WHERE id = ? LIMIT 1', [userId]),
-    db.execute('SELECT * FROM job_seeker_profiles WHERE user_id = ? LIMIT 1', [userId]),
-    db.execute('SELECT skills FROM job_seeker_profiles WHERE user_id = ? LIMIT 1', [userId]),
-    db.execute('SELECT parsed_json_payload FROM job_seeker_profiles WHERE user_id = ? LIMIT 1', [userId]),
-    db.execute('SELECT ai_extracted_data FROM cvs WHERE user_id = ? AND is_active = TRUE ORDER BY is_primary DESC, upload_date DESC LIMIT 1', [userId]),
-  ]);
+  const [cvRows] = await db.execute(
+    'SELECT ai_extracted_data FROM cvs WHERE user_id = ? AND is_active = TRUE ORDER BY is_primary DESC, upload_date DESC LIMIT 1',
+    [userId]
+  );
   const cv = parseJson(cvRows[0]?.ai_extracted_data, {});
-  const cvStatus = profile?.cv_status || (cvRows[0] ? 'uploaded' : 'none');
-  const cvSkills = cvStatus === 'uploaded' ? asArray(cv.skills || cv.extracted_skills).map(skillName).filter(Boolean) : [];
-  let experience = [];
-  try {
-    const payload = candidateProfiles[0]?.parsed_json_payload ? JSON.parse(candidateProfiles[0].parsed_json_payload) : {};
-    experience = Array.isArray(payload.experience) ? payload.experience : [];
-  } catch { experience = []; }
-  let savedSkills = [];
-  try { savedSkills = Array.isArray(skills[0]?.skills) ? skills[0].skills : JSON.parse(skills[0]?.skills || '[]'); } catch { savedSkills = []; }
-  const normalizedSkills = savedSkills.map((skill) => typeof skill === 'string' ? { skill_name: skill } : skill);
-  const manualSkills = cvStatus === 'skipped' || cvStatus === 'none' ? normalizedSkills : [];
-  return { user: user || {}, profile: profile || {}, skills: [...manualSkills, ...cvSkills], experience: cvStatus === 'uploaded' ? (experience.length ? experience : asArray(cv.experience)) : experience, cv: cvStatus === 'uploaded' ? cv : {} };
+  return { cv, hasUploadedCv: Boolean(cvRows[0]) };
 }
 
 async function getMatchedJobs(req, res) {
@@ -98,7 +24,7 @@ async function getMatchedJobs(req, res) {
        FROM jobs j
        JOIN users u ON u.id = j.employer_id
        LEFT JOIN company_profiles cp ON cp.employer_id = j.employer_id
-      WHERE LOWER(j.status) = 'active' AND j.is_approved = TRUE
+      WHERE LOWER(j.status) = 'active' AND j.approval_status = 'approved'
        ORDER BY j.created_at DESC`,
       []
     );
@@ -129,33 +55,86 @@ async function getMatchedJobs(req, res) {
         skillsByJob.set(job.id, legacySkills.map((name) => ({ name, weight: 1 })));
       });
     }
-    const matches = jobs.map((job) => {
-      const enriched = { ...job, requiredSkills: skillsByJob.get(job.id) || [] };
-      const result = calculateMatch(enriched, profile);
-      return { ...job, ...result, requiredSkills: enriched.requiredSkills.map((skill) => skill.name), isSaved: savedIds.has(String(job.id)), isApplied: appliedIds.has(String(job.id)), workSetup: job.work_mode, salary: job.salary_min || job.salary_max ? `${job.currency || 'ETB'} ${job.salary_min || ''}${job.salary_min && job.salary_max ? ' - ' : ''}${job.salary_max || ''}` : 'Negotiable' };
-    }).sort((a, b) => b.matchScore - a.matchScore);
-
-    const uniqueMatches = [];
-    const seen = new Set();
-    matches.forEach((job) => {
-      const fingerprint = `${String(job.title || '').trim().toLowerCase()}_${String(job.company_name || job.company || '').trim().toLowerCase()}_${String(job.location || '').trim().toLowerCase()}`;
-      if (!fingerprint || seen.has(fingerprint)) return;
-      seen.add(fingerprint);
-      uniqueMatches.push(job);
-    });
-
-    uniqueMatches.slice(0, 3).forEach((job, index) => {
-      job.rank = index + 1;
-      job.rationale = index === 0
-        ? "Why this is your top match: Out of all currently available roles, this opportunity exhibits the highest synergy with your core profile strengths and career trajectory."
-        : index === 1
-          ? 'Why it matches: High domain relevance with transferable qualifications matching your background.'
-          : 'Why it matches: Promising career expansion role aligned with your baseline capabilities.';
-    });
-    return res.json({ success: true, jobs: uniqueMatches });
+    const scoredJobs = calculateJobMatches(profile.cv, jobs.map((job) => ({
+      ...job,
+      additional_required_skills: skillsByJob.get(job.id) || [],
+    })));
+    const matches = scoredJobs.map((job, index) => ({
+      ...job,
+      matchScore: profile.hasUploadedCv ? job.match_score : null,
+      matchedSkills: job.matched_skills,
+      missingSkills: job.missing_skills,
+      requiredSkills: job.required_skills,
+      isSaved: Boolean(job.saved_id),
+      isApplied: Boolean(job.application_id),
+      workSetup: job.work_mode,
+      salary: job.is_negotiable || job.is_salary_negotiable
+        ? 'Negotiable'
+        : job.salary_min || job.salary_max
+          ? `${job.currency || 'ETB'} ${job.salary_min || ''}${job.salary_min && job.salary_max ? ' - ' : ''}${job.salary_max || ''}`
+          : 'Compensation disclosed upon application',
+      rationale: profile.hasUploadedCv && job.match_score !== null
+        ? `${job.matched_skills.length} of ${job.required_skills.length} listed required skills match your uploaded CV.`
+        : 'Upload a CV and add required skills to this job to calculate a match.',
+      rank: index + 1,
+    }));
+    return res.json({ success: true, jobs: req.query?.all === 'true' ? matches : matches.slice(0, 3) });
   } catch (error) {
     console.error('Matched jobs query failed:', error.message);
     return res.status(500).json({ success: false, message: 'Unable to calculate matched jobs.' });
+  }
+}
+
+async function getSeekerNotifications(req, res) {
+  try {
+    const userId = req.user.id;
+    const [notifications] = await db.execute(
+      `SELECT id, type, title, message, action_url, related_job_id, is_read, created_at
+       FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 20`,
+      [userId]
+    );
+    const [[unread]] = await db.execute(
+      'SELECT COUNT(*) AS count FROM notifications WHERE user_id = ? AND is_read = FALSE',
+      [userId]
+    );
+    return res.json({ success: true, notifications, unreadCount: Number(unread?.count || 0) });
+  } catch (error) {
+    console.error('Seeker notifications lookup failed:', error.message);
+    return res.status(500).json({ success: false, message: 'Unable to load notifications.' });
+  }
+}
+
+async function markSeekerNotificationRead(req, res) {
+  try {
+    const [existing] = await db.execute(
+      'SELECT id FROM notifications WHERE id = ? AND user_id = ? LIMIT 1',
+      [req.params.notificationId, req.user.id]
+    );
+    if (!existing.length) return res.status(404).json({ success: false, message: 'Notification not found.' });
+    await db.execute(
+      'UPDATE notifications SET is_read = TRUE, read_at = NOW() WHERE id = ? AND user_id = ?',
+      [req.params.notificationId, req.user.id]
+    );
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Mark seeker notification read failed:', error.message);
+    return res.status(500).json({ success: false, message: 'Unable to update notification.' });
+  }
+}
+
+async function getSeekerUnreadMessageCount(req, res) {
+  try {
+    const [[row]] = await db.execute(
+      `SELECT COUNT(*) AS count
+       FROM messages m
+       JOIN conversations c ON c.id = m.conversation_id
+       WHERE c.job_seeker_id = ? AND m.receiver_id = ? AND m.sender_id <> ? AND m.is_read = FALSE`,
+      [req.user.id, req.user.id, req.user.id]
+    );
+    return res.json({ success: true, unreadCount: Number(row?.count || 0) });
+  } catch (error) {
+    console.error('Seeker unread messages lookup failed:', error.message);
+    return res.status(500).json({ success: false, message: 'Unable to load unread messages.' });
   }
 }
 
@@ -165,7 +144,7 @@ async function createApplication(req, res) {
   const connection = await db.getConnection();
   try {
     await connection.beginTransaction();
-    const [[job]] = await connection.query("SELECT * FROM jobs WHERE id = ? AND LOWER(status) = 'active' AND is_approved = TRUE LIMIT 1", [jobId]);
+    const [[job]] = await connection.query("SELECT * FROM jobs WHERE id = ? AND LOWER(status) = 'active' AND approval_status = 'approved' LIMIT 1", [jobId]);
     if (!job) {
       await connection.rollback();
       return res.status(404).json({ success: false, message: 'This job is no longer available.' });
@@ -223,7 +202,7 @@ async function createApplication(req, res) {
 
 async function getApplicationMatchScore(req, res) {
   try {
-    const [[job]] = await db.query("SELECT j.*, COALESCE(j.company_name, cp.company_name, u.full_name, 'Company') AS company_name FROM jobs j JOIN users u ON u.id = j.employer_id LEFT JOIN company_profiles cp ON cp.employer_id = j.employer_id WHERE j.id = ? LIMIT 1", [req.params.jobId]);
+    const [[job]] = await db.query("SELECT j.*, COALESCE(j.company_name, cp.company_name, u.full_name, 'Company') AS company_name FROM jobs j JOIN users u ON u.id = j.employer_id LEFT JOIN company_profiles cp ON cp.employer_id = j.employer_id WHERE j.id = ? AND LOWER(j.status) IN ('active', 'published') AND j.approval_status = 'approved' LIMIT 1", [req.params.jobId]);
     if (!job) return res.status(404).json({ success: false, message: 'Job not found.' });
     const profile = await getCandidateProfile(req.user.id);
     const [requiredSkills] = await db.query('SELECT skill_name, skill_weight FROM job_required_skills WHERE job_id = ? ORDER BY id', [req.params.jobId]);
@@ -251,4 +230,13 @@ async function unsaveJob(req, res) {
   } catch (error) { return res.status(500).json({ success: false, message: 'Unable to remove saved job.' }); }
 }
 
-module.exports = { getMatchedJobs, createApplication, getApplicationMatchScore, saveJob, unsaveJob };
+module.exports = {
+  getMatchedJobs,
+  getSeekerNotifications,
+  markSeekerNotificationRead,
+  getSeekerUnreadMessageCount,
+  createApplication,
+  getApplicationMatchScore,
+  saveJob,
+  unsaveJob,
+};
