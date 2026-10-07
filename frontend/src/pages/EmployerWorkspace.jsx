@@ -3196,7 +3196,6 @@ export default function EmployerWorkspace() {
                       <option value="90">90%+ score</option>
                     </select>
                   </div>
-<<<<<<< HEAD
                   {active === "matching" && (
                     <div className="grid gap-4 md:grid-cols-4">
                       {[
@@ -3221,8 +3220,6 @@ export default function EmployerWorkspace() {
                       ))}
                     </div>
                   )}
-=======
->>>>>>> origin/tade
                   {active === "shortlist" && (
                     <div className="rounded-2xl border border-blue-100 bg-blue-50 p-5">
                       <h3 className="font-semibold text-blue-900">
@@ -3499,24 +3496,6 @@ export default function EmployerWorkspace() {
                   <X />
                 </button>
               </div>
-<<<<<<< HEAD
-
-              <section className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <h3 className="text-sm font-semibold text-slate-900">Contact information</h3>
-                <div className="mt-3 space-y-1 text-sm text-slate-600">
-                  <p>{selected.email || "Email not provided"}</p>
-                  <p>{selected.phone || "Phone not provided"}</p>
-                  <p>{selected.location || "Location not provided"}</p>
-                </div>
-              </section>
-
-              <section className="mt-5">
-                <div className="flex items-center gap-4">
-                  <ScoreRing score={selected.matchScore} size={76} />
-                  <div>
-                    <h3 className="font-semibold">AI match breakdown</h3>
-                    <p className="mt-1 text-xs text-slate-500">Score breakdown from this submitted application.</p>
-=======
               {selected.candidateId && <button type="button" onClick={() => setReportCandidate(selected)} className="mt-4 inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-slate-500 transition hover:bg-rose-50 hover:text-rose-700"><ShieldAlert className="h-4 w-4" />Report candidate</button>}
               <div className="mt-6 grid gap-4 sm:grid-cols-[auto_1fr]">
                 <ScoreRing score={selected.matchScore} size={90} />
@@ -3535,7 +3514,6 @@ export default function EmployerWorkspace() {
                         {skill}
                       </span>
                     ))}
->>>>>>> origin/tade
                   </div>
                 </div>
                 <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
@@ -3556,7 +3534,7 @@ export default function EmployerWorkspace() {
                       : <span className="text-xs text-slate-500">No missing skills recorded.</span>}
                   </div>
                 </div>
-              </section>
+              </div>
 
               <section className="mt-5 grid gap-4 sm:grid-cols-2">
                 {[

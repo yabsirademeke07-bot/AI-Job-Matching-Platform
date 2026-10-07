@@ -117,14 +117,11 @@ router.post('/employer/profile', controller.updateCompanyProfile);
 router.post('/employer/profile/tin-certificate', parseTinCertificateUpload, controller.uploadTinCertificate);
 router.post('/employer/profile/trade-license', parseTradeLicenseUpload, controller.uploadTradeLicense);
 router.get('/employer/stats', controller.getDashboardStats);
-<<<<<<< HEAD
 router.get('/employer/dashboard-stats', controller.getEmployerDashboardStats);
-=======
 router.get('/employer/matching/jobs', matchingController.getJobs);
 router.get('/employer/matching/candidates/:jobId', matchingController.getCandidates);
 router.post('/employer/matching/run/:jobId', matchingController.runMatching);
 router.post('/employer/matching/shortlist', matchingController.shortlist);
->>>>>>> origin/tade
 router.get('/employer/dashboard', controller.getDashboardOverview);
 router.get('/employer/applications', controller.getEmployerApplications);
 router.patch('/employer/applications/:applicationId/status', controller.updateApplicationStatus);
