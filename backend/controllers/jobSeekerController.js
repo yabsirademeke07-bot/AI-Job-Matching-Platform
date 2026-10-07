@@ -115,13 +115,42 @@ function validateProfile(payload = {}) {
   return { errors: {}, value: normalizeProfile(payload) };
 }
 
+async function getAuditProfileSnapshot(userId) {
+  try {
+    const [[user]] = await db.execute('SELECT full_name, email, phone FROM users WHERE id = ? LIMIT 1', [userId]);
+    const [[profile]] = await db.execute('SELECT headline, bio, location, city, job_category, experience_level, education_level, skills FROM job_seeker_profiles WHERE user_id = ? LIMIT 1', [userId]);
+    let skills = [];
+    try { skills = profile?.skills ? JSON.parse(profile.skills) : []; } catch {}
+    return { full_name: user?.full_name || null, email: user?.email || null, phone: user?.phone || null, headline: profile?.headline || null, bio: profile?.bio || null, location: profile?.location || null, city: profile?.city || null, job_category: profile?.job_category || null, experience_level: profile?.experience_level || null, education_level: profile?.education_level || null, skills };
+  } catch {
+    return {};
+  }
+}
+
+async function recordSeekerProfileAudit(req, userId, oldValues, newValues) {
+  try {
+    const changedFields = [...new Set([...Object.keys(oldValues || {}), ...Object.keys(newValues || {})])]
+      .filter((key) => JSON.stringify(oldValues?.[key] ?? null) !== JSON.stringify(newValues?.[key] ?? null));
+    const description = `Updated seeker profile${changedFields.length ? `: ${changedFields.join(', ')}` : ''}`.slice(0, 255);
+    await db.execute(`
+      INSERT INTO user_activity_log
+        (user_id, activity_type, description, details, ip_address, user_agent)
+      VALUES (?, 'profile-update', ?, ?, ?, ?)
+    `, [userId, description, JSON.stringify({ recordId: userId, oldValues: oldValues || {}, newValues: newValues || {}, ipAddress: req.ip, userAgent: req.get('user-agent') }), req.ip, req.get('user-agent')]);
+  } catch (error) {
+    console.warn('Seeker profile audit log skipped:', error.message);
+  }
+}
+
 async function updateProfile(req, res) {
   const { errors, value } = validateProfile(req.body);
   if (Object.keys(errors).length) return res.status(422).json({ success: false, errors });
   try {
     const userId = await resolveAuthenticatedUserId(req);
+    const oldValues = await getAuditProfileSnapshot(userId);
     const profile = await seekerModel.upsertProfile(userId, value);
     await waitForDatabaseWrite();
+    await recordSeekerProfileAudit(req, userId, oldValues, await getAuditProfileSnapshot(userId));
     return res.json({ success: true, message: 'Profile saved successfully!', data: profile, profile, profileCompleted: true });
   } catch (error) {
     console.error('❌ SQL EXECUTION FAILED:');
@@ -135,8 +164,10 @@ async function updateProfile(req, res) {
 async function saveProfile(req, res) {
   try {
     const userId = await resolveAuthenticatedUserId(req);
+    const oldValues = await getAuditProfileSnapshot(userId);
     const profile = await seekerModel.upsertProfile(userId, normalizeProfile(req.body));
     await waitForDatabaseWrite();
+    await recordSeekerProfileAudit(req, userId, oldValues, await getAuditProfileSnapshot(userId));
     return res.json({ success: true, message: 'Profile saved successfully!', data: profile, profile, onboarding_completed: true, profileCompleted: true });
   } catch (error) {
     console.error('❌ SQL EXECUTION FAILED:');
@@ -150,6 +181,7 @@ async function saveProfile(req, res) {
 async function updatePersonalInfo(req, res) {
   const personal = req.body || {};
   try {
+    const oldValues = await getAuditProfileSnapshot(req.user.id);
     await db.execute(
       `UPDATE users SET full_name = COALESCE(NULLIF(?, ''), full_name),
        email = COALESCE(NULLIF(?, ''), email), phone = ? WHERE id = ?`,
@@ -163,6 +195,7 @@ async function updatePersonalInfo(req, res) {
        city = COALESCE(VALUES(city), city), country = COALESCE(VALUES(country), country), updated_at = NOW()`,
       [req.user.id, personal.headline || '', personal.bio || null, personal.location || null, personal.city || null, personal.country || null]
     );
+    await recordSeekerProfileAudit(req, req.user.id, oldValues, await getAuditProfileSnapshot(req.user.id));
     return res.json({ success: true, message: 'Personal information updated successfully.' });
   } catch (error) {
     console.error('Update seeker personal information failed:', error.message);
@@ -176,10 +209,12 @@ async function updateSkills(req, res) {
     ? submittedSkills
     : Object.values(submittedSkills || {}).flat();
   try {
+    const oldValues = await getAuditProfileSnapshot(req.user.id);
     const normalizedSkills = skills.flatMap((group) => Array.isArray(group) ? group : [group])
       .map((skill) => typeof skill === 'string' ? { skill_name: skill.trim() } : skill)
       .filter((skill) => skill?.skill_name || skill?.name);
     await db.query('UPDATE job_seeker_profiles SET skills = ?, updated_at = NOW() WHERE user_id = ?', [JSON.stringify(normalizedSkills), req.user.id]);
+    await recordSeekerProfileAudit(req, req.user.id, oldValues, await getAuditProfileSnapshot(req.user.id));
     return res.json({ success: true, message: 'Skills updated successfully.' });
   } catch (error) {
     console.error('Update seeker skills failed:', error.message);

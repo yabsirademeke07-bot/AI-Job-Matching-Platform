@@ -48,6 +48,8 @@ const uploadDir = path.join(__dirname, 'uploads', 'cvs');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
+const reportUploadDir = path.join(__dirname, 'uploads', 'reports');
+if (!fs.existsSync(reportUploadDir)) fs.mkdirSync(reportUploadDir, { recursive: true });
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api/contact', contactRoutes);
 app.use('/api/about', aboutRoutes);
@@ -540,6 +542,27 @@ const upload = multer({
   },
 });
 
+const reportEvidenceUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, reportUploadDir),
+    filename: (_req, file, cb) => {
+      const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+      cb(null, `report-${uniqueSuffix}${path.extname(file.originalname || '').toLowerCase()}`);
+    },
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowedFiles = new Map([['.jpg', 'image/jpeg'], ['.jpeg', 'image/jpeg'], ['.png', 'image/png'], ['.webp', 'image/webp'], ['.pdf', 'application/pdf']]);
+    const extension = path.extname(file.originalname || '').toLowerCase();
+    const allowed = allowedFiles.get(extension) === file.mimetype;
+    cb(allowed ? null : new Error('Evidence must be a JPG, PNG, WebP, or PDF file.'), allowed);
+  },
+});
+const handleReportEvidenceUpload = (req, res, next) => reportEvidenceUpload.single('evidence')(req, res, (error) => {
+  if (error) return res.status(400).json({ success: false, message: error.message || 'Evidence upload failed.' });
+  return next();
+});
+
 const authenticateUser = (req, res, next) => {
   const authHeader = req.headers.authorization || '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
@@ -568,11 +591,17 @@ const requireAdmin = (req, res, next) => {
 
 const adminController = require('./controllers/adminController');
 
+app.post('/api/reports', authenticateUser, handleReportEvidenceUpload, adminController.createReport);
 app.get('/api/admin/overview', authenticateUser, requireAdmin, adminController.getAdminDashboardData);
 app.get('/api/admin/dashboard-stats', authenticateUser, requireAdmin, adminController.getAdminDashboardStats);
+app.get('/api/admin/activity-logs', authenticateUser, requireAdmin, adminController.getAdminActivityLogs);
 app.patch('/api/admin/companies/:companyId/verify', authenticateUser, requireAdmin, adminController.verifyCompany);
 app.patch('/api/admin/company/:id/verify', authenticateUser, requireAdmin, adminController.updateVerificationStatus);
 app.get('/api/admin/companies', authenticateUser, requireAdmin, adminController.getPendingCompanies);
+app.get('/api/admin/reports', authenticateUser, requireAdmin, adminController.getAdminReports);
+app.get('/api/admin/reports/:id/messages', authenticateUser, requireAdmin, adminController.getReportMessages);
+app.post('/api/admin/reports/:id/resolve', authenticateUser, requireAdmin, adminController.resolveAdminReport);
+app.post('/api/admin/reports/:id/reply', authenticateUser, requireAdmin, adminController.replyToReport);
 app.get('/api/admin/jobs', authenticateUser, requireAdmin, adminController.getAllJobsForModeration);
 app.get('/api/admin/jobs/:id/preview', authenticateUser, requireAdmin, adminController.getJobPreview);
 app.patch('/api/admin/users/:userId/status', authenticateUser, requireAdmin, adminController.toggleUserStatus);

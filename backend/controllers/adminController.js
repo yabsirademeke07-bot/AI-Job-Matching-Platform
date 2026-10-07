@@ -1,4 +1,5 @@
 const db = require('../connection');
+const fs = require('node:fs/promises');
 const { normalizeJobStatus } = require('../models/jobModel');
 const { createNotification } = require('../services/databaseNotificationService');
 const { sendJobRejectionEmail } = require('../services/notificationService');
@@ -94,9 +95,9 @@ const sendJobRejectionEmailSafely = async (job, reason) => {
 };
 
 exports.getAdminDashboardStats = async (req, res) => {
-  const emptyStats = { totalUsers: 0, jobSeekersCount: 0, employersCount: 0, activeJobs: 0, avgMatchScore: 0, moderationQueueCount: 0, pipeline: { pending: 0, shortlisted: 0, interviewing: 0, hired: 0, rejected: 0 } };
+  const emptyStats = { totalUsers: 0, jobSeekersCount: 0, employersCount: 0, activeJobs: 0, avgMatchScore: 0, candidateGrowthPercent: 0, newJobsThisWeek: 0, moderationQueueCount: 0, pipeline: { pending: 0, shortlisted: 0, interviewing: 0, hired: 0, rejected: 0 } };
   try {
-    const [[users], [seekers], [employers], [jobs], [verification], [reports], [average], [pipeline]] = await Promise.all([
+    const [[users], [seekers], [employers], [jobs], [verification], [reports], [average], [pipeline], [candidateGrowth], [newJobs]] = await Promise.all([
       db.execute('SELECT COUNT(*) AS count FROM users'),
       db.execute("SELECT COUNT(*) AS count FROM users WHERE role IN ('job_seeker', 'employee', 'seeker')"),
       db.execute("SELECT COUNT(*) AS count FROM users WHERE role IN ('employer', 'company', 'recruiter')"),
@@ -105,11 +106,22 @@ exports.getAdminDashboardStats = async (req, res) => {
       db.execute("SELECT COUNT(*) AS count FROM reports WHERE status = 'pending'"),
       db.execute('SELECT AVG(ai_match_score) AS score FROM applications WHERE ai_match_score IS NOT NULL'),
       db.execute("SELECT status, COUNT(*) AS count FROM applications GROUP BY status"),
+      db.execute(`SELECT
+        SUM(CASE WHEN created_at >= DATE_FORMAT(CURDATE(), '%Y-%m-01') THEN 1 ELSE 0 END) AS current_month,
+        SUM(CASE WHEN created_at >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 1 MONTH), '%Y-%m-01')
+          AND created_at < DATE_FORMAT(CURDATE(), '%Y-%m-01') THEN 1 ELSE 0 END) AS previous_month
+        FROM users WHERE role IN ('job_seeker', 'employee', 'seeker')`),
+      db.execute('SELECT COUNT(*) AS count FROM jobs WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)'),
     ]);
     const pipelineStats = { pending: 0, shortlisted: 0, interviewing: 0, hired: 0, rejected: 0 };
     pipeline.forEach((row) => { const key = row.status === 'interview-scheduled' ? 'interviewing' : row.status; if (key in pipelineStats) pipelineStats[key] = Number(row.count || 0); });
     const [pendingJobs] = await db.execute("SELECT COUNT(*) AS count FROM jobs WHERE LOWER(status) IN ('pending', 'pending_approval', 'draft')");
-    return res.status(200).json({ success: true, stats: { totalUsers: Number(users[0]?.count || 0), jobSeekersCount: Number(seekers[0]?.count || 0), employersCount: Number(employers[0]?.count || 0), activeJobs: Number(jobs[0]?.count || 0), avgMatchScore: average[0]?.score == null ? 0 : Number(Number(average[0].score).toFixed(1)), moderationQueueCount: Number(verification[0]?.count || 0) + Number(pendingJobs[0]?.count || 0) + Number(reports[0]?.count || 0), pipeline: pipelineStats } });
+    const currentMonthCandidates = Number(candidateGrowth[0]?.current_month || 0);
+    const previousMonthCandidates = Number(candidateGrowth[0]?.previous_month || 0);
+    const candidateGrowthPercent = previousMonthCandidates
+      ? Math.round(((currentMonthCandidates - previousMonthCandidates) / previousMonthCandidates) * 100)
+      : currentMonthCandidates ? 100 : 0;
+    return res.status(200).json({ success: true, stats: { totalUsers: Number(users[0]?.count || 0), jobSeekersCount: Number(seekers[0]?.count || 0), employersCount: Number(employers[0]?.count || 0), activeJobs: Number(jobs[0]?.count || 0), avgMatchScore: average[0]?.score == null ? 0 : Number(Number(average[0].score).toFixed(1)), candidateGrowthPercent, newJobsThisWeek: Number(newJobs[0]?.count || 0), moderationQueueCount: Number(verification[0]?.count || 0) + Number(pendingJobs[0]?.count || 0) + Number(reports[0]?.count || 0), pipeline: pipelineStats } });
   } catch (error) {
     console.error('Dashboard stats error:', error.message);
     return res.status(200).json({ success: true, stats: emptyStats, databaseError: true });
@@ -255,7 +267,7 @@ exports.getAllJobsForModeration = async (req, res) => {
 exports.getAdminDashboardData = async (req, res) => {
   try {
     const emptyAnalytics = { seekersCount: 0, employersTotal: 0, employersVerified: 0, activeJobsCount: 0, totalApplications: 0, avgMatchScore: 0 };
-    const [analytics, companies, jobs, users, logs, applications, reports, notifications, performance, categories] = await Promise.all([
+    const [analytics, companies, jobs, users, logs, applications, reports, notifications, performance, categories, candidateCategories] = await Promise.all([
       exports.getPlatformAnalyticsData().catch((error) => {
         console.warn('Admin analytics query skipped:', error.message);
         return emptyAnalytics;
@@ -299,13 +311,23 @@ exports.getAdminDashboardData = async (req, res) => {
         GROUP BY j.id
         ORDER BY j.created_at DESC
       `),
-      safeExecute('SELECT id, full_name, email, phone, role, is_verified, is_active, created_at FROM users ORDER BY created_at DESC'),
+      safeExecute(`SELECT id, full_name, email, phone, role, is_verified, is_active,
+        CASE WHEN is_active = TRUE THEN 'active' ELSE 'suspended' END AS status,
+        created_at FROM users ORDER BY created_at DESC`),
       safeExecute(`SELECT u.full_name, u.email, u.role, l.activity_type, l.related_job_id, l.created_at FROM user_activity_log l LEFT JOIN users u ON u.id = l.user_id ORDER BY l.created_at DESC LIMIT 30`),
       safeExecute(`SELECT a.id, a.status, a.ai_match_score, a.skills_match_score, a.experience_match_score, a.education_match_score, a.location_match_score, a.applied_at, candidate.full_name AS candidate_name, j.title AS job_title, employer.full_name AS employer_name FROM applications a JOIN users candidate ON candidate.id = a.job_seeker_id JOIN jobs j ON j.id = a.job_id JOIN users employer ON employer.id = j.employer_id ORDER BY a.applied_at DESC LIMIT 100`),
       safeExecute(`SELECT r.*, reporter.full_name AS reporter_name, reporter.email AS reporter_email, target_user.full_name AS reported_user_name, target_job.title AS reported_job_title FROM reports r JOIN users reporter ON reporter.id = r.reporter_id LEFT JOIN users target_user ON target_user.id = r.reported_user_id LEFT JOIN jobs target_job ON target_job.id = r.reported_job_id ORDER BY r.created_at DESC LIMIT 100`),
       safeExecute(`SELECT n.*, u.full_name AS recipient_name FROM notifications n JOIN users u ON u.id = n.user_id ORDER BY n.created_at DESC LIMIT 100`),
-      safeExecute(`SELECT DATE(applied_at) AS day, COUNT(*) AS applications, ROUND(AVG(COALESCE(ai_match_score, 0)), 1) AS average_score FROM applications WHERE applied_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY) GROUP BY DATE(applied_at) ORDER BY day`),
+      safeExecute(`SELECT DATE(applied_at) AS day, COUNT(*) AS applications,
+        SUM(CASE WHEN ai_match_score IS NOT NULL THEN 1 ELSE 0 END) AS matches,
+        ROUND(AVG(ai_match_score), 1) AS average_score
+        FROM applications WHERE applied_at IS NOT NULL GROUP BY DATE(applied_at) ORDER BY day`),
       safeExecute(`SELECT COALESCE(NULLIF(category, ''), 'Other') AS category, COUNT(*) AS total FROM jobs GROUP BY COALESCE(NULLIF(category, ''), 'Other') ORDER BY total DESC LIMIT 6`),
+      safeExecute(`SELECT TRIM(job_category) AS category, COUNT(*) AS total
+        FROM job_seeker_profiles
+        WHERE job_category IS NOT NULL AND TRIM(job_category) <> ''
+          AND LOWER(TRIM(job_category)) <> 'select sector'
+        GROUP BY TRIM(job_category) ORDER BY total DESC`),
     ]);
 
     return res.status(200).json({
@@ -328,6 +350,7 @@ exports.getAdminDashboardData = async (req, res) => {
       notifications: notifications[0],
       performance: performance[0],
       categories: categories[0],
+      candidateCategories: candidateCategories[0],
       pendingEmployers: companies[0].filter((company) => company.verification_status === 'pending'),
       recentJobs: jobs[0].slice(0, 10),
       recentUsers: users[0].slice(0, 10),
@@ -336,6 +359,105 @@ exports.getAdminDashboardData = async (req, res) => {
   } catch (error) {
     console.error('Admin Data Error:', error);
     return res.status(500).json({ success: false, message: 'Failed to retrieve admin data.' });
+  }
+};
+
+exports.getAdminActivityLogs = async (req, res) => {
+  const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+  const limit = Math.min(100, Math.max(1, Number.parseInt(req.query.limit, 10) || 25));
+  const offset = (page - 1) * limit;
+  const search = String(req.query.search || '').trim();
+  const type = String(req.query.type || '').trim().toLowerCase();
+  const date = String(req.query.date || 'all').trim().toLowerCase();
+  const typeGroups = {
+    role_selection: ['role_selection'],
+    profile_updates: ['profile_update'],
+    job_applications: ['job_application'],
+    admin_actions: ['admin_action'],
+  };
+
+  const activityUnion = `
+    SELECT CONCAT('user-', activity.id) AS id, activity.user_id, actor.full_name,
+           actor.email, actor.role, activity.activity_type AS action,
+           CASE
+             WHEN activity.activity_type = 'role_selected' AND activity.description IN ('User selected a role', 'role selected')
+               THEN CONCAT('User selected ', REPLACE(COALESCE(actor.role, 'a'), '_', ' '), ' role')
+             WHEN activity.activity_type = 'job-apply' AND activity.description IN ('Applied for a job', 'job apply')
+               THEN CONCAT('Applied for ', COALESCE(job.title, CONCAT('job #', activity.related_job_id)))
+             ELSE COALESCE(activity.description,
+               CASE activity.activity_type
+                 WHEN 'login' THEN 'User signed in'
+                 WHEN 'role_selected' THEN CONCAT('User selected ', REPLACE(COALESCE(actor.role, 'a'), '_', ' '), ' role')
+                 WHEN 'profile-update' THEN 'Updated profile information'
+                 WHEN 'job-apply' THEN CONCAT('Applied for ', COALESCE(job.title, CONCAT('job #', activity.related_job_id)))
+                 WHEN 'job-view' THEN 'Viewed a job listing'
+                 WHEN 'profile-view' THEN 'Viewed a profile'
+                 WHEN 'message-sent' THEN 'Sent a message'
+                 WHEN 'cv-upload' THEN 'Uploaded a CV'
+                 ELSE REPLACE(activity.activity_type, '-', ' ')
+               END)
+           END AS description,
+           COALESCE(activity.details, JSON_OBJECT(
+             'recordId', activity.id,
+             'relatedJobId', activity.related_job_id,
+             'relatedUserId', activity.related_user_id,
+             'ipAddress', activity.ip_address,
+             'userAgent', activity.user_agent
+           )) AS details,
+           activity.ip_address, activity.user_agent, activity.created_at,
+           CASE activity.activity_type
+             WHEN 'role_selected' THEN 'role_selection'
+             WHEN 'profile-update' THEN 'profile_update'
+             WHEN 'job-apply' THEN 'job_application'
+             ELSE 'other'
+           END AS event_type
+    FROM user_activity_log activity
+    LEFT JOIN users actor ON actor.id = activity.user_id
+    LEFT JOIN jobs job ON job.id = activity.related_job_id
+    UNION ALL
+    SELECT CONCAT('admin-', action.id) AS id, action.admin_id AS user_id,
+           actor.full_name, actor.email, actor.role, action.action_type AS action,
+           COALESCE(NULLIF(action.reason, ''), CONCAT('Admin performed ', REPLACE(action.action_type, '-', ' '))) AS description,
+           JSON_OBJECT('recordId', action.id, 'reason', action.reason,
+             'targetUserId', action.target_user_id,
+             'targetJobId', action.target_job_id,
+             'targetCompanyId', action.target_company_id,
+             'ipAddress', NULL, 'userAgent', NULL) AS details,
+           NULL AS ip_address, NULL AS user_agent, action.created_at,
+           'admin_action' AS event_type
+    FROM admin_actions_log action
+    LEFT JOIN users actor ON actor.id = action.admin_id
+  `;
+
+  const conditions = [];
+  const values = [];
+  if (typeGroups[type]) {
+    conditions.push(`event_type IN (${typeGroups[type].map(() => '?').join(', ')})`);
+    values.push(...typeGroups[type]);
+  }
+  if (search) {
+    conditions.push(`(LOWER(COALESCE(full_name, '')) LIKE ? OR LOWER(COALESCE(email, '')) LIKE ? OR LOWER(action) LIKE ? OR LOWER(description) LIKE ? OR LOWER(CAST(details AS CHAR)) LIKE ?)`);
+    const term = `%${search.toLowerCase()}%`;
+    values.push(term, term, term, term, term);
+  }
+  if (date === 'today') conditions.push('DATE(created_at) = CURDATE()');
+  else if (date === '7d') conditions.push('created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)');
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  try {
+    const [countRows] = await db.execute(`SELECT COUNT(*) AS total FROM (${activityUnion}) AS audit ${where}`, values);
+    const [logs] = await db.execute(`
+      SELECT id, user_id, full_name, email, role, action, description, details,
+             ip_address, user_agent, created_at, event_type
+      FROM (${activityUnion}) AS audit ${where}
+      ORDER BY created_at DESC, id DESC
+      LIMIT ? OFFSET ?
+    `, [...values, limit, offset]);
+    const total = Number(countRows[0]?.total || 0);
+    return res.json({ success: true, logs, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
+  } catch (error) {
+    console.error('Admin activity log error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to load activity logs.' });
   }
 };
 
@@ -395,7 +517,9 @@ exports.moderateJob = async (req, res) => {
   const statusByAction = { publish: 'active', approve: 'active', reject: 'rejected' };
   const nextStatus = normalizeJobStatus(statusByAction[action]);
   if (!statusByAction[action]) return res.status(422).json({ success: false, message: 'Moderation action must be approve or reject.' });
-  if (action === 'reject' && !reason) return res.status(422).json({ success: false, message: 'A rejection reason is required.' });
+  if (['active', 'rejected'].includes(nextStatus) && reason.length < 20) {
+    return res.status(422).json({ success: false, message: 'Please provide an approval or rejection reason of at least 20 characters.' });
+  }
 
   const connection = await db.getConnection();
   try {
@@ -476,16 +600,22 @@ exports.verifyCompany = async (req, res) => {
 exports.toggleUserStatus = async (req, res) => {
   try {
     const { userId } = req.params;
-    const [rows] = await db.execute('SELECT is_active FROM users WHERE id = ?', [userId]);
+    const status = String(req.body?.status || '').trim().toLowerCase();
+    if (!['active', 'suspended'].includes(status)) {
+      return res.status(422).json({ success: false, message: 'Status must be active or suspended.' });
+    }
+
+    const [rows] = await db.execute('SELECT id FROM users WHERE id = ?', [userId]);
     if (!rows.length) return res.status(404).json({ success: false, message: 'User not found.' });
 
-    const nextStatus = rows[0].is_active === 1 ? 0 : 1;
-    await db.execute('UPDATE users SET is_active = ? WHERE id = ?', [nextStatus, userId]);
+    const isActive = status === 'active' ? 1 : 0;
+    await db.execute('UPDATE users SET is_active = ? WHERE id = ?', [isActive, userId]);
 
     return res.status(200).json({
       success: true,
-      message: nextStatus ? 'User activated successfully.' : 'User suspended successfully.',
-      is_active: nextStatus,
+      message: status === 'active' ? 'User activated successfully.' : 'User suspended successfully.',
+      status,
+      is_active: isActive,
     });
   } catch (error) {
     console.error('Admin toggle user status error:', error);
@@ -502,8 +632,8 @@ exports.toggleJobStatus = async (req, res) => {
     if (!['pending_approval', 'active', 'rejected'].includes(nextStatus)) {
       return res.status(422).json({ success: false, message: 'Invalid job moderation status.' });
     }
-    if (nextStatus === 'rejected' && !reason) {
-      return res.status(422).json({ success: false, message: 'A rejection reason is required.' });
+    if (['active', 'rejected'].includes(nextStatus) && reason.length < 20) {
+      return res.status(422).json({ success: false, message: 'Please provide an approval or rejection reason of at least 20 characters.' });
     }
 
     const [rows] = await db.execute(`
@@ -575,5 +705,316 @@ exports.updateReportStatus = async (req, res) => {
   } catch (error) {
     console.error('Admin report status error:', error);
     return res.status(500).json({ success: false, message: 'Failed to update report status.' });
+  }
+};
+
+exports.createReport = async (req, res) => {
+  if (req.file?.path) {
+    res.on('finish', () => {
+      if (res.statusCode >= 400) fs.unlink(req.file.path).catch(() => {});
+    });
+  }
+  const role = String(req.user?.role || '').toLowerCase();
+  const reporterRole = ['employer', 'company', 'recruiter'].includes(role) ? 'employer' : ['job_seeker', 'seeker', 'jobseeker', 'employee', 'user'].includes(role) ? 'seeker' : null;
+  const targetType = String(req.body?.targetType || '').trim().toLowerCase();
+  const targetId = req.body?.targetId ? Number(req.body.targetId) : null;
+  const issueCategory = String(req.body?.issueCategory || '').trim().toLowerCase();
+  const description = String(req.body?.description || '').trim();
+  const evidenceUrl = req.file ? `/uploads/reports/${req.file.filename}` : null;
+  const seekerReasons = new Set(['scam_fraud', 'upfront_fee', 'misleading_description', 'harassment', 'system_bug', 'other']);
+  const employerReasons = new Set(['fake_credentials', 'unprofessional_conduct', 'interview_no_show', 'spam_applications', 'system_bug', 'other']);
+
+  if (!reporterRole) return res.status(403).json({ success: false, message: 'Only job seekers and employers can submit reports.' });
+  if (!['job', 'candidate', 'employer', 'platform'].includes(targetType)) return res.status(422).json({ success: false, message: 'Invalid report target type.' });
+  if (targetType !== 'platform' && (!Number.isInteger(targetId) || targetId < 1)) return res.status(422).json({ success: false, message: 'A valid report target is required.' });
+  if ((targetType === 'job' || targetType === 'employer') && reporterRole !== 'seeker') return res.status(403).json({ success: false, message: 'Employers can report candidates or platform issues.' });
+  if (targetType === 'candidate' && reporterRole !== 'employer') return res.status(403).json({ success: false, message: 'Only employers can report candidates.' });
+  if (!(reporterRole === 'seeker' ? seekerReasons : employerReasons).has(issueCategory)) return res.status(422).json({ success: false, message: 'Select a valid reason for your report.' });
+  if (description.length < 20 || description.length > 5000) return res.status(422).json({ success: false, message: 'Describe the issue in 20 to 5000 characters.' });
+
+  const reportTypeByCategory = {
+    scam_fraud: 'fraud', upfront_fee: 'fraud', misleading_description: 'other', harassment: 'offensive-language',
+    system_bug: 'other', fake_credentials: 'fraud', unprofessional_conduct: 'offensive-language',
+    interview_no_show: 'other', spam_applications: 'spam', other: 'other',
+  };
+  let connection;
+  try {
+    connection = await db.getConnection();
+    await connection.beginTransaction();
+
+    let reportedUserId = null;
+    let reportedJobId = null;
+    if (targetType === 'job') {
+      const [jobs] = await connection.execute('SELECT id, employer_id FROM jobs WHERE id = ? LIMIT 1', [targetId]);
+      if (!jobs.length) { await connection.rollback(); return res.status(404).json({ success: false, message: 'The reported job was not found.' }); }
+      reportedJobId = jobs[0].id;
+    } else if (targetType === 'candidate' || targetType === 'employer') {
+      const [targets] = await connection.execute('SELECT id, role FROM users WHERE id = ? LIMIT 1', [targetId]);
+      if (!targets.length) { await connection.rollback(); return res.status(404).json({ success: false, message: 'The reported account was not found.' }); }
+      if (Number(targetId) === Number(req.user.id)) { await connection.rollback(); return res.status(422).json({ success: false, message: 'You cannot report your own account.' }); }
+      const targetRole = String(targets[0].role || '').toLowerCase();
+      const validTarget = targetType === 'candidate'
+        ? ['job_seeker', 'seeker', 'jobseeker', 'employee', 'user'].includes(targetRole)
+        : ['employer', 'company', 'recruiter'].includes(targetRole);
+      if (!validTarget) { await connection.rollback(); return res.status(422).json({ success: false, message: 'The target account does not match this report type.' }); }
+      reportedUserId = targets[0].id;
+    }
+
+    const [result] = await connection.execute(`
+      INSERT INTO reports
+        (reporter_id, reporter_role, target_type, target_id, reported_user_id, reported_job_id,
+         report_type, issue_category, description, evidence_url, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+    `, [req.user.id, reporterRole, targetType, targetId, reportedUserId, reportedJobId, reportTypeByCategory[issueCategory], issueCategory, description, evidenceUrl]);
+
+    await connection.commit();
+    return res.status(201).json({ success: true, reportId: result.insertId, message: 'Your report was sent to the platform moderation team.' });
+  } catch (error) {
+    if (connection) await connection.rollback();
+    console.error('Report submission failed:', error);
+    return res.status(500).json({ success: false, message: 'Unable to submit your report.' });
+  } finally {
+    if (connection) connection.release();
+  }
+};
+
+exports.getAdminReports = async (req, res) => {
+  try {
+    const conditions = [];
+    const values = [];
+    const reporterRole = String(req.query.reporter_role || '').trim().toLowerCase();
+    const targetType = String(req.query.target_type || '').trim().toLowerCase();
+    const statusInput = String(req.query.status || '').trim().toLowerCase();
+    const status = statusInput === 'under_review' ? 'under-review' : statusInput;
+    if (['seeker', 'employer', 'admin'].includes(reporterRole)) { conditions.push('r.reporter_role = ?'); values.push(reporterRole); }
+    if (['job', 'candidate', 'employer', 'platform'].includes(targetType)) { conditions.push('r.target_type = ?'); values.push(targetType); }
+    if (['pending', 'under-review', 'resolved', 'dismissed'].includes(status)) { conditions.push('r.status = ?'); values.push(status); }
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    const [reports] = await db.execute(`
+      SELECT r.id, r.reporter_id, r.reporter_role, r.target_type,
+             COALESCE(r.target_id, r.reported_job_id, r.reported_user_id) AS target_id,
+             r.reported_user_id, r.reported_job_id,
+             COALESCE(r.issue_category, r.report_type) AS issue_type,
+             r.description, r.evidence_url, r.status, r.admin_notes, r.created_at, r.resolved_at,
+             reporter.full_name AS reporter_name, reporter.email AS reporter_email,
+             reporter.phone AS reporter_phone,
+             target_user.id AS target_user_id, target_user.role AS target_user_role,
+             target_user.full_name AS reported_user_name, target_user.email AS reported_user_email,
+             job.title AS reported_job_title, job.company_name AS reported_company_name,
+             job.location AS reported_job_location, job.status AS reported_job_status,
+             COALESCE(job.employer_id, CASE WHEN r.target_type IN ('candidate', 'employer') THEN target_user.id ELSE NULL END) AS accused_user_id,
+             accused.full_name AS accused_name, accused.email AS accused_email, accused.role AS accused_role,
+             COALESCE(job.title, target_user.full_name, 'Platform') AS target_title
+      FROM reports r
+      JOIN users reporter ON reporter.id = r.reporter_id
+      LEFT JOIN users target_user ON target_user.id = CASE WHEN r.target_type IN ('candidate', 'employer') THEN COALESCE(r.target_id, r.reported_user_id) ELSE r.reported_user_id END
+      LEFT JOIN jobs job ON job.id = CASE WHEN r.target_type = 'job' THEN COALESCE(r.target_id, r.reported_job_id) ELSE r.reported_job_id END
+      LEFT JOIN users accused ON accused.id = COALESCE(job.employer_id, target_user.id)
+      ${where}
+      ORDER BY FIELD(r.status, 'pending', 'under-review', 'resolved', 'dismissed'), r.created_at DESC
+    `, values);
+    return res.json({ success: true, reports });
+  } catch (error) {
+    console.error('Admin reports list error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to load reports.' });
+  }
+};
+
+exports.getReportMessages = async (req, res) => {
+  try {
+    const [reports] = await db.execute('SELECT id FROM reports WHERE id = ?', [req.params.id]);
+    if (!reports.length) return res.status(404).json({ success: false, message: 'Report not found.' });
+
+    const [messages] = await db.execute(`
+      SELECT message.id, message.report_id, message.sender_type, message.sender_id,
+             message.message, message.created_at, sender.full_name AS sender_name,
+             sender.email AS sender_email
+      FROM report_messages message
+      JOIN users sender ON sender.id = message.sender_id
+      WHERE message.report_id = ?
+      ORDER BY message.created_at ASC, message.id ASC
+    `, [req.params.id]);
+    return res.json({ success: true, messages });
+  } catch (error) {
+    console.error('Admin report messages error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to load report messages.' });
+  }
+};
+
+exports.replyToReport = async (req, res) => {
+  const reportId = Number(req.params.id);
+  const message = String(req.body?.message || '').trim();
+  const requestedStatus = String(req.body?.newStatus || 'investigating').trim().toLowerCase();
+  const statusByRequest = { pending: 'pending', investigating: 'under-review', 'under-review': 'under-review', resolved: 'resolved' };
+  const status = statusByRequest[requestedStatus];
+  const actionTaken = String(req.body?.actionTaken || 'none').trim().toLowerCase();
+
+  if (!Number.isInteger(reportId) || reportId < 1) return res.status(422).json({ success: false, message: 'Invalid report ID.' });
+  if (!message || message.length > 5000) return res.status(422).json({ success: false, message: 'Reply must contain 1 to 5000 characters.' });
+  if (!status) return res.status(422).json({ success: false, message: 'Status must be pending, investigating, or resolved.' });
+  if (!['none', 'take_down_job'].includes(actionTaken)) return res.status(422).json({ success: false, message: 'Invalid report action.' });
+
+  let connection;
+  try {
+    connection = await db.getConnection();
+    await connection.beginTransaction();
+
+    const [reports] = await connection.execute(`
+      SELECT id, reporter_id, reported_job_id
+      FROM reports WHERE id = ? FOR UPDATE
+    `, [reportId]);
+    const report = reports[0];
+    if (!report) {
+      await connection.rollback();
+      return res.status(404).json({ success: false, message: 'Report not found.' });
+    }
+    if (actionTaken === 'take_down_job' && !report.reported_job_id) {
+      await connection.rollback();
+      return res.status(422).json({ success: false, message: 'This report does not reference a job.' });
+    }
+
+    if (actionTaken === 'take_down_job') {
+      const [jobs] = await connection.execute('SELECT id FROM jobs WHERE id = ? FOR UPDATE', [report.reported_job_id]);
+      if (!jobs.length) {
+        await connection.rollback();
+        return res.status(404).json({ success: false, message: 'Reported job no longer exists.' });
+      }
+      await connection.execute(`
+        UPDATE jobs
+        SET status = 'rejected', is_approved = FALSE,
+            rejection_reason = ?, reviewed_by = ?, reviewed_at = NOW(), updated_at = NOW()
+        WHERE id = ?
+      `, [`Taken down while investigating report #${reportId}.`, req.user.id, report.reported_job_id]);
+    }
+
+    await connection.execute(
+      'INSERT INTO report_messages (report_id, sender_type, sender_id, message) VALUES (?, \'admin\', ?, ?)',
+      [reportId, req.user.id, message]
+    );
+    await connection.execute(`
+      UPDATE reports
+      SET status = ?,
+          resolved_by = CASE WHEN ? = 'resolved' THEN ? ELSE resolved_by END,
+          resolved_at = CASE WHEN ? = 'resolved' THEN NOW() ELSE NULL END,
+          resolution_notes = CASE WHEN ? = 'resolved' THEN ? ELSE resolution_notes END
+      WHERE id = ?
+    `, [status, status, req.user.id, status, status, message, reportId]);
+    await connection.execute(`
+      INSERT INTO notifications
+        (user_id, type, title, message, reference_type, reference_id, related_job_id, action_url)
+      VALUES (?, 'SYSTEM', 'Update to your report', ?, 'REPORT', ?, ?, '/notifications')
+    `, [report.reporter_id, message, reportId, report.reported_job_id || null]);
+
+    await connection.commit();
+    return res.json({
+      success: true,
+      message: 'Reply sent and report updated.',
+      status: requestedStatus === 'under-review' ? 'investigating' : requestedStatus,
+      actionTaken,
+    });
+  } catch (error) {
+    if (connection) await connection.rollback();
+    console.error('Admin report reply error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to send report reply.' });
+  } finally {
+    if (connection) connection.release();
+  }
+};
+
+exports.resolveAdminReport = async (req, res) => {
+  const reportId = Number(req.params.id);
+  const resolutionMessage = String(req.body?.resolutionMessage || '').trim();
+  const warningToTarget = String(req.body?.warningToTarget || '').trim();
+  const requestedStatus = String(req.body?.newStatus || 'resolved').trim().toLowerCase();
+  const statusByRequest = { pending: 'pending', under_review: 'under-review', 'under-review': 'under-review', resolved: 'resolved', dismissed: 'dismissed' };
+  const status = statusByRequest[requestedStatus];
+  const targetPenalty = String(req.body?.targetPenalty || 'none').trim().toLowerCase();
+
+  if (!Number.isInteger(reportId) || reportId < 1) return res.status(422).json({ success: false, message: 'Invalid report ID.' });
+  if (!status) return res.status(422).json({ success: false, message: 'Invalid report status.' });
+  if (!['none', 'suspend_user', 'take_down_job'].includes(targetPenalty)) return res.status(422).json({ success: false, message: 'Invalid target penalty.' });
+  if (resolutionMessage.length > 5000 || warningToTarget.length > 2000) return res.status(422).json({ success: false, message: 'Resolution and warning messages are too long.' });
+  if (!resolutionMessage && !warningToTarget && targetPenalty === 'none' && !['dismissed', 'under-review'].includes(status)) return res.status(422).json({ success: false, message: 'Add a resolution message or moderation action.' });
+
+  let connection;
+  try {
+    connection = await db.getConnection();
+    await connection.beginTransaction();
+    const [rows] = await connection.execute(`
+            SELECT id, reporter_id, target_type, issue_category,
+             COALESCE(target_id, reported_job_id, reported_user_id) AS target_id,
+              COALESCE(reported_job_id, CASE WHEN target_type = 'job' THEN target_id END) AS reported_job_id,
+              reported_user_id
+      FROM reports WHERE id = ? FOR UPDATE
+    `, [reportId]);
+    const report = rows[0];
+    if (!report) { await connection.rollback(); return res.status(404).json({ success: false, message: 'Report not found.' }); }
+
+    let accusedUserId = report.reported_user_id;
+    if (report.target_type === 'job' && report.reported_job_id) {
+      const [jobs] = await connection.execute('SELECT id, employer_id FROM jobs WHERE id = ? FOR UPDATE', [report.reported_job_id]);
+      if (!jobs.length && targetPenalty === 'take_down_job') { await connection.rollback(); return res.status(404).json({ success: false, message: 'Reported job no longer exists.' }); }
+      accusedUserId = jobs[0]?.employer_id || accusedUserId;
+    } else if (['candidate', 'employer'].includes(report.target_type)) {
+      accusedUserId = report.target_id;
+    }
+
+    if (targetPenalty === 'suspend_user') {
+      if (!accusedUserId) { await connection.rollback(); return res.status(422).json({ success: false, message: 'This report does not identify an account to suspend.' }); }
+      const [targets] = await connection.execute('SELECT id, role FROM users WHERE id = ? FOR UPDATE', [accusedUserId]);
+      if (!targets.length) { await connection.rollback(); return res.status(404).json({ success: false, message: 'Reported account no longer exists.' }); }
+      if (['admin', 'super_admin'].includes(String(targets[0].role).toLowerCase())) { await connection.rollback(); return res.status(403).json({ success: false, message: 'Admin accounts cannot be suspended through report resolution.' }); }
+      await connection.execute('UPDATE users SET is_active = FALSE WHERE id = ?', [accusedUserId]);
+      await connection.execute(`INSERT INTO admin_actions_log (admin_id, action_type, target_user_id, reason)
+        VALUES (?, 'user-blocked', ?, ?)
+        ON DUPLICATE KEY UPDATE reason = VALUES(reason)`, [req.user.id, accusedUserId, `Suspended while resolving report #${reportId}`]);
+    }
+
+    if (targetPenalty === 'take_down_job') {
+      const jobId = report.reported_job_id || (report.target_type === 'job' ? report.target_id : null);
+      if (!jobId) { await connection.rollback(); return res.status(422).json({ success: false, message: 'This report does not reference a job.' }); }
+      const [jobs] = await connection.execute('SELECT id FROM jobs WHERE id = ? FOR UPDATE', [jobId]);
+      if (!jobs.length) { await connection.rollback(); return res.status(404).json({ success: false, message: 'Reported job no longer exists.' }); }
+      await connection.execute(`UPDATE jobs SET status = 'rejected', is_approved = FALSE,
+        rejection_reason = ?, reviewed_by = ?, reviewed_at = NOW(), updated_at = NOW() WHERE id = ?`,
+      [`Taken down while resolving report #${reportId}`, req.user.id, jobId]);
+      try {
+        await connection.execute(`INSERT INTO admin_actions_log (admin_id, action_type, target_job_id, reason)
+          VALUES (?, 'content-moderated', ?, ?)`, [req.user.id, jobId, `Taken down while resolving report #${reportId}`]);
+      } catch (auditError) { console.warn('Report job takedown audit skipped:', auditError.message); }
+    }
+
+    const reporterMessage = resolutionMessage || (status === 'dismissed' ? 'The report was reviewed and dismissed by the moderation team.' : `Your report was updated to ${status.replace('-', ' ')}.`);
+    await connection.execute(`INSERT INTO report_messages (report_id, sender_type, sender_id, message)
+      VALUES (?, 'admin', ?, ?)`, [reportId, req.user.id, reporterMessage]);
+    await connection.execute(`UPDATE reports SET status = ?, resolved_by = ?,
+      resolved_at = CASE WHEN ? IN ('resolved', 'dismissed') THEN NOW() ELSE NULL END,
+      resolution_notes = CASE WHEN ? IN ('resolved', 'dismissed') THEN ? ELSE resolution_notes END,
+      admin_notes = CASE WHEN ? <> '' THEN CONCAT(COALESCE(admin_notes, ''), CASE WHEN admin_notes IS NULL OR admin_notes = '' THEN '' ELSE '\n' END, ?) ELSE admin_notes END
+      WHERE id = ?`, [status, req.user.id, status, status, resolutionMessage || reporterMessage, warningToTarget, warningToTarget, reportId]);
+
+    await connection.execute(`INSERT INTO notifications
+      (user_id, type, title, message, reference_type, reference_id, related_job_id, related_user_id, action_url)
+      VALUES (?, 'SYSTEM', 'Admin reviewed your report', ?, 'REPORT', ?, ?, ?, '/notifications')`,
+    [report.reporter_id, `Admin reviewed your report regarding ${report.target_type}: ${reporterMessage}`, reportId, report.reported_job_id || null, accusedUserId || null]);
+
+    if (accusedUserId && (warningToTarget || targetPenalty !== 'none')) {
+      const targetMessage = warningToTarget || (targetPenalty === 'suspend_user'
+        ? 'Your account has been suspended following a platform moderation review.'
+        : 'Your job listing has been taken down following a platform moderation review.');
+      await connection.execute(`INSERT INTO notifications
+        (user_id, type, title, message, reference_type, reference_id, related_job_id, related_user_id, action_url)
+        VALUES (?, 'SYSTEM', 'Platform moderation notice', ?, 'REPORT', ?, ?, ?, '/notifications')`,
+      [accusedUserId, `Your account or listing was reported for ${report.issue_category || 'a policy concern'}: ${targetMessage}`, reportId, report.reported_job_id || null, report.reporter_id]);
+    }
+
+    await connection.commit();
+    return res.json({ success: true, status, targetPenalty, message: 'Report resolution and notifications were saved.' });
+  } catch (error) {
+    if (connection) await connection.rollback();
+    console.error('Admin report resolution error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to resolve report.' });
+  } finally {
+    if (connection) connection.release();
   }
 };

@@ -4,6 +4,7 @@ const path = require('path');
 const employerDocumentDir = path.resolve(__dirname, '..', 'private', 'employer-documents');
 const { createNotification } = require('../services/databaseNotificationService');
 
+<<<<<<< HEAD
 const normalizeApplicationStatus = (value) => {
   const status = String(value || '').trim().toLowerCase().replace(/_/g, ' ');
   if (['pending', 'pending review', 'applied', 'new'].includes(status)) return 'pending';
@@ -13,6 +14,18 @@ const normalizeApplicationStatus = (value) => {
   if (['hired', 'accepted', 'offer'].includes(status)) return 'hired';
   if (['rejected', 'declined'].includes(status)) return 'rejected';
   return status;
+=======
+const recordProfileActivity = async (req, { userId, description, oldValues, newValues }) => {
+  try {
+    await db.execute(`
+      INSERT INTO user_activity_log
+        (user_id, activity_type, description, details, ip_address, user_agent)
+      VALUES (?, 'profile-update', ?, ?, ?, ?)
+    `, [userId, description.slice(0, 255), JSON.stringify({ recordId: userId, oldValues, newValues, ipAddress: req.ip, userAgent: req.get('user-agent') }), req.ip, req.get('user-agent')]);
+  } catch (error) {
+    console.warn('Profile audit log skipped:', error.message);
+  }
+>>>>>>> origin/tade
 };
 
 const normalizeList = (value) => {
@@ -264,6 +277,11 @@ exports.updateCompanyProfile = async (req, res) => {
       if (!fullName || !phone || !householdName || !householdSize || !residenceLocation) {
         return res.status(400).json({ success: false, message: 'Household name, representative name, phone, household size, and residence are required.' });
       }
+      let previousHousehold = {};
+      try {
+        const [previousRows] = await db.execute('SELECT full_name, phone_number, household_name, industry, residence_location FROM household_employers WHERE user_id = ? LIMIT 1', [userId]);
+        previousHousehold = previousRows[0] || {};
+      } catch {}
       await db.execute(
         `INSERT INTO household_employers (
           user_id, employer_type, full_name, role_relationship, work_email, phone_number,
@@ -279,7 +297,13 @@ exports.updateCompanyProfile = async (req, res) => {
           nullable(data.industry) || 'Domestic & Home Services', householdSize,
           residenceLocation, nullable(data.aboutHousehold || data.aboutCompany)]
       );
+<<<<<<< HEAD
       await db.execute('UPDATE users SET phone = ? WHERE id = ?', [phone, userId]);
+=======
+      const householdValues = { full_name: fullName, phone_number: phone, household_name: householdName, industry: nullable(data.industry) || 'Domestic & Home Services', residence_location: residenceLocation };
+      const changedHouseholdFields = Object.keys(householdValues).filter((key) => String(previousHousehold[key] ?? '') !== String(householdValues[key] ?? ''));
+      await recordProfileActivity(req, { userId, description: `Updated household profile${changedHouseholdFields.length ? `: ${changedHouseholdFields.join(', ')}` : ''}`, oldValues: previousHousehold, newValues: householdValues });
+>>>>>>> origin/tade
       return res.json({ success: true, message: 'Household employer profile saved successfully!' });
     }
 
@@ -312,6 +336,11 @@ exports.updateCompanyProfile = async (req, res) => {
     if (!companyName || !fullName || !companyPhone || !companySize || !industry || !headquarters) {
       return res.status(400).json({ success: false, message: 'Company name, representative, phone, company size, industry, and headquarters are required.' });
     }
+    let previousCompany = {};
+    try {
+      const [previousRows] = await db.execute('SELECT company_name, representative_name, phone, industry, location, website, description FROM company_profiles WHERE employer_id = ? LIMIT 1', [userId]);
+      previousCompany = previousRows[0] || {};
+    } catch {}
     await db.execute(
       `INSERT INTO employers (
         user_id, userId, employer_type, full_name, representative_name, job_title, representative_title,
@@ -359,8 +388,14 @@ exports.updateCompanyProfile = async (req, res) => {
         industry, companySize, website, aboutCompany, aboutCompany, headquarters, socialMedia,
         nullable(data.hiringVolume || data.hiring_volume), nullable(data.linkedin)]
     );
+<<<<<<< HEAD
     await db.execute('UPDATE users SET phone = ? WHERE id = ?', [companyPhone, userId]);
     await db.execute("INSERT INTO user_activity_log (user_id, activity_type) VALUES (?, 'profile-update')", [req.user.id]).catch(() => {});
+=======
+    const companyValues = { company_name: companyName, representative_name: fullName, phone: companyPhone, industry, location: headquarters, website, description: aboutCompany };
+    const changedCompanyFields = Object.keys(companyValues).filter((key) => String(previousCompany[key] ?? '') !== String(companyValues[key] ?? ''));
+    await recordProfileActivity(req, { userId: req.user.id, description: `Updated company profile${changedCompanyFields.length ? `: ${changedCompanyFields.join(', ')}` : ''}`, oldValues: previousCompany, newValues: companyValues });
+>>>>>>> origin/tade
     return res.json({ success: true, message: 'Company profile saved successfully!' });
   } catch (error) {
     console.error('--> [PROFILE SAVE ERROR]:', error.message);

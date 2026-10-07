@@ -24,6 +24,7 @@ import {
   PauseCircle,
   Plus,
   Search,
+  ShieldAlert,
   Settings,
   Sparkles,
   Star,
@@ -45,9 +46,10 @@ import {
 } from "../utils/pipelineStatus";
 import CompanyReviews from "../components/company/CompanyReviews";
 import CompanyQA from "../components/company/CompanyQA";
+import UniversalReportModal from "../components/UniversalReportModal";
 import TalentPool from "../components/employer/TalentPool";
-import AIRecommendedTalent from "../components/employer/AIRecommendedTalent";
 import TopCandidatesList from "../components/employer/TopCandidatesList";
+import AICandidateMatching from "../components/employer/AICandidateMatching";
 import DashboardMetricCards from "../components/employer/DashboardMetricCards";
 import ApplicationsTable from "../components/employer/ApplicationsTable";
 import EmployerSidebar from "../components/employer/EmployerSidebar";
@@ -542,6 +544,8 @@ export default function EmployerWorkspace() {
     location.pathname.includes("/post-job") ||
     location.pathname.endsWith("/jobs/new")
       ? "post"
+      : location.pathname === "/employer/ai-matching"
+        ? "matching"
       : location.pathname.includes("/applicants") ||
           location.pathname.includes("/applications") ||
           location.pathname.includes("/candidates")
@@ -627,6 +631,8 @@ export default function EmployerWorkspace() {
   const [editingJobId, setEditingJobId] = useState(null);
   const [wizard, setWizard] = useState(1);
   const [selected, setSelected] = useState(null);
+  const [reportCandidate, setReportCandidate] = useState(null);
+  const [platformReportOpen, setPlatformReportOpen] = useState(false);
   const [aiCandidate, setAiCandidate] = useState(null);
   const [matchingJobId, setMatchingJobId] = useState("");
   const [search, setSearch] = useState("");
@@ -845,6 +851,8 @@ export default function EmployerWorkspace() {
       location.pathname.includes("/post-job") ||
       location.pathname.endsWith("/jobs/new")
         ? "post"
+        : location.pathname === "/employer/ai-matching"
+          ? "matching"
         : location.pathname.includes("/applicants") ||
             location.pathname.includes("/applications") ||
             location.pathname.includes("/candidates")
@@ -862,6 +870,8 @@ export default function EmployerWorkspace() {
     const nextUrl =
       stage === "overview"
         ? "/employer/dashboard"
+        : stage === "matching"
+          ? "/employer/ai-matching"
         : stage === "post"
           ? "/employer/jobs/new"
           : `/employer/dashboard?view=${stage}`;
@@ -1620,26 +1630,6 @@ export default function EmployerWorkspace() {
   };
 
   const renderApplications = (items = filtered) => {
-    if (active === "matching") {
-      return (
-        <TopCandidatesList
-          jobId={matchingJobId}
-          onSelectCandidate={setAiCandidate}
-          onShortlist={(candidate) =>
-            updateApplication(candidate.applicationId, "shortlisted")
-          }
-          onSchedule={(candidate) => {
-            setSelected({
-              ...candidate,
-              id: candidate.applicationId,
-              candidateId: candidate.candidateId,
-            });
-            setShowSchedule(true);
-          }}
-        />
-      );
-    }
-
     const filteredCandidates = (items || []).filter((item) => {
       if (selectedJobFilter === "all") return true;
       const itemJobId = String(
@@ -1928,13 +1918,16 @@ export default function EmployerWorkspace() {
                     </p>
                   </div>
 
-                  <button
-                    onClick={() => selectStage("post")}
-                    className="inline-flex flex-shrink-0 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-bold text-white shadow-md shadow-blue-500/20 transition-all hover:bg-blue-700 hover:shadow-lg active:scale-[0.98]"
-                  >
-                    <span className="text-base font-bold">+</span>
-                    <span>Post New Job</span>
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button type="button" onClick={() => setPlatformReportOpen(true)} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs font-bold text-slate-600 hover:bg-rose-50 hover:text-rose-700"><ShieldAlert className="h-4 w-4" />Report platform issue</button>
+                    <button
+                      onClick={() => selectStage("post")}
+                      className="inline-flex flex-shrink-0 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-bold text-white shadow-md shadow-blue-500/20 transition-all hover:bg-blue-700 hover:shadow-lg active:scale-[0.98]"
+                    >
+                      <span className="text-base font-bold">+</span>
+                      <span>Post New Job</span>
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
@@ -3165,7 +3158,7 @@ export default function EmployerWorkspace() {
                 </div>
               )}
 
-              {["applications", "matching", "shortlist", "hired"].includes(
+              {["applications", "shortlist", "hired"].includes(
                 active,
               ) && (
                 <div className="space-y-5">
@@ -3203,6 +3196,7 @@ export default function EmployerWorkspace() {
                       <option value="90">90%+ score</option>
                     </select>
                   </div>
+<<<<<<< HEAD
                   {active === "matching" && (
                     <div className="grid gap-4 md:grid-cols-4">
                       {[
@@ -3227,6 +3221,8 @@ export default function EmployerWorkspace() {
                       ))}
                     </div>
                   )}
+=======
+>>>>>>> origin/tade
                   {active === "shortlist" && (
                     <div className="rounded-2xl border border-blue-100 bg-blue-50 p-5">
                       <h3 className="font-semibold text-blue-900">
@@ -3246,6 +3242,10 @@ export default function EmployerWorkspace() {
                         : filtered,
                   )}
                 </div>
+              )}
+
+              {active === "matching" && (
+                <AICandidateMatching initialJobId={matchingJobId} />
               )}
 
               {active === "hired" && (
@@ -3464,11 +3464,6 @@ export default function EmployerWorkspace() {
                   />
                 </div>
               )}
-              {active === "matching" && (
-                <div className="mt-8">
-                  <AIRecommendedTalent jobId={matchingJobId} />
-                </div>
-              )}
               {active === "talent-pool" && <TalentPool />}
               {active === "messages" && <EmployerMessages />}
               {active === "notifications" && <EmployerNotifications />}
@@ -3483,6 +3478,8 @@ export default function EmployerWorkspace() {
           </main>
         </div>
         <Toast toast={toast} onClose={() => setToast(null)} />
+        {platformReportOpen && <UniversalReportModal isOpen reporterRole="employer" targetType="platform" targetId={null} targetTitle="platform issue" currentUser={user} onClose={() => setPlatformReportOpen(false)} />}
+        {reportCandidate && <UniversalReportModal isOpen reporterRole="employer" targetType="candidate" targetId={reportCandidate.candidateId} targetTitle={reportCandidate.name || reportCandidate.candidateName || "candidate"} currentUser={user} onClose={() => setReportCandidate(null)} />}
         {selected && (
           <div className="fixed inset-0 z-[60] flex justify-end bg-slate-950/50" onClick={() => setSelected(null)}>
             <aside
@@ -3502,6 +3499,7 @@ export default function EmployerWorkspace() {
                   <X />
                 </button>
               </div>
+<<<<<<< HEAD
 
               <section className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 <h3 className="text-sm font-semibold text-slate-900">Contact information</h3>
@@ -3518,6 +3516,26 @@ export default function EmployerWorkspace() {
                   <div>
                     <h3 className="font-semibold">AI match breakdown</h3>
                     <p className="mt-1 text-xs text-slate-500">Score breakdown from this submitted application.</p>
+=======
+              {selected.candidateId && <button type="button" onClick={() => setReportCandidate(selected)} className="mt-4 inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-slate-500 transition hover:bg-rose-50 hover:text-rose-700"><ShieldAlert className="h-4 w-4" />Report candidate</button>}
+              <div className="mt-6 grid gap-4 sm:grid-cols-[auto_1fr]">
+                <ScoreRing score={selected.matchScore} size={90} />
+                <div>
+                  <h3 className="font-black">AI Match Breakdown</h3>
+                  <p className="mt-1 text-sm leading-6 text-slate-500">
+                    Strong match based on skills and experience. Review the
+                    skill gaps before the final decision.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {selected.skills?.map((skill) => (
+                      <span
+                        className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700"
+                        key={skill}
+                      >
+                        {skill}
+                      </span>
+                    ))}
+>>>>>>> origin/tade
                   </div>
                 </div>
                 <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
