@@ -450,7 +450,7 @@ exports.getTopCandidates = async (req, res) => {
 exports.getTalentPool = async (req, res) => {
   try {
     const [savedCandidates] = await db.execute(
-      `SELECT tp.id, tp.candidateId AS id, u.full_name AS fullName, u.email, u.phone, jsp.headline AS preferredDepartment, jsp.preferred_job_type AS preferredJobType, tp.aiMatchScore, tp.skills, tp.notes, tp.savedAt, c.file_name AS cvFileName FROM talent_pool tp JOIN users u ON u.id = tp.candidateId LEFT JOIN job_seeker_profiles jsp ON jsp.user_id = u.id LEFT JOIN cvs c ON c.user_id = u.id AND c.is_primary = TRUE WHERE tp.employerId = ? ORDER BY tp.savedAt DESC`,
+      `SELECT tp.id, tp.candidateId AS id, u.full_name AS fullName, u.email, u.phone, jsp.headline AS preferredDepartment, jsp.preferred_job_type AS preferredJobType, tp.aiMatchScore, tp.skills, tp.notes, tp.savedAt, c.file_name AS cvFileName, c.file_url AS resumeUrl FROM talent_pool tp JOIN users u ON u.id = tp.candidateId LEFT JOIN job_seeker_profiles jsp ON jsp.user_id = u.id LEFT JOIN cvs c ON c.user_id = u.id AND c.is_primary = TRUE WHERE tp.employerId = ? ORDER BY tp.savedAt DESC`,
       [req.user.id]
     );
 
@@ -463,7 +463,7 @@ exports.getTalentPool = async (req, res) => {
       })) });
     }
 
-    const [candidates] = await db.execute(`SELECT DISTINCT u.id, u.full_name fullName, u.email, u.phone, jsp.headline preferredDepartment, jsp.preferred_job_type preferredJobType, c.file_name cvFileName, jsp.profile_completion_percentage FROM users u JOIN job_seeker_profiles jsp ON jsp.user_id = u.id LEFT JOIN cvs c ON c.user_id = u.id AND c.is_primary = TRUE WHERE u.role = 'job_seeker' ORDER BY jsp.profile_completion_percentage DESC, u.created_at DESC`);
+    const [candidates] = await db.execute(`SELECT DISTINCT u.id, u.full_name fullName, u.email, u.phone, jsp.headline preferredDepartment, jsp.preferred_job_type preferredJobType, c.file_name cvFileName, c.file_url resumeUrl, jsp.profile_completion_percentage FROM users u JOIN job_seeker_profiles jsp ON jsp.user_id = u.id LEFT JOIN cvs c ON c.user_id = u.id AND c.is_primary = TRUE WHERE u.role = 'job_seeker' ORDER BY jsp.profile_completion_percentage DESC, u.created_at DESC`);
     return res.json({ success: true, candidates: candidates.map((candidate) => ({ ...candidate, keySkills: [], experience: 'Experience TBD', aiMatchScore: 0 })) });
   } catch (error) { return res.status(500).json({ success: false, message: 'Failed to retrieve talent pool.' }); }
 };
