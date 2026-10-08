@@ -1,4 +1,4 @@
-import { Bell, BriefcaseBusiness, Building2, ClipboardList, LayoutDashboard, LogOut, MessageCircle, Settings, Sparkles, Target, UserCheck, Users, X } from 'lucide-react';
+import { Bell, BriefcaseBusiness, Building2, ClipboardList, LayoutDashboard, MessageCircle, Settings, Sparkles, Target, UserCheck, Users, X } from 'lucide-react';
 
 const menuItems = [
   ['overview', 'Dashboard', LayoutDashboard],
@@ -14,13 +14,13 @@ const menuItems = [
   ['settings', 'Settings', Settings],
 ];
 
-export default function EmployerSidebar({ active, onSelect, onLogout, applicationsCount = 0, unreadMessages = 0, unreadNotifications = 0, isOpen = false, onClose, stages = menuItems }) {
+export default function EmployerSidebar({ active, onSelect, applicationsCount = 0, unreadMessages = 0, unreadNotifications = 0, isOpen = false, onClose, stages = menuItems }) {
   const stageMap = new Map(stages.map((item) => [item[0], item]));
   const navItems = menuItems.filter(([id]) => stageMap.has(id));
 
   return <>
     {isOpen && <button type="button" aria-label="Close employer navigation" onClick={onClose} className="fixed inset-0 z-40 bg-slate-950/40 lg:hidden" />}
-    <aside className={`employer-sidebar fixed left-0 top-20 z-40 flex h-[calc(100vh-5rem)] w-72 max-w-[85vw] flex-col border-r border-slate-200 bg-white/95 p-5 pb-6 shadow-xl backdrop-blur-sm transition-transform sm:top-24 sm:h-[calc(100vh-6rem)] lg:sticky lg:top-24 lg:h-[calc(100vh-6rem)] lg:w-[280px] lg:max-w-none lg:translate-x-0 lg:shadow-none ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+    <aside className={`employer-sidebar fixed left-0 top-20 z-40 flex h-[calc(100vh-5rem)] w-72 max-w-[85vw] flex-col border-r border-slate-200 bg-white/95 p-5 pb-6 shadow-xl backdrop-blur-sm transition-transform sm:top-24 sm:h-[calc(100vh-6rem)] lg:static lg:z-auto lg:h-auto lg:min-h-[calc(100dvh-11rem)] lg:w-[280px] lg:max-w-none lg:shrink-0 lg:translate-x-0 lg:shadow-none ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
       <button type="button" aria-label="Close employer navigation" onClick={onClose} className="absolute right-4 top-5 text-slate-500 lg:hidden"><X className="h-5 w-5" /></button>
 
       <div className="mb-5 flex shrink-0 items-center gap-3 border-b border-slate-100 pb-4">
@@ -32,7 +32,7 @@ export default function EmployerSidebar({ active, onSelect, onLogout, applicatio
         </div>
       </div>
 
-      <nav aria-label="Employer dashboard navigation" className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-1 pb-2 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-slate-300">
+      <nav aria-label="Employer dashboard navigation" className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain pr-1 pb-2 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-slate-300 lg:h-auto lg:flex-none lg:overflow-visible">
         {navItems.map(([id, label]) => (
           <button
             key={id}
@@ -49,10 +49,6 @@ export default function EmployerSidebar({ active, onSelect, onLogout, applicatio
         ))}
       </nav>
 
-      <button type="button" onClick={onLogout} className="mt-4 flex w-full shrink-0 items-center gap-3 rounded-xl border border-red-100 px-4 py-3 text-left text-sm font-bold text-red-600 transition hover:bg-red-50">
-        <LogOut className="h-4 w-4" />
-        Logout
-      </button>
     </aside>
   </>;
 }

@@ -3,6 +3,7 @@ import { Building2, CheckCircle2, FileText, Globe2, MapPin, ShieldCheck, Sparkle
 import officeImage from '../../pages/images/images (4).jpg';
 import api from '../../services/api';
 import { useToast } from '../../hooks/useToast.js';
+import SearchableSelect from '../ui/SearchableSelect.jsx';
 
 const hiringVolumeOptions = ['1-5 Hires', '6-20 Hires', '20+ Scaled Hiring', 'Continuous Talent Pool'];
 const companySizeOptions = ['1-10', '11-50', '51-200', '201-500', '501-1000', '1000+'];
@@ -405,11 +406,14 @@ function Field({ label, value, onChange, type = 'text', required = false, select
         {required && <span className="ml-1 text-blue-600">*</span>}
       </span>
       {select ? (
-        <select ref={inputRef} value={safeValue} onChange={(event) => onChange(event.target.value)} className={classes}>
-          {options.map((option) => (
-            <option key={option} value={option}>{option}</option>
-          ))}
-        </select>
+        <SearchableSelect
+          value={safeValue}
+          onChange={onChange}
+          options={options}
+          placeholder={`Select ${label.toLowerCase()}...`}
+          aria-invalid={Boolean(error)}
+          className={classes}
+        />
       ) : (
         <input ref={inputRef} type={type} value={safeValue} onChange={(event) => onChange(event.target.value)} className={classes} />
       )}
@@ -440,4 +444,3 @@ function InfoRow({ icon: Icon, label, value }) {
     </div>
   );
 }
-

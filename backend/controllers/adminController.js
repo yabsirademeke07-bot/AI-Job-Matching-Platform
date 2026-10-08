@@ -71,6 +71,21 @@ const createJobModerationNotifications = async (executor, { employerId, jobId, j
   return { rejected, title, message };
 };
 
+const createJobSeekerOpportunityNotifications = async (executor, { jobId, jobTitle, companyName, location }) => {
+  const message = `${jobTitle} was just posted by ${companyName || 'a company'} in ${location || 'a location not specified'}.`;
+  try {
+    await executor.execute(
+      `INSERT INTO notifications
+        (user_id, type, title, message, reference_type, reference_id, related_job_id, action_url)
+       SELECT id, 'JOB_STATUS', '💼 New Job Opportunity', ?, 'JOB', ?, ?, ?
+       FROM users WHERE role = 'job_seeker'`,
+      [message, jobId, jobId, `/jobs/${jobId}`]
+    );
+  } catch (error) {
+    console.warn('Job seeker opportunity notifications skipped:', error.message);
+  }
+};
+
 const sendJobRejectionEmailSafely = async (job, reason) => {
   try {
     await sendJobRejectionEmail({ toEmail: job.employer_email, jobTitle: job.title, reason });
@@ -510,9 +525,13 @@ exports.moderateJob = async (req, res) => {
   try {
     await connection.beginTransaction();
     const [rows] = await connection.execute(`
-      SELECT j.id, j.title, j.employer_id, u.email AS employer_email,
+            SELECT j.id, j.title, j.employer_id, j.status, j.location,
+              COALESCE(cp.company_name, j.company_name, u.full_name, 'Company') AS company_name,
+              u.email AS employer_email,
              ${jobEmployerLegalFields}
-      FROM jobs j JOIN users u ON u.id = j.employer_id WHERE j.id = ? FOR UPDATE`, [jobId]);
+            FROM jobs j JOIN users u ON u.id = j.employer_id
+            LEFT JOIN company_profiles cp ON cp.employer_id = j.employer_id
+            WHERE j.id = ? FOR UPDATE`, [jobId]);
     if (!rows.length) { await connection.rollback(); return res.status(404).json({ success: false, message: 'Job not found.' }); }
     const job = rows[0];
     if (nextStatus === 'active' && !hasEmployerLegalDocuments(job)) {
@@ -523,6 +542,7 @@ exports.moderateJob = async (req, res) => {
       `UPDATE jobs
        SET status = ?,
            is_approved = ?,
+           approval_status = ?,
            rejection_reason = ?,
            approved_by = ?,
            approved_at = CASE WHEN ? = 'active' THEN NOW() ELSE NULL END,
@@ -530,7 +550,7 @@ exports.moderateJob = async (req, res) => {
            reviewed_at = NOW(),
            updated_at = NOW()
        WHERE id = ?`,
-         [nextStatus, nextStatus === 'active', nextStatus === 'rejected' ? reason : null, nextStatus === 'active' ? req.user.id : null, nextStatus, req.user.id, jobId]
+         [nextStatus, nextStatus === 'active', nextStatus === 'active' ? 'approved' : nextStatus === 'rejected' ? 'rejected' : 'pending', nextStatus === 'rejected' ? reason : null, nextStatus === 'active' ? req.user.id : null, nextStatus, req.user.id, jobId]
     );
     await createJobModerationNotifications(connection, {
       employerId: job.employer_id,
@@ -539,6 +559,14 @@ exports.moderateJob = async (req, res) => {
       status: nextStatus,
       reason,
     });
+    if (nextStatus === 'active' && normalizeJobStatus(job.status) !== 'active') {
+      await createJobSeekerOpportunityNotifications(connection, {
+        jobId,
+        jobTitle: job.title,
+        companyName: job.company_name,
+        location: job.location,
+      });
+    }
     try {
       await connection.execute('INSERT INTO admin_actions_log (admin_id, action_type, target_job_id, reason) VALUES (?, \'content-moderated\', ?, ?)', [req.user.id, jobId, reason || `Job status changed to ${nextStatus}`]);
     } catch (auditError) {
@@ -609,9 +637,13 @@ exports.toggleJobStatus = async (req, res) => {
     }
 
     const [rows] = await db.execute(`
-      SELECT j.id, j.title, j.employer_id, u.email AS employer_email,
+            SELECT j.id, j.title, j.employer_id, j.status, j.location,
+              COALESCE(cp.company_name, j.company_name, u.full_name, 'Company') AS company_name,
+              u.email AS employer_email,
              ${jobEmployerLegalFields}
-      FROM jobs j JOIN users u ON u.id = j.employer_id WHERE j.id = ?`, [jobId]);
+            FROM jobs j JOIN users u ON u.id = j.employer_id
+            LEFT JOIN company_profiles cp ON cp.employer_id = j.employer_id
+            WHERE j.id = ?`, [jobId]);
     if (!rows.length) return res.status(404).json({ success: false, message: 'Job not found.' });
     if (nextStatus === 'active' && !hasEmployerLegalDocuments(rows[0])) {
       return res.status(422).json({ success: false, message: 'Employer TIN and trade license details are required before approving this job.' });
@@ -621,6 +653,7 @@ exports.toggleJobStatus = async (req, res) => {
       `UPDATE jobs
        SET status = ?,
            is_approved = ?,
+           approval_status = ?,
            rejection_reason = CASE WHEN ? = 'rejected' THEN ? ELSE NULL END,
            approved_by = CASE WHEN ? = 'active' THEN ? ELSE approved_by END,
            approved_at = CASE WHEN ? = 'active' THEN NOW() ELSE approved_at END,
@@ -628,7 +661,7 @@ exports.toggleJobStatus = async (req, res) => {
            reviewed_at = NOW(),
            updated_at = NOW()
        WHERE id = ?`,
-      [nextStatus, nextStatus === 'active', nextStatus, reason, nextStatus, req.user.id, nextStatus, req.user.id, jobId]
+      [nextStatus, nextStatus === 'active', nextStatus === 'active' ? 'approved' : nextStatus === 'rejected' ? 'rejected' : 'pending', nextStatus, reason, nextStatus, req.user.id, nextStatus, req.user.id, jobId]
     );
 
     if (nextStatus === 'active' || nextStatus === 'rejected') {
@@ -639,6 +672,14 @@ exports.toggleJobStatus = async (req, res) => {
         status: nextStatus,
         reason,
       });
+      if (nextStatus === 'active' && normalizeJobStatus(rows[0].status) !== 'active') {
+        await createJobSeekerOpportunityNotifications(db, {
+          jobId,
+          jobTitle: rows[0].title,
+          companyName: rows[0].company_name,
+          location: rows[0].location,
+        });
+      }
       if (nextStatus === 'rejected') await sendJobRejectionEmailSafely(rows[0], reason);
       try {
         await db.execute('INSERT INTO admin_actions_log (admin_id, action_type, target_job_id, reason) VALUES (?, \'content-moderated\', ?, ?)', [req.user.id, jobId, reason || `Job status changed to ${nextStatus}`]);

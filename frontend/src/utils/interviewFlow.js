@@ -85,11 +85,42 @@ export function updateMockInterview(interviewId, changes) {
   return interview;
 }
 
-export function notifyMockApplication(application, status) {
-  const title = status === 'Rejected' ? 'Application Rejected' : 'Application Update';
-  const message = status === 'Rejected' ? 'Your application was not selected.' : `Your application for ${application.jobTitle || application.title || application.role || 'this role'} has been shortlisted.`;
-  const notification = { id: `notification-${Date.now()}`, type: 'application', title, message, relatedId: application.id, relatedApplicationId: application.id, createdAt: 'Just now', isRead: false };
+export function notifyMockApplication(application, status, details = {}) {
+  const normalizedStatus = String(status || '').trim();
+  const jobTitle = application?.jobTitle || application?.title || application?.role || 'this role';
+  const companyName = application?.companyName || application?.company || 'the company';
+  const interviewDate = details?.date ? new Date(`${details.date}T${details.time || '09:00'}`) : null;
+  let title = 'Application Update';
+  let message = `Your application for ${jobTitle} has been updated.`;
+
+  if (normalizedStatus === 'Rejected') {
+    title = 'Application Rejected';
+    message = `Your application for ${jobTitle} has been Rejected.`;
+  } else if (normalizedStatus === 'Hired') {
+    title = 'Offer Accepted';
+    message = `Congratulations! You have been marked as Hired at ${companyName}`;
+  } else if (normalizedStatus === 'Interview') {
+    title = 'Interview Invitation';
+    const label = interviewDate && !Number.isNaN(interviewDate.getTime()) ? interviewDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : details?.date || 'the scheduled date';
+    message = `Interview Invitation from ${companyName} for ${jobTitle} on ${label}`;
+  } else if (normalizedStatus === 'Shortlisted') {
+    title = 'Application Shortlisted';
+    message = `Your application for ${jobTitle} has been Shortlisted!`;
+  }
+
+  const notification = {
+    id: `notification-${Date.now()}`,
+    type: normalizedStatus === 'Interview' ? 'interview' : 'application',
+    title,
+    message,
+    relatedId: application?.id,
+    relatedApplicationId: application?.id,
+    relatedInterviewId: details?.interviewId || null,
+    createdAt: 'Just now',
+    isRead: false,
+  };
   write(NOTIFICATIONS_KEY, [notification, ...getMockNotifications()]);
+  window.dispatchEvent?.(new CustomEvent('job-matching:updated', { detail: { key: 'notifications' } }));
   return notification;
 }
 

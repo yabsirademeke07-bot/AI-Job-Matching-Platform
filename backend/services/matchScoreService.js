@@ -16,11 +16,18 @@ function educationScore(seeker, job) {
   ].join(' '));
   const required = normalize(job.required_education || job.education || 'any');
   if (!required || required.includes('any') || required.includes('not required')) return 1;
-  const levels = ['high school', 'certificate', 'diploma', 'associate', 'bachelor', 'master', 'phd'];
-  const requiredIndex = levels.findIndex((level) => required.includes(level));
-  const candidateIndex = levels.reduce((best, level, index) => candidate.includes(level) ? Math.max(best, index) : best, -1);
-  if (requiredIndex < 0) return candidate.includes(required) ? 1 : 0.25;
-  return candidateIndex >= requiredIndex ? 1 : Math.max(0, candidateIndex + 1) / (requiredIndex + 1);
+  const educationRank = (value) => {
+    if (value.includes('phd') || value.includes('doctorate')) return 5;
+    if (value.includes('master')) return 4;
+    if (value.includes('bachelor')) return 3;
+    if (value.includes('diploma') || value.includes('tvet') || value.includes('associate') || value.includes('certificate')) return 2;
+    if (value.includes('high school') || value.includes('secondary')) return 1;
+    return 0;
+  };
+  const requiredRank = educationRank(required);
+  const candidateRank = educationRank(candidate);
+  if (!requiredRank) return candidate.includes(required) ? 1 : 0.25;
+  return candidateRank >= requiredRank ? 1 : candidateRank ? candidateRank / requiredRank : 0;
 }
 
 function experienceScore(seeker, job) {
@@ -30,8 +37,12 @@ function experienceScore(seeker, job) {
     seeker.cv?.experience,
   ].join(' '));
   const required = normalize(job.experience_level || '');
-  const requiredYears = Number(job.years_of_experience_min || (required.match(/\d+/) || [0])[0]);
+  const hasExplicitMinimumExperience = job.min_experience !== null && job.min_experience !== undefined;
+  const requiredYears = Number(hasExplicitMinimumExperience
+    ? job.min_experience
+    : job.years_of_experience_min || (required.match(/\d+/) || [0])[0]);
   const candidateYears = Number((candidate.match(/\d+(?:\.\d+)?/) || [0])[0]);
+  if (hasExplicitMinimumExperience && requiredYears === 0) return 1;
   if (requiredYears > 0) return candidateYears >= requiredYears ? 1 : Math.max(0, candidateYears / requiredYears);
   if (!required || required.includes('any')) return 1;
   if (required.includes('entry')) return candidate.includes('entry') || candidate.includes('junior') || candidateYears > 0 ? 1 : 0.5;

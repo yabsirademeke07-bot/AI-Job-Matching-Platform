@@ -1,12 +1,14 @@
 ﻿import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Building2, Briefcase, Users, UserCheck, Calendar, CheckCircle2,
+  Building2, Briefcase, Users, Calendar, CheckCircle2,
   XCircle, Search, Edit3, Trash2, PauseCircle, PlayCircle,
   Download, Sparkles, Eye, X, LayoutDashboard, Settings,
-  Bell, UserRoundCheck, Target, FilePlus2, PlusCircle
+  Bell, UserRoundCheck, Target, FilePlus2, PlusCircle, Clock3,
+  Star, Trophy
 } from 'lucide-react';
-import { notifyMockApplication, rescheduleMockInterview, scheduleMockInterview, updateMockInterview } from '../utils/interviewFlow';
+import api from '../services/api';
+import { notifyMockApplication, updateMockApplication, updateMockInterview } from '../utils/interviewFlow';
 
 const sanitizeEmployerJobs = (jobsList = []) => {
   const seen = new Set();
@@ -33,6 +35,7 @@ const EmployerDashboard = () => {
   const [darkMode] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [selectedFilter, setSelectedFilter] = useState('');
 
   // 3. Company Profile State
   const [companyProfile, setCompanyProfile] = useState({
@@ -44,6 +47,17 @@ const EmployerDashboard = () => {
   const [editCompanyMode, setEditCompanyMode] = useState(false);
   const [companySaving, setCompanySaving] = useState(false);
   const [publishMessage, setPublishMessage] = useState('');
+  const [stats, setStats] = useState({
+    active_jobs: 0,
+    total_applicants: 0,
+    high_ai_matches: 0,
+    pending_review: 0,
+    shortlisted: 0,
+    interviews_scheduled: 0,
+    hired: 0,
+    new_this_week: 0,
+  });
+  const [statsError, setStatsError] = useState('');
 
   // 4. Job Posts State
   const [jobs, setJobs] = useState(() => JSON.parse(localStorage.getItem('employerJobs') || '[]'));
@@ -58,6 +72,9 @@ const EmployerDashboard = () => {
     }
   });
   const [interviews, setInterviews] = useState(() => JSON.parse(localStorage.getItem('employerInterviews') || '[]'));
+  const [pipelineError, setPipelineError] = useState('');
+  const [statusError, setStatusError] = useState('');
+  const [statusUpdatingId, setStatusUpdatingId] = useState(null);
 
   const navigationItems = [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
@@ -72,6 +89,37 @@ const EmployerDashboard = () => {
     { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'settings', label: 'Settings', icon: Settings }
   ];
+
+  const pipelineStatusOptions = [
+    { value: 'Pending', label: 'Pending' },
+    { value: 'Shortlisted', label: 'Shortlisted' },
+    { value: 'Interview', label: 'Interview' },
+    { value: 'Hired', label: 'Hired' },
+    { value: 'Rejected', label: 'Rejected' },
+  ];
+
+  const pipelineStatusStyles = {
+    Pending: 'bg-amber-50 text-amber-700 border border-amber-200',
+    Review: 'bg-slate-50 text-slate-700 border border-slate-200',
+    Shortlisted: 'bg-blue-50 text-blue-700 border border-blue-200',
+    Interview: 'bg-violet-50 text-violet-700 border border-violet-200',
+    Hired: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+    Rejected: 'bg-rose-50 text-rose-700 border border-rose-200',
+  };
+
+  const normalizePipelineStatus = (value) => {
+    const normalized = String(value || 'Pending').trim();
+    const lowered = normalized.toLowerCase();
+
+    if (['pending', 'applied', 'new'].includes(lowered)) return 'Pending';
+    if (['review', 'in review', 'under review'].includes(lowered)) return 'Review';
+    if (['shortlisted', 'shortlist'].includes(lowered)) return 'Shortlisted';
+    if (['interview', 'interviewed', 'interview scheduled', 'interview-scheduled'].includes(lowered)) return 'Interview';
+    if (['hired', 'accepted', 'offer'].includes(lowered)) return 'Hired';
+    if (['rejected', 'declined'].includes(lowered)) return 'Rejected';
+
+    return normalized;
+  };
 
   // Modals State
   const [selectedApplicant, setSelectedApplicant] = useState(null);
@@ -119,17 +167,102 @@ const EmployerDashboard = () => {
   }, []);
 
   useEffect(() => {
+    let active = true;
+    api.get('/employer/jobs')
+      .then(({ data }) => {
+        if (active && Array.isArray(data.jobs)) setJobs(data.jobs);
+      })
+      .catch((error) => {
+        console.error('Unable to load employer jobs for active-job filters:', error);
+      });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const loadPipeline = async () => {
+      try {
+        const { data } = await api.get('/employer/pipeline');
+        if (!active) return;
+        const pipelineApplications = (data.applications || []).map((application) => ({
+          ...application,
+          name: application.name || application.candidateName || 'Candidate',
+          email: application.email || application.candidateEmail || '',
+          matchScore: application.aiMatchScore ?? application.aiScore ?? application.matchScore ?? 0,
+        }));
+        setApplicants(pipelineApplications);
+        setPipelineError('');
+      } catch (error) {
+        if (active) {
+          setPipelineError(error.response?.data?.message || 'Unable to load live applicants. Showing saved applicants when available.');
+        }
+      }
+    };
+
+    loadPipeline();
+    const intervalId = window.setInterval(loadPipeline, 15000);
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const loadDashboardStats = async () => {
+      try {
+        const { data } = await api.get('/employer/dashboard-stats');
+        if (!active) return;
+        setStats((current) => ({ ...current, ...(data.stats || {}) }));
+        setStatsError('');
+      } catch (error) {
+        if (active) setStatsError(error.response?.data?.message || 'Unable to load live dashboard metrics.');
+      }
+    };
+
+    const refreshAfterPipelineChange = (event) => {
+      if (['employerApplications', 'employerJobs', 'applications', 'sharedApplications', 'mockApplications'].includes(event.detail?.key)) {
+        loadDashboardStats();
+      }
+    };
+
+    loadDashboardStats();
+    const intervalId = window.setInterval(loadDashboardStats, 15000);
+    window.addEventListener('job-matching:updated', refreshAfterPipelineChange);
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+      window.removeEventListener('job-matching:updated', refreshAfterPipelineChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    api.get('/employer/profile')
+      .then(({ data }) => {
+        if (!active) return;
+        const profile = data.profile || {};
+        setCompanyProfile({
+          name: profile.company_name || profile.companyName || profile.household_name || profile.name || user?.companyInfo?.company_name || user?.full_name || '',
+          industry: profile.industry || '',
+          location: profile.location || profile.headquarters || profile.residence_location || '',
+          website: profile.website || '',
+          logo: profile.logo_url || profile.logoUrl || '',
+        });
+      })
+      .catch((error) => {
+        console.error('Unable to load employer company profile:', error);
+        setCompanyProfile((current) => ({
+          ...current,
+          name: current.name || user?.companyInfo?.company_name || user?.full_name || '',
+        }));
+      });
+    return () => { active = false; };
+  }, [user]);
+
+  useEffect(() => {
     localStorage.setItem('employerInterviews', JSON.stringify(interviews));
   }, [interviews]);
-
-  // Dynamic Dashboard Stats
-  const stats = {
-    activeJobs: jobs.filter(a => a.status === 'published').length,
-    totalApplicants: applicants.length,
-    shortlisted: applicants.filter(a => ['shortlisted', 'Shortlisted'].includes(a.status)).length,
-    interviews: interviews.length,
-    hired: applicants.filter(a => ['hired', 'Hired'].includes(a.status)).length
-  };
 
   // Job Actions
   const toggleJobStatus = async (id) => {
@@ -178,10 +311,17 @@ const EmployerDashboard = () => {
 
     setIsSubmitting(true);
     try {
+      const { data: savedJob } = await api.post('/employer/jobs', {
+        ...newJob,
+        title,
+        company_name: company,
+        status: 'published',
+        required_skills: newJob.required_skills.split(',').map((skill) => skill.trim()).filter(Boolean),
+      });
       const today = new Date().toISOString().slice(0, 10);
       const createdJob = {
         ...newJob,
-        id: `job_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+        id: savedJob.id || savedJob.jobId,
         company,
         locationValue: newJob.location,
         type: newJob.job_type,
@@ -199,7 +339,7 @@ const EmployerDashboard = () => {
         priorityRank: 1,
         salaryValue: Number.parseInt(String(newJob.salary).replace(/[^0-9]/g, ''), 10) || 0,
         aiMatchScore: null,
-        status: 'published',
+        status: savedJob.status || 'published',
         created_at: today,
         createdAt: new Date().toISOString(),
         applicantsCount: 0,
@@ -207,11 +347,13 @@ const EmployerDashboard = () => {
       };
       const nextJobs = sanitizeEmployerJobs([createdJob, ...jobs]);
       setJobs(nextJobs);
+      window.dispatchEvent(new CustomEvent('job-matching:updated', { detail: { key: 'employerJobs' } }));
+      setStatsError('');
       setPublishMessage('Job published successfully. It is now visible in Find Jobs.');
       window.setTimeout(() => setPublishMessage(''), 4000);
     } catch (error) {
-      console.error('Unable to create local job:', error);
-      setPublishMessage('Unable to publish this job. Please try again.');
+      console.error('Unable to publish employer job:', error);
+      setPublishMessage(error.response?.data?.message || 'Unable to publish this job. Please try again.');
     } finally {
       setIsSubmitting(false);
       setShowJobModal(false);
@@ -220,16 +362,91 @@ const EmployerDashboard = () => {
   };
 
   // Candidate Status Update
-  const updateCandidateStatus = async (applicantId, newStatus) => {
-      const applicant = applicants.find((item) => item.id === applicantId);
-      if (!applicant) return;
-      setApplicants(applicants.map(a => a.id === applicantId ? { ...a, status: newStatus, applicationStatus: newStatus } : a));
-      if (['Shortlisted', 'Rejected'].includes(newStatus)) notifyMockApplication(applicant, newStatus);
-    setApplicants(applicants.map(a => a.id === applicantId ? { ...a, status: newStatus } : a));
-    if (selectedApplicant && selectedApplicant.id === applicantId) {
-      setSelectedApplicant({ ...selectedApplicant, status: newStatus });
-    }
+  const updateCandidateStatus = async (applicantId, newStatus, details = {}) => {
+    const applicant = applicants.find((item) => String(item.id) === String(applicantId));
+    if (!applicant) return false;
 
+    const normalizedStatus = normalizePipelineStatus(newStatus);
+    const isDatabaseApplication = /^\d+$/.test(String(applicant.id));
+    setStatusError('');
+    setStatusUpdatingId(applicantId);
+
+    try {
+      if (isDatabaseApplication) {
+        if (normalizedStatus === 'Interview') {
+          if (!details.date || !details.time) {
+            setStatusError('Choose an interview date and time before sending the invitation.');
+            return false;
+          }
+          await api.post('/employer/interviews', {
+            applicationId: applicant.id,
+            scheduledDate: details.date,
+            scheduledTime: details.time,
+            interviewType: details.type === 'Online' ? 'video' : details.type.toLowerCase(),
+            meetingLink: details.meetingLink || null,
+            notes: details.instructions || null,
+          });
+        } else {
+          await api.patch(`/employer/applications/${applicant.id}/status`, { status: normalizedStatus });
+        }
+      }
+
+      const interview = normalizedStatus === 'Interview'
+        ? {
+            id: details.interviewId || applicant.interviewId || `interview-${applicant.id}`,
+            applicationId: applicant.id,
+            jobTitle: applicant.jobTitle || applicant.title || 'Job interview',
+            company: applicant.companyName || applicant.company || companyProfile.name || 'Company',
+            status: 'Scheduled',
+            date: details.date || '',
+            time: details.time || '',
+            type: details.type || 'Online',
+            location: details.type === 'In-person' ? details.location || '' : '',
+            meetingLink: details.type === 'Online' ? details.meetingLink || '' : '',
+            instructions: details.instructions || '',
+          }
+        : details.interview || applicant.interview || null;
+      const updatedApplicant = {
+        ...applicant,
+        status: normalizedStatus,
+        applicationStatus: normalizedStatus,
+        interview,
+        interviewId: interview?.id || applicant.interviewId || null,
+      };
+      const nextApplicants = applicants.map((item) => (
+        String(item.id) === String(applicantId) ? updatedApplicant : item
+      ));
+
+      setApplicants(nextApplicants);
+      localStorage.setItem('employerApplications', JSON.stringify(nextApplicants));
+      if (!isDatabaseApplication) {
+        updateMockApplication(applicantId, {
+          status: normalizedStatus,
+          applicationStatus: normalizedStatus,
+          interview,
+          interviewId: updatedApplicant.interviewId,
+        });
+        notifyMockApplication(updatedApplicant, normalizedStatus, { ...details, interviewId: updatedApplicant.interviewId });
+      }
+
+      if (normalizedStatus === 'Interview') {
+        const interviewList = [...interviews.filter((item) => String(item.applicationId) !== String(applicantId)), interview];
+        setInterviews(interviewList);
+        localStorage.setItem('employerInterviews', JSON.stringify(interviewList));
+      }
+
+      if (selectedApplicant && String(selectedApplicant.id) === String(applicantId)) {
+        setSelectedApplicant(updatedApplicant);
+      }
+
+      window.dispatchEvent(new CustomEvent('job-matching:updated', { detail: { key: 'employerApplications' } }));
+      return true;
+    } catch (error) {
+      setStatusError(error.response?.data?.message || 'Unable to update this application. Please try again.');
+      return false;
+    } finally {
+      setStatusUpdatingId(null);
+    }
   };
 
   const handleInterviewStatus = (interview, status) => {
@@ -238,12 +455,21 @@ const EmployerDashboard = () => {
     setApplicants((current) => current.map((item) => item.id === interview.applicationId ? { ...item, interview: updated } : item));
   };
 
-  const handleScheduleInterview = (event) => {
+  const handleScheduleInterview = async (event) => {
     event.preventDefault();
     if (!selectedApplicant) return;
-    const interview = selectedApplicant.interview ? rescheduleMockInterview(selectedApplicant.interview, interviewForm) : scheduleMockInterview(selectedApplicant, interviewForm);
-    setApplicants(applicants.map((applicant) => applicant.id === selectedApplicant.id ? { ...applicant, status: 'Interview', interviewId: interview.id, interview } : applicant));
-    setInterviews((current) => [...current.filter((item) => item.applicationId !== selectedApplicant.id), interview]);
+
+    const nextStatus = 'Interview';
+    const scheduled = await updateCandidateStatus(selectedApplicant.id, nextStatus, {
+      date: interviewForm.date,
+      time: interviewForm.time,
+      type: interviewForm.type,
+      location: interviewForm.location,
+      meetingLink: interviewForm.meetingLink,
+      instructions: interviewForm.instructions,
+    });
+    if (!scheduled) return;
+
     setSelectedApplicant(null);
     setShowInterviewModal(false);
     setInterviewForm({ date: '', time: '', type: 'Online', location: '', meetingLink: '', instructions: '' });
@@ -263,25 +489,108 @@ const EmployerDashboard = () => {
       (a.name || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
       (a.jobTitle || '').toLowerCase().includes(searchTerm.toLowerCase())
     )
-    .filter(a => statusFilter === 'all' ? true : (a.status || '').toLowerCase() === statusFilter.toLowerCase());
+    .filter(a => statusFilter === 'all' ? true : normalizePipelineStatus(a.status).toLowerCase() === statusFilter.toLowerCase());
+
+  const todayTimestamp = new Date().getTime();
+  const selectedFilterLabels = {
+    active_jobs: 'Applicants for active jobs',
+    all: 'All applicants',
+    high_ai_matches: 'High AI Matches (80%+)',
+    pending_review: 'Pending Review',
+    shortlisted: 'Shortlisted',
+    interviews_scheduled: 'Interviews Scheduled',
+    hired: 'Successfully Hired',
+  };
+  const visibleApplicants = filteredApplicants
+    .filter((applicant) => {
+      if (selectedFilter === 'active_jobs') {
+        const job = jobs.find((item) => String(item.id) === String(applicant.jobId || applicant.job_id));
+        if (!job) return false;
+        const hasFutureDeadline = job.application_deadline || job.applicationDeadline || job.deadlineDate || job.deadline;
+        return String(job.status || '').toLowerCase() === 'active'
+          || (hasFutureDeadline && new Date(hasFutureDeadline).getTime() >= todayTimestamp);
+      }
+      if (selectedFilter === 'high_ai_matches') return Number(applicant.matchScore ?? applicant.aiMatchScore ?? 0) >= 80;
+      if (selectedFilter === 'pending_review') return normalizePipelineStatus(applicant.status) === 'Pending';
+      if (selectedFilter === 'shortlisted') return normalizePipelineStatus(applicant.status) === 'Shortlisted';
+      if (selectedFilter === 'interviews_scheduled') return normalizePipelineStatus(applicant.status) === 'Interview';
+      if (selectedFilter === 'hired') return normalizePipelineStatus(applicant.status) === 'Hired';
+      return true;
+    })
+    .filter((applicant) => activeTab !== 'shortlisted' || normalizePipelineStatus(applicant.status) === 'Shortlisted')
+    .filter((applicant) => activeTab !== 'hired' || normalizePipelineStatus(applicant.status) === 'Hired');
+
+  const selectMetric = (filter) => {
+    setSelectedFilter((current) => current === filter ? '' : filter);
+    setStatusFilter('all');
+    setSearchTerm('');
+    setActiveTab('applications');
+  };
+
+  const clearApplicantFilters = () => {
+    setSelectedFilter('');
+    setStatusFilter('all');
+    setSearchTerm('');
+  };
+
+  const exportApplicants = () => {
+    const columns = ['Candidate', 'Email', 'Job Title', 'AI Match Score', 'Hiring Status', 'Applied At'];
+    const escapeCsv = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+    const rows = applicants.map((applicant) => [
+      applicant.name || applicant.candidateName,
+      applicant.email || applicant.candidateEmail,
+      applicant.jobTitle || applicant.title,
+      applicant.matchScore ?? applicant.aiMatchScore ?? '',
+      normalizePipelineStatus(applicant.status),
+      applicant.appliedAt || applicant.applied_at || '',
+    ]);
+    const csv = [columns, ...rows].map((row) => row.map(escapeCsv).join(',')).join('\r\n');
+    const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `applicants-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  };
+
+  const formattedToday = new Intl.DateTimeFormat(undefined, {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(new Date());
 
   return (
     <div className={`min-h-screen transition-colors duration-300 font-sans ${darkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'}`}>
 
       {/* Main Container */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-6 flex flex-col gap-4 rounded-3xl border border-blue-100 bg-blue-50/70 p-6 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-semibold text-blue-600">Employer workspace</p>
-            <h1 className="mt-1 text-2xl font-black text-slate-900">Welcome to your Employer Dashboard</h1>
-            <p className="mt-1 text-sm text-slate-600">Manage your company, publish jobs, and connect with the right candidates.</p>
+        <div className="mb-6 flex flex-col gap-5 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-4">
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-blue-100 bg-blue-50 text-blue-700">
+              {companyProfile.logo
+                ? <img src={companyProfile.logo} alt={`${companyProfile.name || 'Company'} logo`} className="h-full w-full object-cover" />
+                : <Building2 className="h-8 w-8" />}
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-blue-600">Employer workspace</p>
+              <h1 className="mt-1 truncate text-2xl font-black text-slate-900">Welcome, {companyProfile.name || user?.companyInfo?.company_name || user?.full_name || 'Employer'}</h1>
+              <p className="mt-1 text-sm font-medium text-slate-500">{formattedToday}</p>
+              <p className="mt-1 text-sm text-slate-600">Your hiring activity and candidate pipeline at a glance.</p>
+            </div>
           </div>
-          <button type="button" onClick={() => navigate('/employer/jobs/new')} className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-black text-white shadow-lg shadow-blue-500/25 transition-all hover:bg-blue-700 active:scale-95">
-            <PlusCircle className="h-4 w-4" />
-            <span>+ Post Job</span>
-          </button>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <button type="button" onClick={exportApplicants} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50">
+              <Download className="h-4 w-4" /> Export Data
+            </button>
+            <button type="button" onClick={() => navigate('/employer/jobs/new')} className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-black text-white shadow-lg shadow-blue-500/25 transition-all hover:bg-blue-700 active:scale-95">
+              <PlusCircle className="h-4 w-4" /><span>+ Post New Job</span>
+            </button>
+          </div>
         </div>
         {publishMessage && <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{publishMessage}</div>}
+        {pipelineError && <div role="status" className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">{pipelineError}</div>}
+        {statusError && <div role="alert" className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{statusError}</div>}
         
         {/* Company Banner & Profile Edit */}
         <div className={`p-6 rounded-3xl border shadow-sm ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
@@ -326,24 +635,51 @@ const EmployerDashboard = () => {
         </div>
 
         {/* Dynamic Analytics Stats */}
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+        {statsError && <p role="status" className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800">{statsError}</p>}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
           {[
-            { label: 'Active Jobs', value: stats.activeJobs, icon: Briefcase, color: 'text-blue-500', bg: 'bg-blue-50 dark:bg-blue-950/40' },
-            { label: 'Total Applicants', value: stats.totalApplicants, icon: Users, color: 'text-emerald-500', bg: 'bg-emerald-50 dark:bg-emerald-950/40' },
-            { label: 'Shortlisted Candidates', value: stats.shortlisted, icon: CheckCircle2, color: 'text-cyan-500', bg: 'bg-cyan-50 dark:bg-cyan-950/40' },
-            { label: 'Interviews Scheduled', value: stats.interviews, icon: Calendar, color: 'text-purple-500', bg: 'bg-purple-50 dark:bg-purple-950/40' },
-            { label: 'Hired Candidates', value: stats.hired, icon: UserCheck, color: 'text-amber-500', bg: 'bg-amber-50 dark:bg-amber-950/40' }
-          ].map((s, idx) => (
-            <div key={idx} className={`p-5 rounded-3xl border shadow-sm flex items-center justify-between ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
-              <div>
-                <span className="text-xs font-medium text-slate-400 block mb-1">{s.label}</span>
-                <span className="text-2xl font-bold">{s.value}</span>
-              </div>
-              <div className={`w-12 h-12 rounded-2xl ${s.bg} flex items-center justify-center`}>
-                <s.icon className={`w-6 h-6 ${s.color}`} />
-              </div>
-            </div>
-          ))}
+            { key: 'active_jobs', label: 'Active Jobs', value: stats.active_jobs, badge: 'Active now', icon: Briefcase, tint: 'blue', filter: 'active_jobs' },
+            { key: 'total_applicants', label: 'Total Applicants', value: stats.total_applicants, badge: `+${stats.new_this_week} new this week`, icon: Users, tint: 'indigo', filter: 'all' },
+            { key: 'high_ai_matches', label: 'High AI Matches', value: stats.high_ai_matches, badge: '≥80% match rate', icon: Sparkles, tint: 'purple', filter: 'high_ai_matches' },
+            { key: 'pending_review', label: 'Pending Review', value: stats.pending_review, badge: 'Needs review', icon: Clock3, tint: 'amber', filter: 'pending_review' },
+            { key: 'shortlisted', label: 'Shortlisted', value: stats.shortlisted, badge: 'Candidate pipeline', icon: Star, tint: 'sky', filter: 'shortlisted' },
+            { key: 'interviews_scheduled', label: 'Interviews Scheduled', value: stats.interviews_scheduled, badge: 'Upcoming rounds', icon: Calendar, tint: 'teal', filter: 'interviews_scheduled' },
+            { key: 'hired', label: 'Successfully Hired', value: stats.hired, badge: 'Offer accepted', icon: Trophy, tint: 'emerald', filter: 'hired' },
+          ].map((card) => {
+            const colors = {
+              blue: ['border-blue-100', 'bg-blue-50', 'text-blue-700', 'bg-blue-100'],
+              indigo: ['border-indigo-100', 'bg-indigo-50', 'text-indigo-700', 'bg-indigo-100'],
+              purple: ['border-purple-100', 'bg-purple-50', 'text-purple-700', 'bg-purple-100'],
+              amber: ['border-amber-100', 'bg-amber-50', 'text-amber-700', 'bg-amber-100'],
+              sky: ['border-sky-100', 'bg-sky-50', 'text-sky-700', 'bg-sky-100'],
+              teal: ['border-teal-100', 'bg-teal-50', 'text-teal-700', 'bg-teal-100'],
+              emerald: ['border-emerald-100', 'bg-emerald-50', 'text-emerald-700', 'bg-emerald-100'],
+            }[card.tint];
+            const selected = selectedFilter === card.filter;
+            return (
+              <button
+                key={card.key}
+                type="button"
+                onClick={() => selectMetric(card.filter)}
+                aria-pressed={selected}
+                className={`cursor-pointer rounded-2xl border bg-white p-5 text-left shadow-sm transition duration-200 hover:-translate-y-1 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${colors[0]} ${selected ? 'ring-2 ring-blue-500 shadow-md' : ''}`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <span className="block text-sm font-bold text-slate-500">{card.label}</span>
+                    <span className="mt-2 block text-3xl font-black tracking-tight text-slate-900">{Number(card.value || 0).toLocaleString()}</span>
+                  </div>
+                  <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${colors[1]} ${colors[2]}`}>
+                    <card.icon className="h-5 w-5" />
+                  </span>
+                </div>
+                <span className={`mt-4 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold ${colors[3]} ${colors[2]}`}>
+                  {card.key === 'active_jobs' && <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />}
+                  {card.badge}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Dashboard Navigation Tabs */}
@@ -373,7 +709,7 @@ const EmployerDashboard = () => {
             {/* TAB 1: AI APPLICANTS RANKING TABLE */}
             {['overview', 'applications', 'matching', 'shortlisted', 'hired'].includes(activeTab) && (
               <div className={`p-6 rounded-3xl border shadow-sm space-y-4 ${darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
-                <h3 className="text-lg font-bold">{activeTab === 'overview' ? 'Recent Applications' : activeTab === 'matching' ? 'AI Candidate Matching' : activeTab === 'shortlisted' ? 'Shortlisted Candidates' : activeTab === 'hired' ? 'Hired Candidates' : 'Applications'}</h3>
+                <h3 className="text-lg font-bold">{activeTab === 'overview' ? 'Recent Applicants & AI Matches' : activeTab === 'matching' ? 'AI Candidate Matching' : activeTab === 'shortlisted' ? 'Shortlisted Candidates' : activeTab === 'hired' ? 'Hired Candidates' : 'Applications'}</h3>
                 
                 {/* Search & Filter Header */}
                 <div className="flex flex-col sm:flex-row gap-3 justify-between">
@@ -392,18 +728,34 @@ const EmployerDashboard = () => {
 
                   <select 
                     value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
+                    onChange={(e) => {
+                      setSelectedFilter('');
+                      setStatusFilter(e.target.value);
+                    }}
                     className={`px-4 py-2.5 rounded-2xl border text-xs outline-none ${
                       darkMode ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'
                     }`}
                   >
                     <option value="all">All Statuses</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Review">Review</option>
                     <option value="Shortlisted">Shortlisted</option>
-                    <option value="Under Review">Under Review</option>
-                    <option value="Interview Scheduled">Interview Scheduled</option>
+                    <option value="Interview">Interview</option>
+                    <option value="Hired">Hired</option>
                     <option value="Rejected">Rejected</option>
                   </select>
                 </div>
+                {(selectedFilterLabels[selectedFilter] || statusFilter !== 'all') && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-blue-100 bg-blue-50 px-4 py-2.5">
+                    <p className="text-sm font-semibold text-blue-900">
+                      <span className="mr-2 inline-flex rounded-full bg-blue-100 px-2.5 py-1 text-xs font-bold text-blue-800">Active filter</span>
+                      {selectedFilterLabels[selectedFilter] || statusFilter}
+                    </p>
+                    <button type="button" onClick={clearApplicantFilters} className="text-sm font-bold text-blue-700 underline underline-offset-2 hover:text-blue-900">
+                      Clear Filter
+                    </button>
+                  </div>
+                )}
 
                 {/* Applicants Table */}
                 <div className="overflow-x-auto">
@@ -413,13 +765,13 @@ const EmployerDashboard = () => {
                         <th className="py-3 px-4">Candidate</th>
                         <th className="py-3 px-4">Applied Job</th>
                         <th className="py-3 px-4">AI Match Score</th>
-                        <th className="py-3 px-4">Status</th>
+                        <th className="py-3 px-4">Hiring Status</th>
                         <th className="py-3 px-4 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
-                      {(activeTab === 'shortlisted' ? filteredApplicants.filter((applicant) => ['shortlisted', 'Shortlisted'].includes(applicant.status)) : activeTab === 'hired' ? filteredApplicants.filter((applicant) => ['hired', 'Hired'].includes(applicant.status)) : filteredApplicants).length > 0 ? (
-                        (activeTab === 'shortlisted' ? filteredApplicants.filter((applicant) => ['shortlisted', 'Shortlisted'].includes(applicant.status)) : activeTab === 'hired' ? filteredApplicants.filter((applicant) => ['hired', 'Hired'].includes(applicant.status)) : filteredApplicants).map(applicant => (
+                      {visibleApplicants.length > 0 ? (
+                        visibleApplicants.map(applicant => (
                           <tr key={applicant.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition">
                             <td className="py-3.5 px-4 font-semibold">
                               <div>
@@ -430,17 +782,37 @@ const EmployerDashboard = () => {
                             <td className="py-3.5 px-4 text-slate-500">{applicant.jobTitle}</td>
                             <td className="py-3.5 px-4">
                               <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold flex items-center gap-1 w-fit ${
-                                applicant.matchScore >= 90 ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' :
-                                applicant.matchScore >= 75 ? 'bg-blue-50 text-blue-600 border border-blue-200' :
+                                Number(applicant.matchScore ?? applicant.aiMatchScore ?? 0) >= 90 ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' :
+                                Number(applicant.matchScore ?? applicant.aiMatchScore ?? 0) >= 75 ? 'bg-blue-50 text-blue-600 border border-blue-200' :
                                 'bg-slate-100 text-slate-600'
                               }`}>
-                                <Sparkles className="w-3 h-3" /> {applicant.matchScore}% Match
+                                <Sparkles className="w-3 h-3" /> {Number(applicant.matchScore ?? applicant.aiMatchScore ?? 0)}% Match
                               </span>
                             </td>
                             <td className="py-3.5 px-4">
-                              <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                                {applicant.status}
-                              </span>
+                              <select
+                                value={normalizePipelineStatus(applicant.status)}
+                                disabled={String(statusUpdatingId) === String(applicant.id)}
+                                onChange={(event) => {
+                                  const nextStatus = event.target.value;
+                                  if (nextStatus === 'Interview') {
+                                    setStatusError('');
+                                    setSelectedApplicant(applicant);
+                                    setInterviewForm({ date: '', time: '', type: 'Online', location: '', meetingLink: '', instructions: '' });
+                                    setShowInterviewModal(true);
+                                    return;
+                                  }
+                                  updateCandidateStatus(applicant.id, nextStatus);
+                                }}
+                                aria-label={`Hiring status for ${applicant.name || 'applicant'}`}
+                                className={`min-w-[150px] rounded-full px-2.5 py-1.5 text-[10px] font-semibold shadow-sm outline-none ring-0 disabled:cursor-wait disabled:opacity-60 ${pipelineStatusStyles[normalizePipelineStatus(applicant.status)] || 'bg-slate-100 text-slate-600 border border-slate-200'}`}
+                              >
+                                {pipelineStatusOptions.map((option) => (
+                                  <option key={option.value} value={option.value} className="bg-white text-slate-800">
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
                             </td>
                             <td className="py-3.5 px-4 text-right space-x-2">
                               <button 
@@ -586,8 +958,13 @@ const EmployerDashboard = () => {
                 <Download className="w-4 h-4" /> Download CV
               </a>
               <button 
-                onClick={() => { if (selectedApplicant.status === 'Shortlisted') setShowInterviewModal(true); }}
-                disabled={selectedApplicant.status !== 'Shortlisted'}
+                onClick={() => {
+                  if (normalizePipelineStatus(selectedApplicant.status) === 'Shortlisted') {
+                    setStatusError('');
+                    setShowInterviewModal(true);
+                  }
+                }}
+                disabled={normalizePipelineStatus(selectedApplicant.status) !== 'Shortlisted'}
                 className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-semibold flex items-center justify-center gap-1.5 hover:bg-blue-700 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Calendar className="w-4 h-4" /> Schedule Interview
@@ -601,12 +978,13 @@ const EmployerDashboard = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
           <form onSubmit={handleScheduleInterview} className="w-full max-w-md space-y-4 rounded-3xl bg-white p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-wider text-blue-600">Interview invitation</p><h3 className="mt-1 text-xl font-black text-slate-900">Schedule Interview</h3><p className="mt-1 text-sm text-slate-500">{selectedApplicant.jobTitle} · {selectedApplicant.name}</p></div><button type="button" onClick={() => setShowInterviewModal(false)} className="text-slate-400"><X className="h-5 w-5" /></button></div>
+            {statusError && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">{statusError}</p>}
             <div className="grid gap-3 sm:grid-cols-2"><label className="text-xs font-bold text-slate-600">Date<input required type="date" value={interviewForm.date} onChange={(event) => setInterviewForm({ ...interviewForm, date: event.target.value })} className="mt-1 min-h-10 w-full rounded-xl border border-slate-200 px-3" /></label><label className="text-xs font-bold text-slate-600">Time<input required type="time" value={interviewForm.time} onChange={(event) => setInterviewForm({ ...interviewForm, time: event.target.value })} className="mt-1 min-h-10 w-full rounded-xl border border-slate-200 px-3" /></label></div>
             <label className="block text-xs font-bold text-slate-600">Interview type<select value={interviewForm.type} onChange={(event) => setInterviewForm({ ...interviewForm, type: event.target.value })} className="mt-1 min-h-10 w-full rounded-xl border border-slate-200 px-3"><option>Online</option><option>In-person</option><option>Phone</option></select></label>
-            {interviewForm.type === 'Online' && <label className="block text-xs font-bold text-slate-600">Meeting link<input required value={interviewForm.meetingLink} onChange={(event) => setInterviewForm({ ...interviewForm, meetingLink: event.target.value })} placeholder="https://" className="mt-1 min-h-10 w-full rounded-xl border border-slate-200 px-3" /></label>}
-            {interviewForm.type === 'In-person' && <label className="block text-xs font-bold text-slate-600">Location<input required value={interviewForm.location} onChange={(event) => setInterviewForm({ ...interviewForm, location: event.target.value })} className="mt-1 min-h-10 w-full rounded-xl border border-slate-200 px-3" /></label>}
+            {interviewForm.type === 'Online' && <label className="block text-xs font-bold text-slate-600">Meeting link (optional)<input value={interviewForm.meetingLink} onChange={(event) => setInterviewForm({ ...interviewForm, meetingLink: event.target.value })} placeholder="https://" className="mt-1 min-h-10 w-full rounded-xl border border-slate-200 px-3" /></label>}
+            {interviewForm.type === 'In-person' && <label className="block text-xs font-bold text-slate-600">Location (optional)<input value={interviewForm.location} onChange={(event) => setInterviewForm({ ...interviewForm, location: event.target.value })} className="mt-1 min-h-10 w-full rounded-xl border border-slate-200 px-3" /></label>}
             <label className="block text-xs font-bold text-slate-600">Instructions<textarea value={interviewForm.instructions} onChange={(event) => setInterviewForm({ ...interviewForm, instructions: event.target.value })} rows={3} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2" /></label>
-            <div className="flex justify-end gap-3"><button type="button" onClick={() => setShowInterviewModal(false)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-600">Cancel</button><button type="submit" className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white">Schedule Interview</button></div>
+            <div className="flex justify-end gap-3"><button type="button" onClick={() => setShowInterviewModal(false)} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-600">Cancel</button><button type="submit" disabled={String(statusUpdatingId) === String(selectedApplicant.id)} className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-60">{String(statusUpdatingId) === String(selectedApplicant.id) ? 'Scheduling…' : 'Schedule Interview'}</button></div>
           </form>
         </div>
       )}
@@ -700,7 +1078,7 @@ const EmployerDashboard = () => {
 
               <div>
                 <label className="font-semibold block mb-1">Application Deadline</label>
-                <input type="date" value={newJob.application_deadline} onChange={(e) => setNewJob({ ...newJob, application_deadline: e.target.value })} className="w-full p-2.5 rounded-xl border dark:bg-slate-800 dark:border-slate-700 outline-none" />
+                <input type="date" required value={newJob.application_deadline} onChange={(e) => setNewJob({ ...newJob, application_deadline: e.target.value })} className="w-full p-2.5 rounded-xl border dark:bg-slate-800 dark:border-slate-700 outline-none" />
               </div>
 
               <div>

@@ -3,16 +3,11 @@ import { Link, useNavigate } from 'react-router-dom';
 
 import peopleImg from '../images/peoples.jpg';
 import homeImg from '../images/home.jpg';
+import aboutHeroImg from '../images/ab out.jpg';
 import TrustedBy from '../../components/home/TrustedBy';
+import HowItWorksCards from '../../components/HowItWorksCards';
 
-const heroImages = [peopleImg, homeImg];
-
-const howItWorks = [
-  { title: 'Create Account', text: 'Set up your talent or company profile in minutes.' },
-  { title: 'Complete Profile', text: 'Add the skills, experience, or roles that matter to you.' },
-  { title: 'AI Matching', text: 'Our matching engine compares fit across the right signals.' },
-  { title: 'Apply / Hire', text: 'Take the next step with more context and less friction.' },
-];
+const heroImages = [peopleImg, homeImg, aboutHeroImg];
 
 const aiFeatures = [
   ['Semantic Skill Extraction', 'Analyzes real demonstrated expertise rather than relying on exact keyword phrasing.'],
@@ -127,20 +122,22 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-white text-slate-800 font-sans">
-      <section className="bg-[#f1f6ff] px-5 py-4 text-center sm:px-8 sm:py-6" aria-label="AI job matching hero">
-        <div className="mx-auto max-w-5xl">
-          <p className="mb-2 inline-flex rounded-full border border-blue-200 bg-blue-100/70 px-3 py-1 text-[0.55rem] font-bold tracking-wide text-blue-700 sm:text-[0.65rem]">
-            #1 Ethiopian AI-Powered Tech Career Platform
-          </p>
-          <h1 className="min-h-[3.5rem] text-2xl font-black leading-[1.08] tracking-tight text-[#102756] sm:min-h-0 sm:text-3xl lg:text-4xl">
-            {typedHeadline}
-            {typedHeadline.length < headline.length && <span className="ml-1 text-blue-600" aria-hidden="true">|</span>}
-          </h1>
-        </div>
-      </section>
-      <section className="flex w-full justify-end overflow-hidden bg-white" aria-label="AI job matching team">
-        <div className="relative mr-0 block h-[360px] w-full sm:h-[520px] lg:h-[700px] lg:w-[86%]">
-          {heroImages.map((image, index) => <img key={image} src={image} alt="Team using AI for job matching" className={`absolute inset-0 h-full w-full object-cover object-[center_62%] transition-all duration-1000 ease-in-out ${index === activeHeroImage ? 'scale-[1.08] opacity-100 lg:scale-[1.1]' : 'scale-[1.13] opacity-0 lg:scale-[1.15]'}`} />)}
+      <section className="relative m-0 w-full overflow-hidden bg-slate-50 p-0" aria-label="AI job matching hero">
+        <div className="relative m-0 h-[360px] w-full overflow-hidden bg-slate-50 p-0 sm:h-[440px] md:h-[500px] lg:h-[540px]">
+          {heroImages.map((image, index) => <img key={image} src={image} alt="Team using AI for job matching" className={`absolute inset-0 h-full w-full object-cover object-top transition-opacity duration-1000 ease-in-out ${index === activeHeroImage ? 'opacity-100' : 'opacity-0'}`} />)}
+          <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-gradient-to-b from-slate-900/25 via-slate-800/10 to-slate-900/30" />
+          <div className="absolute inset-x-0 top-4 z-10 px-4 text-center sm:top-6">
+            <div className="mx-auto flex max-w-5xl flex-col items-center">
+              <p className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-white/40 bg-white/15 px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-white shadow-lg backdrop-blur-sm sm:text-xs">
+                <span aria-hidden="true">✨</span>
+                <span>#1 Ethiopian AI-Powered Tech Career Platform</span>
+              </p>
+              <h1 className="min-h-[2.5em] max-w-5xl text-[clamp(2rem,4vw,5rem)] font-black leading-[0.9] tracking-[-0.06em] text-white drop-shadow-[0_8px_28px_rgba(15,23,42,0.45)]">
+                {typedHeadline}
+                {typedHeadline.length < headline.length && <span className="ml-1 text-sky-200" aria-hidden="true">|</span>}
+              </h1>
+            </div>
+          </div>
         </div>
       </section>
       <TrustedBy />
@@ -158,19 +155,7 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 sm:gap-6 lg:mt-16 lg:grid-cols-4 lg:gap-8 xl:gap-10">
-            {howItWorks.map(({ title, text }) => (
-              <div
-                key={title}
-                className="card-floating group relative flex min-h-[240px] flex-col justify-between text-left sm:min-h-[260px] lg:min-h-[350px] xl:min-h-[360px]"
-              >
-                <div className="max-w-full">
-                  <h3 className="mb-3 max-w-full break-words text-xl font-extrabold leading-tight tracking-tight text-slate-900 sm:text-2xl lg:text-2xl xl:text-3xl">{title}</h3>
-                  <p className="max-w-full break-words text-sm leading-relaxed text-slate-600 sm:text-base lg:text-lg">{text}</p>
-                </div>
-              </div>
-            ))}
-          </div>
+          <HowItWorksCards className="mt-12 lg:mt-16" interactive />
         </div>
       </section>
 

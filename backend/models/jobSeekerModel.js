@@ -118,6 +118,8 @@ async function getApplications(userId) {
   const [rows] = await db.execute(
     `SELECT a.id, a.job_id, a.status, a.ai_match_score, a.skills_match_score, a.experience_match_score,
             a.education_match_score, a.resume_snapshot, a.seeker_cover_letter, a.applied_at,
+            i.id AS interview_id, i.scheduled_at AS interview_scheduled_at,
+            i.interview_status, i.interview_type, i.interview_url,
             j.title, j.location, j.work_mode, j.job_type, j.description,
             COALESCE(j.company_name, u.full_name, 'Employer company') AS company_name,
             c.file_name AS resume_file_name, c.file_url AS resume_file_url
@@ -125,6 +127,7 @@ async function getApplications(userId) {
      JOIN jobs j ON j.id = a.job_id
      JOIN users u ON u.id = j.employer_id
      LEFT JOIN cvs c ON c.id = a.cv_id
+     LEFT JOIN interviews i ON i.application_id = a.id
      WHERE a.job_seeker_id = ? ORDER BY a.applied_at DESC`,
     [userId]
   );
@@ -156,6 +159,15 @@ async function getApplications(userId) {
       submittedResumeName: snapshot.fileName || application.resume_file_name,
       submittedResumeUrl: snapshot.fileUrl || application.resume_file_url,
       coverLetter: application.seeker_cover_letter,
+      interview: application.interview_id
+        ? {
+            id: application.interview_id,
+            status: application.interview_status,
+            scheduledAt: application.interview_scheduled_at,
+            type: application.interview_type,
+            meetingUrl: application.interview_url,
+          }
+        : null,
       job: { id: application.job_id, title: application.title, company: application.company_name, location: application.location, description: application.description, job_type: application.job_type, work_mode: application.work_mode },
     };
   });

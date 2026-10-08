@@ -1,6 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Loader2, Sparkles, RefreshCw, FileText, CheckCircle2, Pencil, Save, Briefcase, GraduationCap, Mail, Phone, MapPin, ArrowRight } from 'lucide-react';
+import { Loader2, RefreshCw, FileText, Pencil, Save, Briefcase, GraduationCap, Mail, Phone, MapPin, ArrowRight } from 'lucide-react';
+
+const flattenSkillNames = (value) => {
+  if (Array.isArray(value)) return value.flatMap(flattenSkillNames);
+  if (typeof value === 'string') return [value];
+  if (!value || typeof value !== 'object') return [];
+  if (value.skill_name || value.name) return [value.skill_name || value.name];
+  return Object.values(value).flatMap(flattenSkillNames);
+};
+
+const cleanLocation = (value) => String(value || '')
+  .replace(/^\s*address\s*:\s*/i, '')
+  .replace(/^\[|\]$/g, '')
+  .trim();
 
 const AiCvAnalysis = () => {
   const navigate = useNavigate();
@@ -121,9 +134,9 @@ const AiCvAnalysis = () => {
   const headline = analysis?.headline || analysis?.professional_title;
   const firstEducation = analysis?.education?.[0];
   const firstExperience = analysis?.experience?.[0];
-  const matchScore = analysis?.matchScore ?? analysis?.keywordMatch;
   const skillLabel = (skill) => typeof skill === 'string' ? skill : skill?.skill_name || skill?.name || '';
-  const visibleSkills = skills.filter((skill) => skillLabel(skill));
+  const visibleSkills = (Array.isArray(skills) ? skills : flattenSkillNames(skills)).filter((skill) => skillLabel(skill));
+  const displayLocation = cleanLocation(analysis?.location);
 
   return (
     <div className="min-h-screen w-full bg-slate-100/70 flex items-center justify-center p-4 sm:p-6 lg:p-10">
@@ -149,23 +162,13 @@ const AiCvAnalysis = () => {
         {!analyzing && isSuccess && analysis && (
           <div className="text-left">
             <div className="flex items-center gap-4 border-b border-slate-100 pb-5">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-600"><CheckCircle2 className="h-6 w-6" /></div>
               <div><h1 className="text-2xl font-extrabold text-slate-950">Your CV was analyzed successfully</h1><p className="mt-1 text-sm text-slate-500">Review your extracted profile details below. You can edit any field before confirming.</p></div>
             </div>
-            <div className="grid grid-cols-1 gap-8 pt-8 lg:grid-cols-12">
-              <div className="space-y-6 lg:col-span-7">
+            <div className="grid grid-cols-1 gap-8 pt-8">
+              <div className="mx-auto w-full max-w-4xl space-y-6">
                 <section className="space-y-4 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-6">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-emerald-700">
-                      <CheckCircle2 className="h-3.5 w-3.5" />
-                      Verified profile data
-                    </div>
-                    <div className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-blue-700">
-                      {typeof matchScore === 'number' ? `${matchScore}% match` : 'Profile ready'}
-                    </div>
-                  </div>
                   <div className="flex items-center justify-between"><span className="text-xs font-bold uppercase tracking-wider text-slate-400">Candidate profile</span><button type="button" onClick={() => setEditing((value) => !value)} className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-800">{editing ? <Save className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}{editing ? 'Done' : 'Edit fields'}</button></div>
-                  {editing ? <div className="space-y-3">{[['firstName', 'First name'], ['lastName', 'Last name'], ['email', 'Email'], ['phone', 'Phone'], ['location', 'Location'], ['headline', 'Headline']].map(([field, label]) => <label key={field} className="block text-xs font-bold text-slate-600">{label}<input value={analysis[field] || ''} onChange={(event) => updateField(field, event.target.value)} className="mt-1 w-full rounded-lg border border-blue-300 bg-white px-3 py-2 text-sm font-normal text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-200" /></label>)}<label className="block text-xs font-bold text-slate-600">Add skill<input onKeyDown={addSkill} placeholder="Type a skill and press Enter" className="mt-1 w-full rounded-lg border border-blue-300 bg-white px-3 py-2 text-sm font-normal text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-200" /></label><div className="flex flex-wrap gap-2">{visibleSkills.map((skill, index) => <button type="button" key={`${skillLabel(skill)}-${index}`} onClick={() => setSkills((current) => current.filter((_, itemIndex) => itemIndex !== index))} className="rounded-lg border border-blue-200 bg-white px-3 py-1 text-xs font-bold text-blue-700">{skillLabel(skill)} x</button>)}</div></div> : <><h2 className="text-2xl font-extrabold text-slate-900">{displayName}</h2><div className="grid gap-3 pt-2 text-sm text-slate-600 sm:grid-cols-2">{analysis.email && <div className="flex min-w-0 items-center gap-2"><Mail className="h-4 w-4 shrink-0 text-slate-400" /><span className="truncate">{analysis.email}</span></div>}{analysis.phone && <div className="flex items-center gap-2"><FileText className="h-4 w-4 shrink-0 text-slate-400" /><span>{analysis.phone}</span></div>}{analysis.location && <div className="flex items-center gap-2"><MapPin className="h-4 w-4 shrink-0 text-slate-400" /><span>{analysis.location}</span></div>}</div>{headline && <p className="border-t border-slate-200 pt-3 text-sm font-semibold text-slate-700">{headline}</p>}</>}
+                  {editing ? <div className="space-y-3">{[['firstName', 'First name'], ['lastName', 'Last name'], ['email', 'Email'], ['phone', 'Phone'], ['location', 'Location'], ['headline', 'Headline']].map(([field, label]) => <label key={field} className="block text-xs font-bold text-slate-600">{label}<input value={analysis[field] || ''} onChange={(event) => updateField(field, event.target.value)} className="mt-1 w-full rounded-lg border border-blue-300 bg-white px-3 py-2 text-sm font-normal text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-200" /></label>)}<label className="block text-xs font-bold text-slate-600">Add skill<input onKeyDown={addSkill} placeholder="Type a skill and press Enter" className="mt-1 w-full rounded-lg border border-blue-300 bg-white px-3 py-2 text-sm font-normal text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-200" /></label><div className="flex flex-wrap gap-2">{visibleSkills.map((skill, index) => <button type="button" key={`${skillLabel(skill)}-${index}`} onClick={() => setSkills((current) => current.filter((_, itemIndex) => itemIndex !== index))} className="rounded-lg border border-blue-200 bg-white px-3 py-1 text-xs font-bold text-blue-700">{skillLabel(skill)} x</button>)}</div></div> : <><h2 className="text-2xl font-extrabold text-slate-900">{displayName}</h2><div className="grid gap-3 pt-2 text-sm text-slate-600 sm:grid-cols-2">{analysis.email && <div className="flex min-w-0 items-center gap-2"><Mail className="h-4 w-4 shrink-0 text-slate-400" /><span className="truncate">{analysis.email}</span></div>}{analysis.phone && <div className="flex items-center gap-2"><FileText className="h-4 w-4 shrink-0 text-slate-400" /><span>{analysis.phone}</span></div>}{analysis.location && <div className="flex items-center gap-2"><MapPin className="h-4 w-4 shrink-0 text-slate-400" /><span>{displayLocation}</span></div>}</div>{headline && <p className="border-t border-slate-200 pt-3 text-sm font-semibold text-slate-700">{headline}</p>}</>}
                 </section>
 
                 <div className="space-y-4">{firstEducation && (firstEducation.degree || firstEducation.school_name || firstEducation.institution) && <section className="rounded-xl border border-slate-200/80 bg-white p-5"><div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-400"><GraduationCap className="h-4 w-4 text-blue-600" />Education</div><p className="mt-2 text-sm font-bold text-slate-800">{[firstEducation.degree, firstEducation.field_of_study].filter(Boolean).join(' in ')}</p><p className="mt-1 text-xs text-slate-500">{[firstEducation.school_name || firstEducation.institution, firstEducation.graduationYear || firstEducation.end_date].filter(Boolean).join(' • ')}</p></section>}{firstExperience && (firstExperience.job_title || firstExperience.role || firstExperience.company_name || firstExperience.company) && <section className="rounded-xl border border-slate-200/80 bg-white p-5"><div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-400"><Briefcase className="h-4 w-4 text-emerald-600" />Experience</div><p className="mt-2 text-sm font-bold text-slate-800">{firstExperience.job_title || firstExperience.role}</p><p className="mt-1 text-xs text-slate-500">{[firstExperience.company_name || firstExperience.company, firstExperience.duration].filter(Boolean).join(' • ')}</p>{(firstExperience.responsibilities?.length || firstExperience.description) && <ul className="mt-3 space-y-1 text-xs leading-5 text-slate-600">{(firstExperience.responsibilities?.length ? firstExperience.responsibilities : [firstExperience.description]).slice(0, 3).map((item, index) => <li key={index}>• {item}</li>)}</ul>}</section>}</div>
@@ -173,10 +176,10 @@ const AiCvAnalysis = () => {
                 <section><span className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-400">Verified skills</span><div className="flex flex-wrap gap-2">{visibleSkills.length ? visibleSkills.map((skill, index) => <span key={`${skillLabel(skill)}-${index}`} className="rounded-lg border border-slate-200 bg-slate-100 px-3 py-1.5 text-xs font-semibold capitalize text-slate-800">{skillLabel(skill)}</span>) : <span className="text-sm text-slate-500">No verified skills detected yet.</span>}</div></section>
               </div>
 
-              <div className="flex flex-col justify-between space-y-6 lg:col-span-5">
-                <section className="space-y-4 rounded-2xl border border-blue-200/80 bg-linear-to-br from-blue-50 via-indigo-50/40 to-emerald-50/40 p-6"><div className="flex items-center justify-between"><span className="text-xs font-bold uppercase tracking-wider text-blue-700">AI job market compatibility</span><span className="rounded-lg bg-blue-100 p-1.5 text-blue-700"><Sparkles className="h-4 w-4" /></span></div><div className="flex items-baseline gap-2"><span className="text-5xl font-extrabold tracking-tight text-blue-600">{matchScore ?? '--'}{matchScore !== undefined && <span>%</span>}</span><span className="text-xs font-semibold text-slate-500">compatibility score</span></div><p className="text-xs leading-relaxed text-slate-600">Calculated from normalized candidate skills against published job requirements.</p><div className="space-y-2 border-t border-blue-200/60 pt-3 text-xs font-medium text-slate-700"><div className="flex items-start gap-2"><span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" /><span>{visibleSkills.length ? `${visibleSkills.length} verified skills available for matching.` : 'Add skills to improve matching precision.'}</span></div><div className="flex items-start gap-2"><span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" /><span>{firstExperience ? 'Professional experience is included in the profile.' : 'Education and skills can still support entry-level matches.'}</span></div></div></section>
-                <div className="space-y-3 pt-2"><button type="button" onClick={continueToProfile} disabled={saving} className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-2xl bg-blue-600 px-6 py-4 text-base font-bold text-white shadow-lg shadow-blue-500/25 transition-all hover:bg-blue-700 hover:shadow-blue-500/40 active:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-75">{saving ? <><Loader2 size={18} className="animate-spin" /> Preparing profile...</> : <><span>Save and Continue</span><ArrowRight className="h-5 w-5" /></>}</button><div className="grid grid-cols-2 gap-3 pt-1"><button type="button" onClick={() => setEditing(true)} className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50">Edit fields</button><button type="button" onClick={handleReplace} className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50"><RefreshCw className="h-3.5 w-3.5" />Replace CV</button></div></div>
-              </div>
+            </div>
+            <div className="mx-auto mt-8 w-full max-w-4xl space-y-3">
+              <button type="button" onClick={continueToProfile} disabled={saving} className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-2xl bg-blue-600 px-6 py-4 text-base font-bold text-white shadow-lg shadow-blue-500/25 transition-all hover:bg-blue-700 hover:shadow-blue-500/40 active:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-75">{saving ? <><Loader2 size={18} className="animate-spin" /> Preparing profile...</> : <><span>Save and Continue</span><ArrowRight className="h-5 w-5" /></>}</button>
+              <div className="grid grid-cols-2 gap-3 pt-1"><button type="button" onClick={() => setEditing(true)} className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50">Edit fields</button><button type="button" onClick={handleReplace} className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50"><RefreshCw className="h-3.5 w-3.5" />Replace CV</button></div>
             </div>
             </div>
         )}
