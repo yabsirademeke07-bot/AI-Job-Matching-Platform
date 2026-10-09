@@ -89,8 +89,12 @@ async function getSeekerNotifications(req, res) {
   try {
     const userId = req.user.id;
     const [notifications] = await db.execute(
-      `SELECT id, type, title, message, action_url, related_job_id, is_read, created_at
-       FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 20`,
+      `SELECT n.id, n.type, n.title, n.message, n.action_url, n.reference_type, n.reference_id,
+          n.related_job_id, n.related_application_id, n.related_user_id,
+          related_user.full_name AS related_user_name, n.is_read, n.created_at
+       FROM notifications n
+       LEFT JOIN users related_user ON related_user.id = n.related_user_id
+       WHERE n.user_id = ? ORDER BY n.created_at DESC LIMIT 20`,
       [userId]
     );
     const [[unread]] = await db.execute(

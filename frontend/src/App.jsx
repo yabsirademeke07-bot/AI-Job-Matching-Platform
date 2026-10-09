@@ -83,7 +83,7 @@ function AppLayout() {
           {/* ========================================== */}
           <Route path="/" element={<Home />} />
           <Route path="/jobs" element={<ExploreJobs />} />
-          <Route path="/explore-jobs" element={<ExploreJobs />} />
+          <Route path="/explore-jobs" element={new URLSearchParams(location.search).get('from') === 'dashboard' ? <ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}>{withSeekerSidebar(<ExploreJobs />)}</ProtectedRoute> : <ExploreJobs />} />
 
           <Route path="/job-details/:id" element={<JobDetailsPage />} />
           <Route path="/jobs/:id" element={<JobDetailsPage />} />
@@ -201,7 +201,7 @@ function AppLayout() {
             path="/seeker-dashboard"
             element={
               <ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}>
-                <JobSeekerDashboard />
+                {withSeekerSidebar(<JobSeekerDashboard />)}
               </ProtectedRoute>
             }
           />
@@ -209,7 +209,7 @@ function AppLayout() {
             path="/seeker/dashboard"
             element={
               <ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}>
-                <JobSeekerDashboard />
+                {withSeekerSidebar(<JobSeekerDashboard />)}
               </ProtectedRoute>
             }
           />
@@ -221,7 +221,7 @@ function AppLayout() {
             path="/seekerDashboard"
             element={
               <ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}>
-                <JobSeekerDashboard />
+                {withSeekerSidebar(<JobSeekerDashboard />)}
               </ProtectedRoute>
             }
           />
@@ -229,7 +229,7 @@ function AppLayout() {
             path="/dashboard"
             element={
               <ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}>
-                <JobSeekerDashboard />
+                {withSeekerSidebar(<JobSeekerDashboard />)}
               </ProtectedRoute>
             }
           />

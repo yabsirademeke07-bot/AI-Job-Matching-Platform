@@ -2,7 +2,7 @@ const crypto = require('crypto');
 const { sendEmailOtp } = require('./notificationService');
 
 const MAX_RESENDS_PER_HOUR = 5;
-const OTP_EXPIRY_MINUTES = 1;
+const OTP_EXPIRY_MINUTES = 3;
 
 const createOtp = () => crypto.randomInt(100000, 1000000).toString();
 

@@ -43,8 +43,6 @@ const fallbackJobs = [
 
 export default function Home() {
   const navigate = useNavigate();
-  const headline = 'Find Your Dream Tech Job With AI Matching Precision';
-  const [typedHeadline, setTypedHeadline] = useState('');
   const [searchTitle, setSearchTitle] = useState('');
   const [searchError, setSearchError] = useState('');
   const [publishedJobs] = useState(() => {
@@ -58,20 +56,6 @@ export default function Home() {
   const [visibleJobs, setVisibleJobs] = useState(allJobs);
   const [activeQuery, setActiveQuery] = useState('');
   const [activeHeroImage, setActiveHeroImage] = useState(0);
-
-  useEffect(() => {
-    let characterIndex = 0;
-    const timer = window.setInterval(() => {
-      characterIndex += 1;
-      setTypedHeadline(headline.slice(0, characterIndex));
-
-      if (characterIndex >= headline.length) {
-        window.clearInterval(timer);
-      }
-    }, 55);
-
-    return () => window.clearInterval(timer);
-  }, []);
 
   useEffect(() => {
     const rotation = window.setInterval(() => {
@@ -125,16 +109,11 @@ export default function Home() {
       <section className="relative m-0 w-full overflow-hidden bg-slate-50 p-0" aria-label="AI job matching hero">
         <div className="relative m-0 h-[360px] w-full overflow-hidden bg-slate-50 p-0 sm:h-[440px] md:h-[500px] lg:h-[540px]">
           {heroImages.map((image, index) => <img key={image} src={image} alt="Team using AI for job matching" className={`absolute inset-0 h-full w-full object-cover object-top transition-opacity duration-1000 ease-in-out ${index === activeHeroImage ? 'opacity-100' : 'opacity-0'}`} />)}
-          <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-gradient-to-b from-slate-900/25 via-slate-800/10 to-slate-900/30" />
-          <div className="absolute inset-x-0 top-4 z-10 px-4 text-center sm:top-6">
-            <div className="mx-auto flex max-w-5xl flex-col items-center">
-              <p className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-white/40 bg-white/15 px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-white shadow-lg backdrop-blur-sm sm:text-xs">
-                <span aria-hidden="true">✨</span>
-                <span>#1 Ethiopian AI-Powered Tech Career Platform</span>
-              </p>
-              <h1 className="min-h-[2.5em] max-w-5xl text-[clamp(2rem,4vw,5rem)] font-black leading-[0.9] tracking-[-0.06em] text-white drop-shadow-[0_8px_28px_rgba(15,23,42,0.45)]">
-                {typedHeadline}
-                {typedHeadline.length < headline.length && <span className="ml-1 text-sky-200" aria-hidden="true">|</span>}
+          <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-linear-to-r from-slate-950/55 via-slate-900/25 to-slate-900/5" />
+          <div className="absolute inset-0 z-10 flex items-start px-5 pt-5 text-center sm:px-8 sm:pt-7 md:items-start md:px-12 md:pt-24 md:text-left lg:px-16">
+            <div className="mx-auto flex max-w-6xl flex-col items-center md:mx-0 md:items-start">
+              <h1 className="max-w-225 text-balance text-[clamp(2rem,4vw,5rem)] font-black leading-[0.98] tracking-normal text-white drop-shadow-[0_8px_28px_rgba(15,23,42,0.45)]">
+                Find Your Dream Tech Job With AI Matching Precision
               </h1>
             </div>
           </div>

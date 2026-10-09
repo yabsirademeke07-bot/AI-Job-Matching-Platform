@@ -57,6 +57,7 @@ const initiateLoginOtp = async (req, res) => {
   logOtpRequest(req);
   const cleanEmail = String(req.body.email || '').trim().toLowerCase();
   if (!cleanEmail) return res.status(400).json({ success: false, message: 'Email is required.' });
+  let otpPurpose = 'login';
 
   try {
     const user = await findLoginUser(cleanEmail);
@@ -65,11 +66,13 @@ const initiateLoginOtp = async (req, res) => {
       return res.status(401).json({ success: false, message: 'Invalid email or password.' });
     }
     if (!user.is_verified) {
-      const otpResult = await issueOtp({ dbClient: db, email: cleanEmail, phone: user.phone, purpose: 'registration', expiresInMinutes: 1 });
+      otpPurpose = 'registration';
+      const otpResult = await issueOtp({ dbClient: db, email: cleanEmail, phone: user.phone, purpose: 'registration' });
       const payload = {
         success: false,
         requires_verification: true,
         email: cleanEmail,
+        otpExpiresAt: otpResult.expiresAt,
         emailDelivered: otpResult.delivery.email,
         emailError: otpResult.delivery.emailError,
         message: 'Your account is not verified. A new verification code has been sent to your email.'
@@ -78,11 +81,12 @@ const initiateLoginOtp = async (req, res) => {
       return res.status(403).json(payload);
     }
 
-    const otpResult = await issueOtp({ dbClient: db, email: cleanEmail, phone: user.phone, purpose: 'login', expiresInMinutes: 1 });
+    const otpResult = await issueOtp({ dbClient: db, email: cleanEmail, phone: user.phone, purpose: 'login' });
     const payload = {
       success: true,
       requires_otp: true,
       email: cleanEmail,
+      otpExpiresAt: otpResult.expiresAt,
       emailDelivered: otpResult.delivery.email,
       emailError: otpResult.delivery.emailError,
       message: 'OTP verification code sent to your email.',
@@ -95,9 +99,9 @@ const initiateLoginOtp = async (req, res) => {
       try {
         const [activeOtps] = await db.query(
           `SELECT expires_at FROM otps
-           WHERE email = ? AND purpose = 'login' AND is_used = 0
+           WHERE email = ? AND purpose = ? AND is_used = 0
            ORDER BY id DESC LIMIT 1`,
-          [cleanEmail]
+          [cleanEmail, otpPurpose]
         );
         if (activeOtps.length > 0 && new Date(activeOtps[0].expires_at).getTime() > Date.now()) {
           const expiresAt = new Date(activeOtps[0].expires_at).getTime();
@@ -106,8 +110,10 @@ const initiateLoginOtp = async (req, res) => {
             requires_otp: true,
             active_code: true,
             email: cleanEmail,
+            purpose: otpPurpose,
+            otpExpiresAt: activeOtps[0].expires_at,
             retry_after_seconds: Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000)),
-            message: 'A valid login code is already active. Enter that code to continue.',
+            message: 'A valid verification code is already active. Enter that code to continue.',
           });
         }
       } catch (lookupError) {
@@ -313,6 +319,7 @@ router.post('/signup', (req, _res, next) => {
       email: cleanEmail,
       userId: targetUserId,
       role: selectedRole,
+      otpExpiresAt: otpResult.expiresAt,
       emailDelivered: otpResult.delivery.email,
       emailError: otpResult.delivery.emailError,
       message: otpResult.delivery.email
@@ -547,7 +554,8 @@ router.post('/verify-otp', async (req, res) => {
 // ==========================================
 const resendOtp = async (req, res) => {
   logOtpRequest(req);
-  const { email, purpose = 'registration' } = req.body;
+  const email = req.body.email;
+  const purpose = ['login', 'registration', 'email-verification'].includes(req.body.purpose) ? req.body.purpose : 'registration';
 
   if (!email) {
     return res.status(400).json({ success: false, message: 'Email is required / እባክዎ ኢሜይል ያስገቡ' });
@@ -559,12 +567,13 @@ const resendOtp = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Account not found.' });
     }
     const cleanEmail = email.trim().toLowerCase();
-    const otpResult = await issueOtp({ dbClient: db, email: cleanEmail, phone: users[0].phone, purpose, expiresInMinutes: 1 });
+    const otpResult = await issueOtp({ dbClient: db, email: cleanEmail, phone: users[0].phone, purpose });
     const { delivery } = otpResult;
 
     if (!delivery.email) {
       const response = {
         success: true,
+        otpExpiresAt: otpResult.expiresAt,
         delivery: { emailSent: false, smsSent: delivery.sms },
         emailDelivered: false,
         emailError: delivery.emailError,
@@ -576,6 +585,7 @@ const resendOtp = async (req, res) => {
 
     const response = {
       success: true,
+      otpExpiresAt: otpResult.expiresAt,
       delivery: { emailSent: true, smsSent: delivery.sms },
       emailDelivered: true,
       message: 'A new OTP has been sent to your email.',
@@ -630,11 +640,11 @@ router.post('/forgot-password', async (req, res) => {
       email,
       phone: user.phone,
       purpose: 'password-reset',
-      expiresInMinutes: 1,
     });
 
     const response = {
       success: true,
+      otpExpiresAt: otpResult.expiresAt,
       message: 'If an account exists for this email, a verification code has been sent.'
     };
     if (process.env.NODE_ENV === 'development') response.devOtp = otpResult.otpCode;

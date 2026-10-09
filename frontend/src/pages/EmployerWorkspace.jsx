@@ -560,6 +560,7 @@ export default function EmployerWorkspace() {
   const [jobsLoading, setJobsLoading] = useState(true);
   const [jobsLoadError, setJobsLoadError] = useState("");
   const [applications, setApplications] = useState([]);
+  const [shortlistedCandidates, setShortlistedCandidates] = useState([]);
   const [pipeline, setPipeline] = useState([]);
   const [offers, setOffers] = useState([]);
   const [onboarding, setOnboarding] = useState([]);
@@ -1005,6 +1006,12 @@ export default function EmployerWorkspace() {
         } catch (error) {
           console.error("Unable to load applications for employer jobs:", error);
         }
+        try {
+          const { data } = await api.get("/employer/talent-pool/shortlist");
+          if (mounted) setShortlistedCandidates(data?.candidates || []);
+        } catch (error) {
+          console.error("Unable to load employer shortlist:", error);
+        }
       } catch (error) {
         if (!mounted) return;
         setJobs([]);
@@ -1018,10 +1025,12 @@ export default function EmployerWorkspace() {
     setJobsLoadError("");
     refreshJobs();
     window.addEventListener("focus", refreshJobs);
+    window.addEventListener("employer-talent-pool:updated", refreshJobs);
     const intervalId = window.setInterval(refreshJobs, 10000);
     return () => {
       mounted = false;
       window.removeEventListener("focus", refreshJobs);
+      window.removeEventListener("employer-talent-pool:updated", refreshJobs);
       window.clearInterval(intervalId);
     };
   }, [token]);
@@ -1065,9 +1074,31 @@ export default function EmployerWorkspace() {
       setSelectedJobFilter("all");
     }
   }, [activeJobs, selectedJobFilter]);
-  const filtered = useMemo(
-    () =>
-      applications.filter(
+  const talentPoolShortlistRows = useMemo(() => {
+    const applicationShortlistIds = new Set(
+      applications
+        .filter((item) => normalizePipelineStatus(item.status) === "shortlisted")
+        .map((item) => String(item.candidateId || item.job_seeker_id || "")),
+    );
+    return shortlistedCandidates
+      .filter((candidate) => !applicationShortlistIds.has(String(candidate.candidateId)))
+      .map((candidate) => ({
+        ...candidate,
+        id: `talent-pool-${candidate.candidateId}`,
+        name: candidate.fullName || candidate.candidateName || "Candidate",
+        candidateId: candidate.candidateId,
+        jobTitle: "Talent Pool",
+        status: "shortlisted",
+        matchScore: Number(candidate.aiMatchScore || 0),
+        appliedDate: candidate.savedAt,
+        isTalentPoolShortlist: true,
+      }));
+  }, [applications, shortlistedCandidates]);
+  const filtered = useMemo(() => {
+    const rows = activeFilter === "ALL" || activeFilter === "Shortlisted"
+      ? [...applications, ...talentPoolShortlistRows]
+      : applications;
+    return rows.filter(
         (item) =>
           (!search ||
             `${item.name} ${item.jobTitle}`
@@ -1083,9 +1114,14 @@ export default function EmployerWorkspace() {
             (activeFilter === "Interview" && normalizePipelineStatus(item.status) === "interviewed") ||
             (activeFilter === "Hired" && normalizePipelineStatus(item.status) === "hired")) &&
           Number(item.matchScore || 0) >= minScore,
-      ),
-    [applications, jobs, activeJobs, search, status, activeFilter, minScore],
-  );
+      );
+  }, [applications, jobs, activeJobs, search, status, activeFilter, minScore, talentPoolShortlistRows]);
+  const shortlistedCandidateIds = new Set([
+    ...applications
+      .filter((item) => normalizePipelineStatus(item.status) === "shortlisted")
+      .map((item) => String(item.candidateId || item.job_seeker_id || item.id)),
+    ...shortlistedCandidates.map((candidate) => String(candidate.candidateId)),
+  ]);
   const stats = {
     active: activeJobs.length,
     applicants: applications.length,
@@ -1093,9 +1129,7 @@ export default function EmployerWorkspace() {
     pending: applications.filter(
       (item) => normalizePipelineStatus(item.status) === "pending",
     ).length,
-    shortlisted: applications.filter(
-      (item) => normalizePipelineStatus(item.status) === "shortlisted",
-    ).length,
+    shortlisted: shortlistedCandidateIds.size,
     interviews: applications.filter(
       (item) => normalizePipelineStatus(item.status) === "interviewed",
     ).length,
@@ -1631,7 +1665,7 @@ export default function EmployerWorkspace() {
 
   const renderApplications = (items = filtered) => {
     const filteredCandidates = (items || []).filter((item) => {
-      if (selectedJobFilter === "all") return true;
+      if (selectedJobFilter === "all" || item.isTalentPoolShortlist) return true;
       const itemJobId = String(
         item.job_id ?? item.jobId ?? item.job?.id ?? "",
       );
@@ -1661,7 +1695,7 @@ export default function EmployerWorkspace() {
         <div className="flex flex-col gap-4 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="flex items-center gap-2 text-base font-bold text-slate-900">
-              <span>Recent Applicants & AI Matches</span>
+              <span>Applicants & Shortlisted Talent</span>
               <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700">
                 {filteredCandidates.length}
               </span>
@@ -1726,7 +1760,7 @@ export default function EmployerWorkspace() {
                 <th className="px-5 py-3.5">Candidate</th>
                 <th className="px-4 py-3.5">Applied Job Role</th>
                 <th className="px-4 py-3.5 text-center">AI Match</th>
-                <th className="px-4 py-3.5">Applied Date</th>
+                <th className="px-4 py-3.5">Applied / Saved</th>
                 <th className="px-4 py-3.5">Hiring Status</th>
                 <th className="px-5 py-3.5 text-right">Actions</th>
               </tr>
@@ -1764,8 +1798,8 @@ export default function EmployerWorkspace() {
                     </td>
 
                     <td className="px-4 py-4">
-                      <span className="inline-block rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
-                        {candidate.jobTitle || "General Application"}
+                      <span className={`inline-block rounded-lg px-2.5 py-1 text-xs font-semibold ${candidate.isTalentPoolShortlist ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-700"}`}>
+                        {candidate.isTalentPoolShortlist ? "Talent Pool shortlist" : candidate.jobTitle || "General Application"}
                       </span>
                     </td>
 
@@ -1779,7 +1813,7 @@ export default function EmployerWorkspace() {
                     </td>
 
                     <td className="px-4 py-4 font-medium text-slate-500">
-                      {candidate.appliedDate ||
+                      {candidate.isTalentPoolShortlist ? `Saved ${candidate.appliedDate ? new Date(candidate.appliedDate).toLocaleDateString() : "to shortlist"}` : candidate.appliedDate ||
                         candidate.applied_at ||
                         candidate.created_at ||
                         candidate.createdAt ||
@@ -1787,7 +1821,7 @@ export default function EmployerWorkspace() {
                     </td>
 
                     <td className="px-4 py-4">
-                      <select
+                      {candidate.isTalentPoolShortlist ? <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-1.5 text-[11px] font-bold text-emerald-700">Shortlisted</span> : <select
                         aria-label={`Hiring status for ${candidate.name || "applicant"}`}
                         value={normalizePipelineStatus(candidate.status)}
                         disabled={String(updatingApplicationId) === String(candidate.id)}
@@ -1805,7 +1839,7 @@ export default function EmployerWorkspace() {
                         <option value="interviewed">Interview</option>
                         <option value="hired">Hired</option>
                         <option value="rejected">Rejected</option>
-                      </select>
+                      </select>}
                     </td>
 
                     <td className="px-5 py-4 text-right">
@@ -1827,13 +1861,13 @@ export default function EmployerWorkspace() {
                         >
                           💬
                         </button>
-                        <button
+                        {!candidate.isTalentPoolShortlist && <button
                           onClick={() => updateApplication(candidate.id, "rejected")}
                           className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
                           title="Decline / Reject"
                         >
                           ✕
-                        </button>
+                        </button>}
                       </div>
                     </td>
                   </tr>
@@ -1862,41 +1896,30 @@ export default function EmployerWorkspace() {
   return (
     <>
       <div className={`min-h-[calc(100dvh-5rem)] max-w-full ${shell} flex flex-col sm:min-h-[calc(100dvh-6rem)]`}>
-        {active !== "post" && (
-          <EmployerHeader
-            currentTabTitle={title}
-            breadcrumb={active === "overview" ? "Home / Dashboard" : `Home / ${title}`}
-            showSearch={active !== "profile"}
-            user={user}
-            unreadNotificationsCount={unreadNotificationCount}
-            onToggleSidebar={() => setSidebarOpen((current) => !current)}
-            onSearchClick={() => { setGlobalQuery(""); setGlobalSearchOpen(true); }}
-            onOpenNotifications={() => setActive("notifications")}
-            onOpenMessages={() => setActive("messages")}
-            onLogout={handleHeaderLogout}
-          />
-        )}
+        <EmployerHeader
+          currentTabTitle={title}
+          breadcrumb={active === "overview" ? "Home / Dashboard" : `Home / ${title}`}
+          showSearch={active !== "profile"}
+          user={user}
+          unreadNotificationsCount={unreadNotificationCount}
+          onToggleSidebar={() => setSidebarOpen((current) => !current)}
+          sidebarOpen={sidebarOpen}
+          onSearchClick={() => { setGlobalQuery(""); setGlobalSearchOpen(true); }}
+          onOpenNotifications={() => setActive("notifications")}
+          onOpenMessages={() => setActive("messages")}
+          onLogout={handleHeaderLogout}
+        />
         <div className="flex min-w-0 flex-1">
-          {!standalonePostJob && sidebarOpen && (
-            <button
-              type="button"
-              aria-label="Close navigation"
-              onClick={() => setSidebarOpen(false)}
-              className="fixed inset-0 z-40 bg-slate-950/40 lg:hidden"
-            />
-          )}
-          {!standalonePostJob && (
-            <EmployerSidebar
-              active={active}
-              onSelect={selectStage}
-              onLogout={handleLogout}
-              applicationsCount={applications.length}
-              unreadMessages={unreadMessageCount}
-              isOpen={sidebarOpen}
-              onClose={() => setSidebarOpen(false)}
-              stages={stages}
-            />
-          )}
+          <EmployerSidebar
+            active={active}
+            onSelect={selectStage}
+            onLogout={handleLogout}
+            applicationsCount={applications.length}
+            unreadMessages={unreadMessageCount}
+            isOpen={sidebarOpen}
+            onClose={() => setSidebarOpen(false)}
+            stages={stages}
+          />
           <main className={`min-w-0 max-w-full flex-1 bg-slate-50/50 ${standalonePostJob ? "p-3 sm:p-6 lg:p-10" : "p-3 sm:p-6 lg:p-8"}`}>
             <div className="mx-auto max-w-7xl">
               {active === "overview" ? (
@@ -2657,14 +2680,26 @@ export default function EmployerWorkspace() {
                       </div>
                     )}
 
-                    {wizard < 3 && (
-                      <div className="mt-5 flex justify-end">
-                        <button
-                          onClick={wizard === 1 ? handleContinueToPreview : () => setWizard((value) => value + 1)}
-                          className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-2.5 text-sm font-medium text-white shadow-sm transition-all hover:bg-blue-700 hover:shadow sm:w-auto"
-                        >
-                          Continue <ChevronRight className="h-4 w-4" />
-                        </button>
+                    {(wizard > 1 || wizard < 3) && (
+                      <div className={`mt-5 flex gap-3 ${wizard === 1 ? "justify-end" : "justify-between"}`}>
+                        {wizard > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => setWizard((value) => Math.max(1, value - 1))}
+                            className="flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-6 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50"
+                          >
+                            Back
+                          </button>
+                        )}
+                        {wizard < 3 && (
+                          <button
+                            type="button"
+                            onClick={wizard === 1 ? handleContinueToPreview : () => setWizard((value) => value + 1)}
+                            className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-2.5 text-sm font-medium text-white shadow-sm transition-all hover:bg-blue-700 hover:shadow sm:w-auto"
+                          >
+                            Continue <ChevronRight className="h-4 w-4" />
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -3552,12 +3587,14 @@ export default function EmployerWorkspace() {
               </section>
 
               <div className="mt-6 flex flex-wrap gap-2 border-t border-slate-200 pt-5">
-                <button type="button" onClick={() => updateApplication(selected.id, "shortlisted")} className="rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white">
-                  Shortlist
-                </button>
-                <button type="button" onClick={() => setShowSchedule(true)} className="rounded-xl bg-violet-600 px-4 py-3 text-sm font-bold text-white">
-                  Schedule Interview
-                </button>
+                {!selected.isTalentPoolShortlist && <>
+                  <button type="button" onClick={() => updateApplication(selected.id, "shortlisted")} className="rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white">
+                    Shortlist
+                  </button>
+                  <button type="button" onClick={() => setShowSchedule(true)} className="rounded-xl bg-violet-600 px-4 py-3 text-sm font-bold text-white">
+                    Schedule Interview
+                  </button>
+                </>}
                 {selected.resumeUrl && (
                   <a href={selected.resumeUrl} target="_blank" rel="noreferrer" className="rounded-xl bg-slate-100 px-4 py-3 text-sm font-bold text-slate-800">
                     View / Download Resume

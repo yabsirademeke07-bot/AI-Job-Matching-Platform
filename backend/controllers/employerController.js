@@ -402,6 +402,15 @@ exports.getDashboardStats = async (req, res) => {
   try {
     const [jobStats] = await db.execute(`SELECT COUNT(*) total_jobs, SUM(status = 'published') active_jobs, SUM(view_count) total_views, SUM(application_count) total_applications FROM jobs WHERE employer_id = ?`, [req.user.id]);
     const [appStats] = await db.execute(`SELECT COUNT(a.id) total_candidates, SUM(a.status = 'applied') new_applied, SUM(a.status = 'under-review') under_review, SUM(a.status = 'shortlisted') shortlisted, SUM(a.status = 'interview') interview_scheduled, SUM(a.status = 'hired') hired, AVG(a.ai_match_score) avg_match_score FROM applications a JOIN jobs j ON j.id = a.job_id WHERE j.employer_id = ?`, [req.user.id]);
+    const [shortlistRows] = await db.execute(
+      `SELECT COUNT(*) AS shortlisted FROM (
+         SELECT a.job_seeker_id AS candidateId FROM applications a JOIN jobs j ON j.id = a.job_id WHERE j.employer_id = ? AND LOWER(a.status) = 'shortlisted'
+         UNION
+         SELECT tp.candidateId FROM talent_pool tp WHERE tp.employerId = ?
+       ) AS shortlisted_candidates`,
+      [req.user.id, req.user.id]
+    );
+    appStats[0].shortlisted = shortlistRows[0]?.shortlisted || 0;
     return res.json({ success: true, stats: { ...jobStats[0], ...appStats[0] } });
   } catch (error) {
     console.error('Employer Stats Error:', error);
@@ -426,9 +435,11 @@ exports.getEmployerDashboardStats = async (req, res) => {
           JOIN jobs j ON j.id = a.job_id
           WHERE j.employer_id = ?
             AND LOWER(REPLACE(a.status, '_', '-')) IN ('pending', 'applied', 'new')) AS pending_review,
-         (SELECT COUNT(*) FROM applications a
-          JOIN jobs j ON j.id = a.job_id
-          WHERE j.employer_id = ? AND LOWER(a.status) = 'shortlisted') AS shortlisted,
+         (SELECT COUNT(*) FROM (
+            SELECT a.job_seeker_id AS candidateId FROM applications a JOIN jobs j ON j.id = a.job_id WHERE j.employer_id = ? AND LOWER(a.status) = 'shortlisted'
+            UNION
+            SELECT tp.candidateId FROM talent_pool tp WHERE tp.employerId = ?
+          ) AS shortlisted_candidates) AS shortlisted,
          (SELECT COUNT(*) FROM applications a
           JOIN jobs j ON j.id = a.job_id
           WHERE j.employer_id = ?
@@ -442,7 +453,7 @@ exports.getEmployerDashboardStats = async (req, res) => {
           WHERE j.employer_id = ?
             AND a.applied_at >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)
             AND a.applied_at < DATE_ADD(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY)) AS new_this_week`,
-      Array(8).fill(req.user.id),
+      Array(9).fill(req.user.id),
     );
 
     const row = rows[0] || {};
@@ -705,23 +716,68 @@ exports.getTopCandidates = async (req, res) => {
 
 exports.getTalentPool = async (req, res) => {
   try {
-    const [savedCandidates] = await db.execute(
-      `SELECT tp.id, tp.candidateId AS id, u.full_name AS fullName, u.email, u.phone, jsp.headline AS preferredDepartment, jsp.preferred_job_type AS preferredJobType, tp.aiMatchScore, tp.skills, tp.notes, tp.savedAt, c.file_name AS cvFileName, c.file_url AS resumeUrl FROM talent_pool tp JOIN users u ON u.id = tp.candidateId LEFT JOIN job_seeker_profiles jsp ON jsp.user_id = u.id LEFT JOIN cvs c ON c.user_id = u.id AND c.is_primary = TRUE WHERE tp.employerId = ? ORDER BY tp.savedAt DESC`,
+    const [candidates] = await db.execute(
+      `SELECT u.id, u.full_name AS fullName, u.email, u.phone,
+              COALESCE(tp.primaryRole, jsp.headline) AS preferredDepartment,
+              jsp.preferred_job_type AS preferredJobType,
+              tp.aiMatchScore, tp.skills, tp.notes, tp.savedAt,
+              c.file_name AS cvFileName, c.file_url AS resumeUrl,
+              jsp.profile_completion_percentage, jsp.skills AS profileSkills,
+              EXISTS(SELECT 1 FROM notifications n WHERE n.user_id = u.id AND n.type = 'SHORTLIST' AND n.reference_type = 'TALENT_POOL' AND n.reference_id = u.id AND n.related_user_id = tp.employerId) AS shortlistNotificationSent
+       FROM users u
+       JOIN job_seeker_profiles jsp ON jsp.user_id = u.id
+       LEFT JOIN talent_pool tp ON tp.candidateId = u.id AND tp.employerId = ?
+       LEFT JOIN cvs c ON c.user_id = u.id AND c.is_primary = TRUE
+       WHERE u.role = 'job_seeker'
+       ORDER BY (tp.savedAt IS NOT NULL) DESC, jsp.profile_completion_percentage DESC, u.created_at DESC`,
       [req.user.id]
     );
-
-    if (savedCandidates.length) {
-      return res.json({ success: true, candidates: savedCandidates.map((candidate) => ({
+    return res.json({ success: true, candidates: candidates.map((candidate) => {
+      let keySkills = candidate.skills || candidate.profileSkills || [];
+      if (typeof keySkills === 'string') {
+        try { keySkills = JSON.parse(keySkills); } catch { keySkills = normalizeList(keySkills); }
+      }
+      return {
         ...candidate,
-        keySkills: candidate.skills ? JSON.parse(candidate.skills) : [],
+        keySkills: Array.isArray(keySkills) ? keySkills : [],
         experience: 'Experience TBD',
         aiMatchScore: Number(candidate.aiMatchScore || 0),
-      })) });
-    }
-
-    const [candidates] = await db.execute(`SELECT DISTINCT u.id, u.full_name fullName, u.email, u.phone, jsp.headline preferredDepartment, jsp.preferred_job_type preferredJobType, c.file_name cvFileName, c.file_url resumeUrl, jsp.profile_completion_percentage FROM users u JOIN job_seeker_profiles jsp ON jsp.user_id = u.id LEFT JOIN cvs c ON c.user_id = u.id AND c.is_primary = TRUE WHERE u.role = 'job_seeker' ORDER BY jsp.profile_completion_percentage DESC, u.created_at DESC`);
-    return res.json({ success: true, candidates: candidates.map((candidate) => ({ ...candidate, keySkills: [], experience: 'Experience TBD', aiMatchScore: 0 })) });
+        shortlisted: Boolean(candidate.savedAt),
+        shortlistNotificationSent: Boolean(candidate.shortlistNotificationSent),
+      };
+    }) });
   } catch (error) { return res.status(500).json({ success: false, message: 'Failed to retrieve talent pool.' }); }
+};
+
+exports.getShortlistedTalentPool = async (req, res) => {
+  try {
+    const [candidates] = await db.execute(
+      `SELECT tp.candidateId, tp.candidateName AS fullName, u.email, u.phone,
+              tp.primaryRole AS preferredDepartment, jsp.preferred_job_type AS preferredJobType,
+              tp.aiMatchScore, tp.skills, tp.notes, tp.savedAt,
+              c.file_name AS cvFileName, c.file_url AS resumeUrl
+       FROM talent_pool tp
+       JOIN users u ON u.id = tp.candidateId
+       LEFT JOIN job_seeker_profiles jsp ON jsp.user_id = u.id
+       LEFT JOIN cvs c ON c.user_id = u.id AND c.is_primary = TRUE
+       WHERE tp.employerId = ?
+       ORDER BY tp.savedAt DESC`,
+      [req.user.id]
+    );
+    return res.json({
+      success: true,
+      candidates: candidates.map((candidate) => {
+        let keySkills = candidate.skills || [];
+        if (typeof keySkills === 'string') {
+          try { keySkills = JSON.parse(keySkills); } catch { keySkills = normalizeList(keySkills); }
+        }
+        return { ...candidate, keySkills: Array.isArray(keySkills) ? keySkills : [], shortlisted: true };
+      }),
+    });
+  } catch (error) {
+    console.error('Get Employer Shortlist Error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to retrieve shortlisted candidates.' });
+  }
 };
 
 exports.saveTalentPoolCandidate = async (req, res) => {
@@ -744,14 +800,50 @@ exports.saveTalentPoolCandidate = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Candidate is required.' });
     }
 
-    await db.execute(
-      `INSERT INTO talent_pool (employerId, candidateId, candidateName, primaryRole, skills, aiMatchScore, notes)
+    const connection = await db.getConnection();
+    let transactionStarted = false;
+    let notificationSent = false;
+    try {
+      await connection.beginTransaction();
+      transactionStarted = true;
+      await connection.execute(
+        `INSERT INTO talent_pool (employerId, candidateId, candidateName, primaryRole, skills, aiMatchScore, notes)
        VALUES (?, ?, ?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE candidateName = VALUES(candidateName), primaryRole = VALUES(primaryRole), skills = VALUES(skills), aiMatchScore = VALUES(aiMatchScore), notes = VALUES(notes)`,
-      [payload.employerId, payload.candidateId, payload.candidateName, payload.primaryRole, payload.skills, payload.aiMatchScore, payload.notes]
-    );
+        [payload.employerId, payload.candidateId, payload.candidateName, payload.primaryRole, payload.skills, payload.aiMatchScore, payload.notes]
+      );
+      await connection.execute('SELECT id FROM talent_pool WHERE employerId = ? AND candidateId = ? FOR UPDATE', [payload.employerId, candidateId]);
+      const [existingNotifications] = await connection.execute(
+        `SELECT id FROM notifications
+         WHERE user_id = ? AND type = 'SHORTLIST' AND reference_type = 'TALENT_POOL' AND reference_id = ? AND related_user_id = ?
+         LIMIT 1`,
+        [candidateId, candidateId, payload.employerId]
+      );
+      notificationSent = existingNotifications.length > 0;
+      if (!notificationSent) {
+        const [[employer]] = await connection.execute('SELECT full_name FROM users WHERE id = ? LIMIT 1', [payload.employerId]);
+        await createNotification({
+          executor: connection,
+          userId: candidateId,
+          type: 'SHORTLIST',
+          title: 'Your profile was shortlisted',
+          message: `${employer?.full_name || 'An employer'} added your profile to their talent shortlist for future opportunities. This is not a job application.`,
+          referenceType: 'TALENT_POOL',
+          referenceId: candidateId,
+          relatedUserId: payload.employerId,
+        });
+        notificationSent = true;
+      }
+      await connection.commit();
+      transactionStarted = false;
+    } catch (error) {
+      if (transactionStarted) await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
 
-    return res.json({ success: true, message: 'Candidate saved to talent pool.' });
+    return res.json({ success: true, notificationSent, message: 'Candidate saved to talent pool.' });
   } catch (error) {
     console.error('Save Talent Pool Error:', error);
     return res.status(500).json({ success: false, message: 'Failed to save talent pool candidate.' });

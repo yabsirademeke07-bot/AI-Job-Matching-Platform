@@ -279,4 +279,30 @@ async function getApplications(req, res) {
   catch (error) { return res.status(500).json({ success: false, message: 'Unable to load applications.' }); }
 }
 
-module.exports = { getProfile, updateProfile, saveProfile, updatePersonalInfo, updateSkills, uploadCv, listCollection, addCollectionItem, deleteCollectionItem, getApplications };
+async function getTalentPoolShortlists(req, res) {
+  try {
+    const [shortlists] = await db.execute(
+      `SELECT tp.id, tp.savedAt, tp.employerId,
+              COALESCE(cp.company_name, employer.full_name) AS employerName,
+              n.id AS notificationId, n.created_at AS notificationDate, n.message AS notificationMessage
+       FROM talent_pool tp
+       JOIN users employer ON employer.id = tp.employerId
+       LEFT JOIN company_profiles cp ON cp.employer_id = tp.employerId
+       LEFT JOIN notifications n ON n.user_id = tp.candidateId
+         AND n.type = 'SHORTLIST' AND n.reference_type = 'TALENT_POOL'
+         AND n.reference_id = tp.candidateId AND n.related_user_id = tp.employerId
+       WHERE tp.candidateId = ?
+       ORDER BY tp.savedAt DESC`,
+      [req.user.id]
+    );
+    return res.json({ success: true, shortlists: shortlists.map((item) => ({
+      ...item,
+      notificationSent: Boolean(item.notificationId),
+    })) });
+  } catch (error) {
+    console.error('Get seeker talent pool shortlists failed:', error.message);
+    return res.status(500).json({ success: false, message: 'Unable to load employer shortlists.' });
+  }
+}
+
+module.exports = { getProfile, updateProfile, saveProfile, updatePersonalInfo, updateSkills, uploadCv, listCollection, addCollectionItem, deleteCollectionItem, getApplications, getTalentPoolShortlists };

@@ -6,7 +6,11 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../hooks/useToast.js';
 import { Cpu, RefreshCw, ShieldCheck, Sparkles, Target } from 'lucide-react';
 
-const OTP_TIMER_SECONDS = 60;
+const OTP_TIMER_SECONDS = 180;
+const getExpiryTimestamp = (value) => {
+  const timestamp = value ? new Date(value).getTime() : NaN;
+  return Number.isFinite(timestamp) ? timestamp : Date.now() + OTP_TIMER_SECONDS * 1000;
+};
 const getOtpDigits = (code) => /^\d{6}$/.test(String(code || ''))
   ? String(code).split('')
   : ['', '', '', '', '', ''];
@@ -27,7 +31,8 @@ const OtpVerification = () => {
   const [developmentOtp, setDevelopmentOtp] = useState(location.state?.devOtp || '');
   const [otp, setOtp] = useState(() => getOtpDigits(location.state?.devOtp));
   const [loading, setLoading] = useState(false);
-  const [otpTimer, setOtpTimer] = useState(OTP_TIMER_SECONDS);
+  const [otpExpiresAt, setOtpExpiresAt] = useState(() => getExpiryTimestamp(location.state?.otpExpiresAt));
+  const [otpTimer, setOtpTimer] = useState(() => Math.max(0, Math.ceil((getExpiryTimestamp(location.state?.otpExpiresAt) - Date.now()) / 1000)));
   const otpInputRefs = useRef([]);
 
   const formatOtpTime = (seconds) => {
@@ -52,12 +57,11 @@ const OtpVerification = () => {
   }, [location.key, location.state, showError]);
 
   useEffect(() => {
-    if (otpTimer <= 0) return undefined;
-    const timer = window.setInterval(() => {
-      setOtpTimer((value) => Math.max(0, value - 1));
-    }, 1000);
+    const updateTimer = () => setOtpTimer(Math.max(0, Math.ceil((otpExpiresAt - Date.now()) / 1000)));
+    updateTimer();
+    const timer = window.setInterval(updateTimer, 1000);
     return () => window.clearInterval(timer);
-  }, [otpTimer]);
+  }, [otpExpiresAt]);
 
   const handleOtpChange = (index, value) => {
     if (!/^\d?$/.test(value)) return;
@@ -124,12 +128,16 @@ const OtpVerification = () => {
     try {
       const response = await api.post('/auth/resend-otp', { email, purpose: otpPurpose });
       if (!response.data?.success) throw new Error(response.data?.message || 'Unable to resend OTP.');
-      setOtpTimer(OTP_TIMER_SECONDS);
+      const expiry = getExpiryTimestamp(response.data.otpExpiresAt);
+      setOtpExpiresAt(expiry);
+      setOtpTimer(Math.max(0, Math.ceil((expiry - Date.now()) / 1000)));
       const newDevelopmentOtp = response.data.devOtp || '';
       setDevelopmentOtp(newDevelopmentOtp);
       setOtp(getOtpDigits(newDevelopmentOtp));
       if (response.data.emailDelivered === false) {
-        if (!newDevelopmentOtp) {
+        if (newDevelopmentOtp) {
+          showError(`${response.data.emailError || 'Email delivery failed.'} Use the development code shown below.`);
+        } else {
           showError(response.data.emailError || 'Email delivery failed. Check the backend SMTP configuration and try again.');
         }
       } else {

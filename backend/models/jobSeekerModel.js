@@ -117,7 +117,7 @@ async function deleteItem(table, id, userId) {
 async function getApplications(userId) {
   const [rows] = await db.execute(
     `SELECT a.id, a.job_id, a.status, a.ai_match_score, a.skills_match_score, a.experience_match_score,
-            a.education_match_score, a.resume_snapshot, a.seeker_cover_letter, a.applied_at,
+            a.education_match_score, a.resume_snapshot, a.applied_at,
             i.id AS interview_id, i.scheduled_at AS interview_scheduled_at,
             i.interview_status, i.interview_type, i.interview_url,
             j.title, j.location, j.work_mode, j.job_type, j.description,
@@ -158,7 +158,7 @@ async function getApplications(userId) {
       },
       submittedResumeName: snapshot.fileName || application.resume_file_name,
       submittedResumeUrl: snapshot.fileUrl || application.resume_file_url,
-      coverLetter: application.seeker_cover_letter,
+      coverLetter: application.seeker_cover_letter || null,
       interview: application.interview_id
         ? {
             id: application.interview_id,

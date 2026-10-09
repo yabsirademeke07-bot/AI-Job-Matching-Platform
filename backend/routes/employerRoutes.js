@@ -135,6 +135,7 @@ router.get('/employer/jobs/:jobId/top-candidates', controller.getTopCandidates);
 router.get('/employer/job-invitations', controller.getJobInvitations);
 router.post('/employer/job-invitations', controller.createJobInvitation);
 router.get('/employer/talent-pool', controller.getTalentPool);
+router.get('/employer/talent-pool/shortlist', controller.getShortlistedTalentPool);
 router.post('/employer/talent-pool/save', controller.saveTalentPoolCandidate);
 router.get('/employer/jobs/:jobId/ai-talent-pool', controller.getTopCandidates);
 router.get('/employer/pipeline', controller.getEmployerPipeline);

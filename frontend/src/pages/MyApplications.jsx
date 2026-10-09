@@ -63,26 +63,10 @@ const formatDate = (value) => {
       });
 };
 
-const normalizeApplication = (application) => ({
-  ...application,
-  title:
-    application.jobTitle ||
-    application.role ||
-    application.title ||
-    "Untitled application",
-  company:
-    application.companyName || application.company || "Company unavailable",
-  status: normalizeStatus(application.status),
-  appliedDate: formatDate(
-    application.appliedDate || application.appliedAt || application.createdAt,
-  ),
-  matchScore: application.aiMatchScore ?? application.matchScore,
-  interview: application.interview,
-});
-
 export default function MyApplications() {
   const navigate = useNavigate();
   const [applications, setApplications] = useState([]);
+  const [talentPoolShortlists, setTalentPoolShortlists] = useState([]);
   const [activeTab, setActiveTab] = useState("All");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -106,14 +90,24 @@ export default function MyApplications() {
         }));
 
         if (active) setApplications(items);
-      } catch {
-        if (isRefresh) return;
         try {
-          const fallback = JSON.parse(localStorage.getItem("mockApplications") || "[]");
-          if (active) setApplications((fallback || []).map(normalizeApplication));
+          const { data: shortlistData } = await api.get('/seeker/talent-pool-shortlists');
+          const shortlistItems = (shortlistData?.shortlists || []).map((item) => ({
+            ...item,
+            id: `talent-pool-shortlist-${item.employerId}-${item.id}`,
+            title: 'Profile shortlisted for future opportunities',
+            company: item.employerName || 'Employer',
+            status: 'Shortlisted',
+            appliedDate: formatDate(item.notificationDate || item.savedAt),
+            message: item.notificationMessage || `${item.employerName || 'An employer'} saved your profile for future opportunities. This is not a job application.`,
+            isTalentPoolShortlist: true,
+          }));
+          if (active) setTalentPoolShortlists(shortlistItems);
         } catch {
-          if (active) setError("Unable to load your applications.");
+          if (active) setTalentPoolShortlists([]);
         }
+      } catch {
+        if (!isRefresh && active) setError("Unable to load your real application records. Please retry.");
       } finally {
         if (active && !isRefresh) setLoading(false);
       }
@@ -134,20 +128,20 @@ export default function MyApplications() {
     () => ({
       All: applications.length,
       Pending: applications.filter(({ status }) => ["Pending", "Under Review"].includes(status)).length,
-      Shortlisted: applications.filter(({ status }) => status === "Shortlisted")
-        .length,
+      Shortlisted: applications.filter(({ status }) => status === "Shortlisted").length + talentPoolShortlists.length,
       Interview: applications.filter(({ status }) => status === "Interview")
         .length,
       Hired: applications.filter(({ status }) => status === "Hired").length,
       Rejected: applications.filter(({ status }) => status === "Rejected")
         .length,
     }),
-    [applications],
+    [applications, talentPoolShortlists],
   );
 
-  const filteredApplications =
-    activeTab === "All"
-      ? applications
+  const filteredApplications = activeTab === "All"
+    ? applications
+    : activeTab === "Shortlisted"
+      ? [...applications.filter(({ status }) => status === "Shortlisted"), ...talentPoolShortlists]
       : applications.filter(({ status }) => activeTab === "Pending" ? ["Pending", "Under Review"].includes(status) : status === activeTab);
 
   return (
@@ -217,13 +211,15 @@ export default function MyApplications() {
               {error}
             </div>
           )}
-          {!loading && !error && applications.length === 0 && (
+          {!loading && !error && activeTab === "All" && applications.length === 0 && (
             <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center">
               <h2 className="text-lg font-black text-slate-900">
                 No Applications Yet
               </h2>
               <p className="mt-2 text-sm text-slate-500">
-                You have not applied for any jobs yet.
+                {talentPoolShortlists.length > 0
+                  ? "An employer saved your profile to their Talent Pool. That is not a job application; apply to a job to track it here."
+                  : "You have not applied for any jobs yet."}
               </p>
               <button
                 type="button"
@@ -236,7 +232,7 @@ export default function MyApplications() {
           )}
           {!loading &&
             !error &&
-            applications.length > 0 &&
+            (applications.length > 0 || talentPoolShortlists.length > 0) &&
             filteredApplications.length === 0 && (
               <div className="rounded-xl border border-slate-200 bg-white p-10 text-center">
                 <h2 className="text-lg font-black text-slate-900">
@@ -264,17 +260,20 @@ export default function MyApplications() {
                         {application.company}
                       </p>
                       <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
-                        <span className="font-semibold text-slate-700">
+                        {!application.isTalentPoolShortlist && <span className="font-semibold text-slate-700">
                           AI Match:{" "}
                           <strong className="text-[var(--brand-deep)]">
                             {application.matchScore != null
                               ? `${application.matchScore}%`
                               : "Not available"}
                           </strong>
-                        </span>
+                        </span>}
                         <span className="text-slate-500">
-                          Applied: {application.appliedDate}
+                          {application.isTalentPoolShortlist ? application.notificationSent ? "Talent-pool shortlist · Notified:" : "Talent-pool shortlist · Notification pending:" : "Applied:"} {application.appliedDate}
                         </span>
+                        {!application.isTalentPoolShortlist && <span className="sr-only">
+                          Applied: {application.appliedDate}
+                        </span>}
                         {application.interview && (
                           <span className="font-semibold text-violet-700">
                             Interview status: {application.interview.status}
@@ -282,14 +281,14 @@ export default function MyApplications() {
                         )}
                       </div>
                     </div>
-                    <div className="flex shrink-0 flex-col items-stretch gap-3 sm:items-end">
+                      <div className="flex shrink-0 flex-col items-stretch gap-3 sm:items-end">
                       <span
                         className={`w-fit rounded-full px-3 py-1 text-xs font-bold ring-1 ${statusStyles[application.status] || statusStyles.Pending}`}
                       >
                         Status: {application.status}
                       </span>
                       <div className="flex flex-wrap gap-2">
-                        <button
+                        {!application.isTalentPoolShortlist && <button
                           type="button"
                           disabled={!application.id}
                           onClick={() => {
@@ -302,7 +301,7 @@ export default function MyApplications() {
                           className="min-h-11 rounded-xl border border-[var(--brand-primary)] px-4 py-2.5 text-sm font-bold text-[var(--brand-deep)] hover:bg-[var(--brand-soft)] disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           View Application
-                        </button>
+                        </button>}
                         {application.interview && (
                           <button
                             type="button"
@@ -320,7 +319,11 @@ export default function MyApplications() {
                       </div>
                     </div>
                   </div>
-                  <ol
+                    {application.isTalentPoolShortlist ? (
+                    <p className="mt-5 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm leading-6 text-blue-900">
+                      {application.message} Apply to an open job separately to create an application and track its hiring stages here.
+                    </p>
+                  ) : <ol
                     className="mt-5 grid grid-cols-4 gap-2 border-t border-slate-100 pt-4"
                     aria-label={`${application.title} application progress`}
                   >
@@ -343,7 +346,7 @@ export default function MyApplications() {
                         </li>
                       );
                     })}
-                  </ol>
+                  </ol>}
                 </article>
               ))}
             </div>

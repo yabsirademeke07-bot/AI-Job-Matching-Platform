@@ -10,7 +10,7 @@ import EmailInputWithDomains from '../components/EmailInputWithDomains';
 import logoImage from './images/logo1.png';
 import registrationImage from './images/images (3).jpg';
 
-const OTP_EXPIRY_SECONDS = 60;
+const OTP_EXPIRY_SECONDS = 180;
 
 const Register = () => {
   const navigate = useNavigate();
@@ -196,6 +196,7 @@ const Register = () => {
           email: formData.email.trim().toLowerCase(),
           role: data.role || formData.role || 'job_seeker',
           purpose: 'registration',
+          otpExpiresAt: data.otpExpiresAt,
           ...(emailDeliveryFailed ? {
             emailDeliveryError: data.emailError || data.message || 'Account created, but email delivery failed. Please check the email configuration and resend your verification code.',
             devOtp: data.devOtp,
@@ -296,7 +297,7 @@ const Register = () => {
     try {
       const data = await sendOtpRequest(formData.email.trim());
       setEmailDeliveryFailed(data.emailDelivered === false);
-      setOtpTimer(data.emailDelivered === false ? 0 : OTP_EXPIRY_SECONDS);
+      setOtpTimer(OTP_EXPIRY_SECONDS);
       setOtp(['', '', '', '', '', '']);
       if (data.emailDelivered === false) {
         const fallbackCode = data.devOtp ? ` Development code: ${data.devOtp}` : '';

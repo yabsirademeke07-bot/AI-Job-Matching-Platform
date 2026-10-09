@@ -119,6 +119,8 @@ const Login = () => {
         navigate('/verify-otp', {
           state: {
             email: data.email || formData.emailOrPhone.trim().toLowerCase(),
+            otpExpiresAt: data.otpExpiresAt,
+            devOtp: data.devOtp,
             message: data.message,
             purpose: 'registration',
             intent: location.state?.intent,
@@ -135,8 +137,10 @@ const Login = () => {
         navigate('/verify-otp', {
           state: {
             email: data.email || formData.emailOrPhone.trim().toLowerCase(),
+            otpExpiresAt: data.otpExpiresAt,
+            devOtp: data.devOtp,
             message: data.message || 'A login code was already sent to your email. Please enter it below to continue.',
-            purpose: 'login',
+            purpose: data.purpose || 'login',
             intent: location.state?.intent,
           }
         });
@@ -148,6 +152,8 @@ const Login = () => {
         navigate('/verify-otp', {
           state: {
             email: data.email || formData.emailOrPhone.trim().toLowerCase(),
+            otpExpiresAt: data.otpExpiresAt,
+            devOtp: data.devOtp,
             message: `We sent a verification code to ${(data.email || formData.emailOrPhone).trim().toLowerCase()}.`,
             purpose: 'login',
             intent: location.state?.intent,

@@ -384,8 +384,96 @@ const ensureDatabaseSchema = async () => {
   }
 
   try {
+    await db.query(`CREATE TABLE IF NOT EXISTS job_invitations (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      employerId INT NOT NULL,
+      candidateId INT NOT NULL,
+      jobId INT NOT NULL,
+      message TEXT,
+      status ENUM('invited', 'accepted', 'declined', 'expired') DEFAULT 'invited',
+      sentAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (employerId) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (candidateId) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (jobId) REFERENCES jobs(id) ON DELETE CASCADE,
+      UNIQUE KEY unique_job_invitation (employerId, candidateId, jobId),
+      INDEX idx_invitation_candidate (candidateId)
+    )`);
+    await db.query(`CREATE TABLE IF NOT EXISTS conversations (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      job_id INT NULL,
+      employer_id INT NOT NULL,
+      job_seeker_id INT NOT NULL,
+      subject VARCHAR(255),
+      status ENUM('active', 'archived', 'closed') DEFAULT 'active',
+      last_message_at TIMESTAMP NULL DEFAULT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE SET NULL,
+      FOREIGN KEY (employer_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (job_seeker_id) REFERENCES users(id) ON DELETE CASCADE,
+      INDEX idx_participants (employer_id, job_seeker_id),
+      INDEX idx_status (status)
+    )`);
+    await db.query(`CREATE TABLE IF NOT EXISTS messages (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      conversation_id INT NOT NULL,
+      sender_id INT NOT NULL,
+      receiver_id INT NULL,
+      message_text TEXT NOT NULL,
+      attachment_url VARCHAR(255),
+      is_read BOOLEAN DEFAULT FALSE,
+      read_at TIMESTAMP NULL DEFAULT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
+      FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
+      INDEX idx_conversation_id (conversation_id),
+      INDEX idx_receiver_id (receiver_id),
+      INDEX idx_message_created_at (created_at)
+    )`);
+
+    const ensureCommunicationColumn = async (tableName, columnName, definition) => {
+      const [columns] = await db.query(
+        'SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ? LIMIT 1',
+        [tableName, columnName]
+      );
+      if (!columns.length) await db.query(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`);
+    };
+
+    await ensureCommunicationColumn('job_invitations', 'message', 'TEXT NULL');
+    await ensureCommunicationColumn('job_invitations', 'employerId', 'INT NULL');
+    await ensureCommunicationColumn('job_invitations', 'candidateId', 'INT NULL');
+    await ensureCommunicationColumn('job_invitations', 'jobId', 'INT NULL');
+    await ensureCommunicationColumn('job_invitations', 'status', "VARCHAR(30) NOT NULL DEFAULT 'invited'");
+    await ensureCommunicationColumn('job_invitations', 'sentAt', 'TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP');
+    await ensureCommunicationColumn('job_invitations', 'createdAt', 'TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP');
+    await ensureCommunicationColumn('conversations', 'job_id', 'INT NULL');
+    await ensureCommunicationColumn('conversations', 'employer_id', 'INT NULL');
+    await ensureCommunicationColumn('conversations', 'job_seeker_id', 'INT NULL');
+    await ensureCommunicationColumn('conversations', 'subject', 'VARCHAR(255) NULL');
+    await ensureCommunicationColumn('conversations', 'status', "VARCHAR(30) NULL DEFAULT 'active'");
+    await ensureCommunicationColumn('conversations', 'last_message_at', 'TIMESTAMP NULL DEFAULT NULL');
+    await ensureCommunicationColumn('conversations', 'created_at', 'TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP');
+    await ensureCommunicationColumn('conversations', 'updated_at', 'TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP');
+    await ensureCommunicationColumn('messages', 'conversation_id', 'INT NULL');
+    await ensureCommunicationColumn('messages', 'sender_id', 'INT NULL');
+    await ensureCommunicationColumn('messages', 'receiver_id', 'INT NULL');
+    await ensureCommunicationColumn('messages', 'message_text', 'TEXT NULL');
+    await ensureCommunicationColumn('messages', 'attachment_url', 'VARCHAR(255) NULL');
+    await ensureCommunicationColumn('messages', 'is_read', 'BOOLEAN NOT NULL DEFAULT FALSE');
+    await ensureCommunicationColumn('messages', 'read_at', 'TIMESTAMP NULL DEFAULT NULL');
+    await ensureCommunicationColumn('messages', 'created_at', 'TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP');
+    await ensureCommunicationColumn('messages', 'updated_at', 'TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP');
+  } catch (error) {
+    console.warn('Employer activity messaging schema check skipped:', error.message);
+  }
+
+  try {
     await db.query('ALTER TABLE notifications ADD COLUMN IF NOT EXISTS reference_type VARCHAR(40) NULL');
     await db.query('ALTER TABLE notifications ADD COLUMN IF NOT EXISTS reference_id INT NULL');
+    await db.query("ALTER TABLE notifications MODIFY COLUMN type VARCHAR(40) NOT NULL DEFAULT 'SYSTEM'");
+    await db.query("UPDATE notifications SET type = 'SHORTLIST' WHERE (type IS NULL OR type = '') AND reference_type = 'TALENT_POOL'");
   } catch (error) {
     console.warn('Notification reference compatibility check skipped:', error.message);
   }
@@ -419,6 +507,15 @@ const ensureDatabaseSchema = async () => {
       return false;
     };
 
+    await ensureJobColumn('slug', 'VARCHAR(200) NULL UNIQUE');
+    await ensureJobColumn('experience_level', "VARCHAR(50) NOT NULL DEFAULT 'mid-level'");
+    await ensureJobColumn('country', 'VARCHAR(100) NULL');
+    await ensureJobColumn('city', 'VARCHAR(100) NULL');
+    await ensureJobColumn('currency', "VARCHAR(5) NULL DEFAULT 'ETB'");
+    await ensureJobColumn('salary_period', "VARCHAR(20) NULL DEFAULT 'monthly'");
+    await ensureJobColumn('years_of_experience_max', 'INT NULL DEFAULT 20');
+    await ensureJobColumn('is_urgent', 'BOOLEAN NOT NULL DEFAULT FALSE');
+    await ensureJobColumn('published_at', 'TIMESTAMP NULL DEFAULT NULL');
     await ensureJobColumn('is_approved', 'BOOLEAN NOT NULL DEFAULT FALSE');
     const approvalStatusWasAdded = await ensureJobColumn('approval_status', "ENUM('pending', 'approved', 'rejected') NOT NULL DEFAULT 'pending'");
     await ensureJobColumn('reviewed_by', 'INT NULL');
@@ -804,7 +901,7 @@ app.post('/api/send-otp', async (req, res) => {
       email: normalizedEmail,
       phone: rows[0].phone,
       purpose: 'registration',
-      expiresInMinutes: 1,
+      expiresInMinutes: 3,
     });
     const response = {
       success: true,
@@ -1002,7 +1099,7 @@ app.post('/api/register', validateSignUp, async (req, res) => {
       user.role = resolvedRole;
     }
 
-    const otpResult = await issueOtp({ dbClient: db, email: normalizedEmail, phone: user.phone, purpose: 'login', expiresInMinutes: 1 });
+    const otpResult = await issueOtp({ dbClient: db, email: normalizedEmail, phone: user.phone, purpose: 'login' });
 
     return res.status(200).json({
       success: true,

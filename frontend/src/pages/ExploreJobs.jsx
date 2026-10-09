@@ -119,6 +119,26 @@ export const WORK_MODES = [
   { label: "Hybrid", value: "Hybrid" },
 ];
 
+const normalizeJobType = (value) => {
+  const normalized = String(value || '').trim().toLowerCase().replace(/[_–—]/g, '-');
+  if (normalized.includes('intern') && normalized.includes('unpaid')) return 'Intern (Unpaid)';
+  if (normalized.includes('intern')) return 'Intern (Paid)';
+  if (normalized.includes('full')) return 'Full-time';
+  if (normalized.includes('part')) return 'Part-time';
+  if (normalized.includes('freelance')) return 'Freelance';
+  if (normalized.includes('contract')) return 'Contractual';
+  if (normalized.includes('volunteer')) return 'Volunteer';
+  return value || 'Full-time';
+};
+
+const normalizeWorkMode = (value) => {
+  const normalized = String(value || '').trim().toLowerCase().replace(/[_–—]/g, '-');
+  if (normalized.includes('remote')) return 'Remote';
+  if (normalized.includes('hybrid') || normalized.includes('flexible')) return 'Hybrid';
+  if (normalized.includes('site') || normalized.includes('office')) return 'On-site';
+  return value || 'Hybrid';
+};
+
 export const EXPERIENCE_LEVELS = [
   { label: "Select experience level", value: "all" },
   { label: "Entry level (0-1 yrs)", value: "Entry level" },
@@ -1240,8 +1260,8 @@ export default function ExploreJobsPage() {
       company: job.company || job.company_name || "Employer company",
       location: job.location || job.locationValue || "Location not specified",
       locationValue: job.locationValue || job.location || "",
-      type: job.type || job.job_type || "Full-time",
-      workplace: job.workplace || job.work_mode || "Hybrid",
+      type: normalizeJobType(job.job_type || job.type),
+      workplace: normalizeWorkMode(job.work_mode || job.workplace),
       experienceLevel:
         job.experienceLevel ||
         job.experience_level ||
@@ -1405,7 +1425,7 @@ export default function ExploreJobsPage() {
     };
   }), [jobs, activeSeekerProfile]);
 
-  const INITIAL_VISIBLE_COUNT = 6;
+  const INITIAL_VISIBLE_COUNT = 3;
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_COUNT);
 
   // Filter States
@@ -2264,25 +2284,27 @@ export default function ExploreJobsPage() {
                   ))}
                 </div>
                 {filteredJobs.length > INITIAL_VISIBLE_COUNT && (
-                  <div className="py-8 text-center">
-                    <p className="mb-3 text-xs font-medium text-slate-500">
-                      Showing {visibleJobs.length} of {filteredJobs.length} jobs
+                  <div className="flex flex-col items-center gap-3 py-8">
+                    <p className="text-sm font-medium text-slate-500">
+                      Showing <span className="font-bold text-slate-700">{visibleJobs.length}</span> of <span className="font-bold text-slate-700">{filteredJobs.length}</span> jobs
                     </p>
                     {visibleCount < filteredJobs.length ? (
                       <button
                         type="button"
                         onClick={handleLoadMore}
-                        className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-6 py-2.5 text-sm font-semibold text-slate-700 shadow-xs transition-all hover:bg-slate-50"
+                        className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-5 py-2.5 text-sm font-bold text-blue-800 shadow-xs transition-colors hover:border-blue-300 hover:bg-blue-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                       >
-                        Load More Jobs ↓
+                        <ChevronDown className="h-4 w-4" />
+                        Show more jobs
                       </button>
                     ) : (
                       <button
                         type="button"
                         onClick={handleLoadLess}
-                        className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-6 py-2.5 text-sm font-semibold text-slate-700 shadow-xs transition-all hover:bg-slate-50"
+                        className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-bold text-slate-700 shadow-xs transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                       >
-                        Show Less ↑
+                        <ChevronUp className="h-4 w-4" />
+                        Show fewer jobs
                       </button>
                     )}
                   </div>

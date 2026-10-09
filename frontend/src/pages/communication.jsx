@@ -286,12 +286,12 @@ function Conversation({ conversation }) {
           onSubmit={handleSend}
           className="border-t border-slate-200 bg-white p-3"
         >
-          <div className="flex gap-2">
+          <div className="flex min-w-0 gap-2">
             <button
               type="button"
               aria-label="Attach a file"
               onClick={() => fileInput.current?.click()}
-              className="min-h-11 min-w-11 rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50"
+              className="min-h-11 min-w-11 shrink-0 rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50"
             >
               <Paperclip className="mx-auto h-4 w-4" />
             </button>
@@ -301,17 +301,17 @@ function Conversation({ conversation }) {
               onChange={(event) =>
                 setAttachment(event.target.files?.[0] || null)
               }
-              className="hidden"
+              className="sr-only"
             />
             <input
               value={input}
               onChange={(event) => setInput(event.target.value)}
               placeholder="Type a message..."
-              className="min-h-11 min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none focus:border-[var(--brand-primary)]"
+              className="min-h-11 w-full min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-[var(--brand-primary)] sm:px-4"
             />
             <button
               type="submit"
-              className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--brand-primary)] px-4 text-sm font-bold text-white hover:bg-[var(--brand-primary-hover)]"
+              className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-xl bg-[var(--brand-primary)] px-3 text-sm font-bold text-white hover:bg-[var(--brand-primary-hover)] sm:px-4"
             >
               <Send className="h-4 w-4" /> Send
             </button>

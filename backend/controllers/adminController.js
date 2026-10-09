@@ -714,7 +714,18 @@ exports.createReport = async (req, res) => {
       if (res.statusCode >= 400) fs.unlink(req.file.path).catch(() => {});
     });
   }
-  const role = String(req.user?.role || '').toLowerCase();
+  const userId = req.user?.id || req.user?.userId || req.user?.user_id || req.user?.sub;
+  if (!userId) return res.status(401).json({ success: false, message: 'Authenticated user id is missing.' });
+
+  let role;
+  try {
+    const [users] = await db.execute('SELECT role FROM users WHERE id = ? LIMIT 1', [userId]);
+    role = String(users[0]?.role || '').toLowerCase();
+  } catch (error) {
+    console.error('Report submitter role lookup failed:', error);
+    return res.status(500).json({ success: false, message: 'Unable to verify your account role.' });
+  }
+
   const reporterRole = ['employer', 'company', 'recruiter'].includes(role) ? 'employer' : ['job_seeker', 'seeker', 'jobseeker', 'employee', 'user'].includes(role) ? 'seeker' : null;
   const targetType = String(req.body?.targetType || '').trim().toLowerCase();
   const targetId = req.body?.targetId ? Number(req.body.targetId) : null;
@@ -751,7 +762,7 @@ exports.createReport = async (req, res) => {
     } else if (targetType === 'candidate' || targetType === 'employer') {
       const [targets] = await connection.execute('SELECT id, role FROM users WHERE id = ? LIMIT 1', [targetId]);
       if (!targets.length) { await connection.rollback(); return res.status(404).json({ success: false, message: 'The reported account was not found.' }); }
-      if (Number(targetId) === Number(req.user.id)) { await connection.rollback(); return res.status(422).json({ success: false, message: 'You cannot report your own account.' }); }
+      if (Number(targetId) === Number(userId)) { await connection.rollback(); return res.status(422).json({ success: false, message: 'You cannot report your own account.' }); }
       const targetRole = String(targets[0].role || '').toLowerCase();
       const validTarget = targetType === 'candidate'
         ? ['job_seeker', 'seeker', 'jobseeker', 'employee', 'user'].includes(targetRole)
@@ -765,7 +776,7 @@ exports.createReport = async (req, res) => {
         (reporter_id, reporter_role, target_type, target_id, reported_user_id, reported_job_id,
          report_type, issue_category, description, evidence_url, status)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
-    `, [req.user.id, reporterRole, targetType, targetId, reportedUserId, reportedJobId, reportTypeByCategory[issueCategory], issueCategory, description, evidenceUrl]);
+    `, [userId, reporterRole, targetType, targetId, reportedUserId, reportedJobId, reportTypeByCategory[issueCategory], issueCategory, description, evidenceUrl]);
 
     await connection.commit();
     return res.status(201).json({ success: true, reportId: result.insertId, message: 'Your report was sent to the platform moderation team.' });

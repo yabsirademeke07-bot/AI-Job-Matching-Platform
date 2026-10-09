@@ -2,23 +2,15 @@ import { useCallback, useEffect, useState } from "react";
 import {
   AlertCircle,
   RefreshCw,
-  LayoutDashboard,
-  FileText,
-  Target,
-  Search,
-  Bookmark,
-  ClipboardList,
-  MessageSquare,
-  Bell,
-  Settings,
 } from "lucide-react";
 import MatchedJobsPanel from "../components/dashboard/MatchedJobsPanel";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
   getDashboardSummary,
   getJobMatches,
   getRecentApplications,
+  getTalentPoolShortlists,
   getRecommendedJobs,
   getMatchedJobs,
   getUpcomingInterviews,
@@ -56,11 +48,13 @@ function useResource(loader) {
 export default function JobSeekerDashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const location = useLocation();
   const summary = useResource(useCallback(() => getDashboardSummary(), []));
   const matches = useResource(useCallback(() => getJobMatches(), []));
   const applications = useResource(
     useCallback(() => getRecentApplications(), []),
+  );
+  const talentPoolShortlists = useResource(
+    useCallback(() => getTalentPoolShortlists(), []),
   );
   const interviews = useResource(
     useCallback(() => getUpcomingInterviews(), []),
@@ -79,9 +73,8 @@ export default function JobSeekerDashboard() {
     cvReviewScore: 0,
   };
   const displayName = user?.name || user?.full_name || user?.email || profile.name || "User";
-  const avatarUrl = user?.avatarUrl || user?.avatar_url || profile.avatarUrl;
   const refreshAll = () =>
-    [summary, matches, applications, interviews, recommended, matchedJobs].forEach(
+    [summary, matches, applications, talentPoolShortlists, interviews, recommended, matchedJobs].forEach(
       (resource) => resource.retry(),
     );
   const joinInterview = (url) =>
@@ -96,7 +89,7 @@ export default function JobSeekerDashboard() {
     ).length,
     shortlisted: applicationItems.filter(
       (item) => item.status === "Shortlisted",
-    ).length,
+    ).length + (talentPoolShortlists.data || []).length,
     interview: applicationItems.filter((item) =>
       ["Interview", "Interview Scheduled"].includes(item.status),
     ).length,
@@ -128,63 +121,8 @@ export default function JobSeekerDashboard() {
               path: `/interviews/${upcomingInterview.id}`,
             }
           : null;
-  const navItems = [
-    ["Dashboard", "/dashboard", LayoutDashboard],
-    ["View Resume", "/resume", FileText],
-    ["Find Jobs", "/explore-jobs", Search],
-    ["AI Job Matches", "/ai-matches", Target],
-    ["Saved Jobs", "/saved-jobs", Bookmark],
-    ["My Applications", "/applications", ClipboardList],
-    ["Messages", "/chat", MessageSquare],
-    ["Notifications", "/notifications", Bell],
-  ];
   return (
-    <div className="information-page min-h-screen bg-slate-50 lg:flex">
-      <aside className="hidden w-64 shrink-0 border-r border-slate-200 bg-white lg:block">
-        <div className="sticky top-0 flex h-screen flex-col p-5">
-          <div className="mb-8 shrink-0 border-b border-slate-100 pb-5">
-            <p className="text-lg font-black lowercase text-slate-900">
-              job <span className="text-[var(--brand-deep)]">matching</span>
-            </p>
-            <p className="text-xs font-bold uppercase tracking-widest text-slate-400">
-              AI Platform
-            </p>
-          </div>
-          <nav
-            className="seeker-sidebar-scroll min-h-0 flex-1 space-y-1 overflow-y-auto"
-            aria-label="Seeker dashboard navigation"
-          >
-            {navItems.map(([label, path, Icon]) => (
-              <button
-                key={path}
-                type="button"
-                onClick={() => navigate(path)}
-                className={`flex min-h-12 w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-base font-bold transition ${location.pathname === path || (path === "/dashboard" && location.pathname === "/seeker-dashboard") ? "bg-[var(--brand-primary)] text-white shadow-sm" : "text-slate-600 hover:bg-[var(--brand-soft)] hover:text-[var(--brand-deep)]"}`}
-              >
-                <Icon className="h-4 w-4" /> {label}
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={() => navigate("/settings")}
-              className="mt-2 flex min-h-11 w-full items-center gap-3 rounded-lg px-4 py-2 text-sm font-bold text-slate-600 hover:bg-[var(--brand-soft)] hover:text-[var(--brand-deep)]"
-            >
-              <Settings className="h-3.5 w-3.5" /> Settings
-            </button>
-            <div className="mt-2 flex items-center justify-between gap-2 border-t border-slate-100 px-3 pt-3">
-              {avatarUrl ? (
-                <img src={avatarUrl} alt={displayName} className="h-7 w-7 rounded-full object-cover" />
-              ) : (
-                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-700">
-                  {displayName.charAt(0).toUpperCase()}
-                </div>
-              )}
-              <span className="min-w-0 flex-1 truncate text-sm font-bold text-slate-600">{displayName}</span>
-            </div>
-          </nav>
-        </div>
-      </aside>
-      <main className="seeker-dashboard-main min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">
+    <main className="seeker-dashboard-main min-w-0 flex-1 bg-slate-50 px-4 py-6 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-6xl space-y-7">
           <section
             className="relative isolate min-h-80 overflow-hidden rounded-2xl bg-slate-900 px-6 py-10 shadow-sm sm:min-h-96 sm:px-10 sm:py-14"
@@ -309,7 +247,6 @@ export default function JobSeekerDashboard() {
             </section>
           )}
         </div>
-      </main>
-    </div>
+    </main>
   );
 }

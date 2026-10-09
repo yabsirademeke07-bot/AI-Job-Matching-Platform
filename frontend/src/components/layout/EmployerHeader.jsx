@@ -6,6 +6,7 @@ import {
   MessageSquareText,
   Minimize2,
   Search,
+  X,
 } from 'lucide-react';
 
 export const EmployerHeader = ({
@@ -14,6 +15,7 @@ export const EmployerHeader = ({
   showSearch = true,
   unreadNotificationsCount = 0,
   onToggleSidebar,
+  sidebarOpen = false,
   onSearchClick,
   onOpenNotifications,
   onOpenMessages,
@@ -49,7 +51,17 @@ export const EmployerHeader = ({
 
   return (
     <header className="sticky top-0 z-30 flex h-20 items-center justify-between border-b border-slate-200/80 bg-white/95 px-6 shadow-xs backdrop-blur-sm">
-      <div className="w-0" aria-hidden="true" />
+      <button
+        type="button"
+        onClick={onToggleSidebar}
+        aria-label={sidebarOpen ? 'Close employer navigation' : 'Open employer navigation'}
+        aria-expanded={sidebarOpen}
+        aria-controls="employer-sidebar"
+        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 lg:hidden"
+      >
+        {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+      </button>
+      <div className="hidden w-0 lg:block" aria-hidden="true" />
 
       {showSearch && <div className="mx-8 hidden max-w-md flex-1 items-center md:flex">
         <button

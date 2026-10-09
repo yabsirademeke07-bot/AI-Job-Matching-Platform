@@ -60,20 +60,32 @@ const RoleSelection = () => {
       is_verified: existingUser.is_verified ?? existingUser.isVerified ?? true,
     };
     const token = localStorage.getItem("token");
-
-    console.log("--> Navigating with Role:", normalizedRole);
-    localStorage.setItem("user", JSON.stringify(updatedUser));
-    setSession({ token, user: updatedUser });
-    navigate(normalizedRole === "employer" ? "/employer/onboarding" : "/seeker/cv-upload", { replace: true });
-
-    // Persist the role in the background; navigation must not depend on this request.
     const userId = existingUser.id || existingUser.userId;
-    if (userId && token) {
-      fetch(`${API_URL.replace(/\/$/, "")}/auth/select-role`, {
+
+    if (!userId || !token) {
+      setError("Your session could not be verified. Please sign in again and retry.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const response = await fetch(`${API_URL.replace(/\/$/, "")}/auth/select-role`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ userId, role: normalizedRole }),
-      }).catch((error) => console.warn("Background role persistence failed:", error.message));
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(result.message || "Unable to save your account role. Please try again.");
+      }
+
+      localStorage.setItem("user", JSON.stringify(updatedUser));
+      setSession({ token, user: updatedUser });
+      navigate(normalizedRole === "employer" ? "/employer/onboarding" : "/seeker/cv-upload", { replace: true });
+    } catch (submitError) {
+      setError(submitError.message || "Unable to save your account role. Please try again.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -274,6 +286,8 @@ const RoleSelection = () => {
               </div>
 
             </div>
+
+            {error && <p role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</p>}
 
             {/* Mobile stacked Continue button */}
             <div className="mt-6 md:hidden">

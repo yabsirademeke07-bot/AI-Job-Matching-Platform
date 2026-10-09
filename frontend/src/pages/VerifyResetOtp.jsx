@@ -5,6 +5,12 @@ import API from '../services/api';
 import { useToast } from '../hooks/useToast';
 import { getResetEmail, getResetFlow, hasValidResetFlow, saveResetFlow, setOtpVerified } from '../utils/passwordResetSession';
 
+const OTP_EXPIRY_SECONDS = 180;
+const getExpiryTimestamp = (value) => {
+  const timestamp = value ? new Date(value).getTime() : NaN;
+  return Number.isFinite(timestamp) ? timestamp : Date.now() + OTP_EXPIRY_SECONDS * 1000;
+};
+
 const VerifyResetOtp = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -13,7 +19,8 @@ const VerifyResetOtp = () => {
 
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [isLoading, setIsLoading] = useState(false);
-  const [otpTimer, setOtpTimer] = useState(600);
+  const [otpExpiresAt, setOtpExpiresAt] = useState(() => getExpiryTimestamp(location.state?.otpExpiresAt));
+  const [otpTimer, setOtpTimer] = useState(() => Math.max(0, Math.ceil((getExpiryTimestamp(location.state?.otpExpiresAt) - Date.now()) / 1000)));
   const [resendCount, setResendCount] = useState(() => Number(sessionStorage.getItem('ai_job_reset_resend_count') || 0));
   const [error, setError] = useState('');
 
@@ -36,14 +43,11 @@ const VerifyResetOtp = () => {
   }, []);
 
   useEffect(() => {
-    if (otpTimer <= 0) return undefined;
-
-    const timer = window.setInterval(() => {
-      setOtpTimer((previous) => Math.max(0, previous - 1));
-    }, 1000);
-
+    const updateTimer = () => setOtpTimer(Math.max(0, Math.ceil((otpExpiresAt - Date.now()) / 1000)));
+    updateTimer();
+    const timer = window.setInterval(updateTimer, 1000);
     return () => window.clearInterval(timer);
-  }, [otpTimer]);
+  }, [otpExpiresAt]);
 
   const formattedTime = useMemo(() => {
     const minutes = String(Math.floor(otpTimer / 60)).padStart(2, '0');
@@ -118,12 +122,14 @@ const VerifyResetOtp = () => {
     }
 
     try {
-      await API.post('/auth/forgot-password', { email });
+      const { data } = await API.post('/auth/forgot-password', { email });
       const nextResendCount = resendCount + 1;
       sessionStorage.setItem('ai_job_reset_resend_count', String(nextResendCount));
       setResendCount(nextResendCount);
       setOtp(['', '', '', '', '', '']);
-      setOtpTimer(600);
+      const expiry = getExpiryTimestamp(data.otpExpiresAt);
+      setOtpExpiresAt(expiry);
+      setOtpTimer(Math.max(0, Math.ceil((expiry - Date.now()) / 1000)));
       showSuccess('If an account exists for this email, a new verification code has been sent.');
       window.setTimeout(() => otpInputRefs.current[0]?.focus(), 0);
     } catch (err) {

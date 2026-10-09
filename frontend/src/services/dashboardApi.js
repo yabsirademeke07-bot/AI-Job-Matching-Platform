@@ -33,12 +33,6 @@ const mockMatches = [
   },
 ];
 
-const mockApplications = [
-  { id: 'application-201', company: 'Ethiopian Digital', role: 'React Developer', appliedDate: 'Aug 18, 2026', status: 'Shortlisted', location: 'Addis Ababa' },
-  { id: 'application-202', company: 'Kifiya Financial', role: 'Frontend Engineer', appliedDate: 'Aug 14, 2026', status: 'Pending', location: 'Remote' },
-  { id: 'application-203', company: 'Mella Digital', role: 'Full Stack Developer', appliedDate: 'Aug 08, 2026', status: 'Interview Scheduled', location: 'Addis Ababa' },
-];
-
 const mockInterviews = [
   { id: 'interview-301', jobTitle: 'React Developer', company: 'Ethiopian Digital', date: 'Thursday, Aug 27, 2026', time: '10:30 AM – 11:15 AM', format: 'Video', interviewerName: 'Sara Bekele', interviewerRole: 'Engineering Manager', meetingUrl: 'https://meet.google.com/' },
 ];
@@ -72,20 +66,15 @@ export async function fetchRecentApplications() {
         status: String(item.status || '').toLowerCase() === 'under-review' ? 'Under Review' : item.status,
       }));
     }
-  } catch {
-    // Preserve the existing local demo fallback when the API is unavailable.
+    throw new Error('The applications service returned an unexpected response.');
+  } catch (error) {
+    throw new Error(error.response?.data?.message || error.message || 'Unable to load your applications.', { cause: error });
   }
+}
 
-  let localApplications = [];
-  try {
-    localApplications = JSON.parse(localStorage.getItem('mockApplications') || '[]');
-  } catch {
-    localApplications = [];
-  }
-
-  return [...localApplications, ...mockApplications].filter(
-    (item, index, list) => list.findIndex((candidate) => String(candidate.id) === String(item.id)) === index,
-  );
+export async function fetchTalentPoolShortlists() {
+  const { data } = await api.get('/seeker/talent-pool-shortlists');
+  return data.shortlists || [];
 }
 
 export async function fetchMatchedJobs() {
@@ -121,6 +110,7 @@ export async function fetchRecommendedJobs() {
 export const getDashboardSummary = fetchDashboardSummary;
 export const getJobMatches = fetchJobMatches;
 export const getRecentApplications = fetchRecentApplications;
+export const getTalentPoolShortlists = fetchTalentPoolShortlists;
 export const getUpcomingInterviews = fetchUpcomingInterviews;
 export const getRecommendedJobs = fetchRecommendedJobs;
 export const getMatchedJobs = fetchMatchedJobs;
