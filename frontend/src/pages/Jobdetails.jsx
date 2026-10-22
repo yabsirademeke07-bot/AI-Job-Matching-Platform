@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { ArrowLeft, LogIn, Send, Sparkles, Loader2, Bookmark } from "lucide-react";
+import { ArrowLeft, LogIn, Send, Sparkles, Loader2, Bookmark, ShieldAlert } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import UniversalReportModal from "../components/UniversalReportModal";
 import { beginApplication, getApplicationForJob, getApplyButtonState, getApplicationRequirements } from "../utils/applicationFlow";
 import api from "../services/api";
 
@@ -37,8 +38,13 @@ const JobDetails = () => {
       return null;
     }
   })();
-  const currentUser = user || storedUser || {};
+  const currentUser = { ...(storedUser || {}), ...(user || {}) };
   const currentAuthentication = isAuthenticated || Boolean(localStorage.getItem("token"));
+  const normalizedCurrentRole = String(storedUser?.role || storedUser?.userType || user?.role || user?.userType || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  const hasSignedInUser = currentAuthentication || Boolean(currentUser.id || currentUser.userId);
+  const isEmployerRole = ["employer", "company", "recruiter", "admin", "super_admin"].includes(normalizedCurrentRole);
+  const canReportAsSeeker = hasSignedInUser && !isEmployerRole;
+  const canReportPlatform = hasSignedInUser && !["admin", "super_admin"].includes(normalizedCurrentRole);
 
   const [job, setJob] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -46,6 +52,8 @@ const JobDetails = () => {
   const [matchLoading] = useState(false);
   const [matchScore] = useState(null);
   const [isSaved, setIsSaved] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [platformReportOpen, setPlatformReportOpen] = useState(false);
 
   // Job details are passed from Explore Jobs and kept in frontend storage.
   useEffect(() => {
@@ -323,9 +331,13 @@ const JobDetails = () => {
             {!isExpired && !existingApplication && <button type="button" onClick={handleToggleSave} className={`mt-5 flex w-full items-center justify-center gap-2 rounded-xl border px-5 py-3 text-sm font-bold transition ${isSaved ? "border-[#0871D1] bg-[#EAF3FF] text-[#075EAE]" : "border-slate-300 bg-white text-slate-700 hover:border-[#0871D1] hover:text-[#075EAE]"}`}>
               <Bookmark className={`h-4 w-4 ${isSaved ? "fill-current" : ""}`} />{isSaved ? "Saved" : "Save Job"}
             </button>}
+            {canReportAsSeeker && <button type="button" onClick={() => setReportOpen(true)} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-slate-500 transition hover:bg-rose-50 hover:text-rose-700"><ShieldAlert className="h-4 w-4" />Report job or employer</button>}
+            {canReportPlatform && <button type="button" onClick={() => setPlatformReportOpen(true)} className="mt-1 inline-flex w-full items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-slate-500 transition hover:bg-blue-50 hover:text-blue-700"><ShieldAlert className="h-4 w-4" />Report a platform issue</button>}
           </aside>
         </div>
       </div>
+      {reportOpen && <UniversalReportModal isOpen reporterRole="seeker" targetType="job" targetId={{ id: job.id, employerId: job.employer_id || job.employerId || job.employer_id }} targetTitle={job.title || companyName} currentUser={currentUser} onClose={() => setReportOpen(false)} />}
+      {platformReportOpen && <UniversalReportModal isOpen reporterRole="seeker" targetType="platform" targetId={null} targetTitle="platform issue" currentUser={currentUser} onClose={() => setPlatformReportOpen(false)} />}
     </div>
   );
 };

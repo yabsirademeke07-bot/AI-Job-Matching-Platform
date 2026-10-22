@@ -1,14 +1,14 @@
+require("dotenv").config();
+
 const express = require("express");
 const cors = require("cors");
 const session = require("express-session");
 const passport = require("passport");
 const multer = require("multer");
-const nodemailer = require("nodemailer");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const fs = require("fs");
 const path = require("path");
-require("dotenv").config();
 
 const db = require("./config/db");
 const authRoutes = require("./routes/auth");
@@ -18,8 +18,8 @@ const jobSeekerRoutes = require("./routes/jobSeekerRoutes");
 const cvRoutes = require("./routes/cvRoutes");
 const seekerMatchingRoutes = require("./routes/seekerMatchingRoutes");
 const profileRoutes = require("./routes/profileRoutes");
-const contactRoutes = require("./routes/contactRoutes");
 const aboutRoutes = require("./routes/aboutRoutes");
+const contactRoutes = require("./routes/contactRoutes");
 const howItWorksRoutes = require("./routes/howItWorksRoutes");
 const { issueOtp } = require("./services/otpService");
 const { syncGoogleUser } = require("./config/googleAuth");
@@ -48,6 +48,8 @@ const uploadDir = path.join(__dirname, 'uploads', 'cvs');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
+const reportUploadDir = path.join(__dirname, 'uploads', 'reports');
+if (!fs.existsSync(reportUploadDir)) fs.mkdirSync(reportUploadDir, { recursive: true });
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api/contact', contactRoutes);
 app.use('/api/about', aboutRoutes);
@@ -131,8 +133,14 @@ const ensureDatabaseSchema = async () => {
     await db.query('ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS representative_title VARCHAR(150) NULL');
     await db.query('ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS employer_type VARCHAR(50) NOT NULL DEFAULT \'company\'');
     await db.query('ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS tin_number VARCHAR(50) NULL');
+    await db.query('ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS tin_certificate_url VARCHAR(255) NULL');
+    await db.query('ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS tin_certificate_name VARCHAR(255) NULL');
     await db.query('ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS trade_license_number VARCHAR(100) NULL');
     await db.query('ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS trade_license_url VARCHAR(255) NULL');
+    await db.query('ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS trade_license_name VARCHAR(255) NULL');
+    await db.query('ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS trade_license_size_bytes INT UNSIGNED NULL');
+    await db.query('ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS trade_license_uploaded_at TIMESTAMP NULL DEFAULT NULL');
+    await db.query('ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS trade_license_official_document BOOLEAN NULL DEFAULT NULL');
     await db.query('ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS onboarding_completed BOOLEAN NOT NULL DEFAULT FALSE');
     await db.query('ALTER TABLE company_profiles ADD COLUMN IF NOT EXISTS work_email VARCHAR(255) NULL');
     await db.query('ALTER TABLE company_profiles MODIFY COLUMN website VARCHAR(255) NULL DEFAULT NULL');
@@ -376,8 +384,96 @@ const ensureDatabaseSchema = async () => {
   }
 
   try {
+    await db.query(`CREATE TABLE IF NOT EXISTS job_invitations (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      employerId INT NOT NULL,
+      candidateId INT NOT NULL,
+      jobId INT NOT NULL,
+      message TEXT,
+      status ENUM('invited', 'accepted', 'declined', 'expired') DEFAULT 'invited',
+      sentAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (employerId) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (candidateId) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (jobId) REFERENCES jobs(id) ON DELETE CASCADE,
+      UNIQUE KEY unique_job_invitation (employerId, candidateId, jobId),
+      INDEX idx_invitation_candidate (candidateId)
+    )`);
+    await db.query(`CREATE TABLE IF NOT EXISTS conversations (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      job_id INT NULL,
+      employer_id INT NOT NULL,
+      job_seeker_id INT NOT NULL,
+      subject VARCHAR(255),
+      status ENUM('active', 'archived', 'closed') DEFAULT 'active',
+      last_message_at TIMESTAMP NULL DEFAULT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE SET NULL,
+      FOREIGN KEY (employer_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (job_seeker_id) REFERENCES users(id) ON DELETE CASCADE,
+      INDEX idx_participants (employer_id, job_seeker_id),
+      INDEX idx_status (status)
+    )`);
+    await db.query(`CREATE TABLE IF NOT EXISTS messages (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      conversation_id INT NOT NULL,
+      sender_id INT NOT NULL,
+      receiver_id INT NULL,
+      message_text TEXT NOT NULL,
+      attachment_url VARCHAR(255),
+      is_read BOOLEAN DEFAULT FALSE,
+      read_at TIMESTAMP NULL DEFAULT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
+      FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
+      INDEX idx_conversation_id (conversation_id),
+      INDEX idx_receiver_id (receiver_id),
+      INDEX idx_message_created_at (created_at)
+    )`);
+
+    const ensureCommunicationColumn = async (tableName, columnName, definition) => {
+      const [columns] = await db.query(
+        'SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ? LIMIT 1',
+        [tableName, columnName]
+      );
+      if (!columns.length) await db.query(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`);
+    };
+
+    await ensureCommunicationColumn('job_invitations', 'message', 'TEXT NULL');
+    await ensureCommunicationColumn('job_invitations', 'employerId', 'INT NULL');
+    await ensureCommunicationColumn('job_invitations', 'candidateId', 'INT NULL');
+    await ensureCommunicationColumn('job_invitations', 'jobId', 'INT NULL');
+    await ensureCommunicationColumn('job_invitations', 'status', "VARCHAR(30) NOT NULL DEFAULT 'invited'");
+    await ensureCommunicationColumn('job_invitations', 'sentAt', 'TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP');
+    await ensureCommunicationColumn('job_invitations', 'createdAt', 'TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP');
+    await ensureCommunicationColumn('conversations', 'job_id', 'INT NULL');
+    await ensureCommunicationColumn('conversations', 'employer_id', 'INT NULL');
+    await ensureCommunicationColumn('conversations', 'job_seeker_id', 'INT NULL');
+    await ensureCommunicationColumn('conversations', 'subject', 'VARCHAR(255) NULL');
+    await ensureCommunicationColumn('conversations', 'status', "VARCHAR(30) NULL DEFAULT 'active'");
+    await ensureCommunicationColumn('conversations', 'last_message_at', 'TIMESTAMP NULL DEFAULT NULL');
+    await ensureCommunicationColumn('conversations', 'created_at', 'TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP');
+    await ensureCommunicationColumn('conversations', 'updated_at', 'TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP');
+    await ensureCommunicationColumn('messages', 'conversation_id', 'INT NULL');
+    await ensureCommunicationColumn('messages', 'sender_id', 'INT NULL');
+    await ensureCommunicationColumn('messages', 'receiver_id', 'INT NULL');
+    await ensureCommunicationColumn('messages', 'message_text', 'TEXT NULL');
+    await ensureCommunicationColumn('messages', 'attachment_url', 'VARCHAR(255) NULL');
+    await ensureCommunicationColumn('messages', 'is_read', 'BOOLEAN NOT NULL DEFAULT FALSE');
+    await ensureCommunicationColumn('messages', 'read_at', 'TIMESTAMP NULL DEFAULT NULL');
+    await ensureCommunicationColumn('messages', 'created_at', 'TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP');
+    await ensureCommunicationColumn('messages', 'updated_at', 'TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP');
+  } catch (error) {
+    console.warn('Employer activity messaging schema check skipped:', error.message);
+  }
+
+  try {
     await db.query('ALTER TABLE notifications ADD COLUMN IF NOT EXISTS reference_type VARCHAR(40) NULL');
     await db.query('ALTER TABLE notifications ADD COLUMN IF NOT EXISTS reference_id INT NULL');
+    await db.query("ALTER TABLE notifications MODIFY COLUMN type VARCHAR(40) NOT NULL DEFAULT 'SYSTEM'");
+    await db.query("UPDATE notifications SET type = 'SHORTLIST' WHERE (type IS NULL OR type = '') AND reference_type = 'TALENT_POOL'");
   } catch (error) {
     console.warn('Notification reference compatibility check skipped:', error.message);
   }
@@ -404,17 +500,34 @@ const ensureDatabaseSchema = async () => {
          WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'jobs' AND COLUMN_NAME = ? LIMIT 1`,
         [columnName]
       );
-      if (!columns.length) await db.query(`ALTER TABLE jobs ADD COLUMN ${columnName} ${definition}`);
+      if (!columns.length) {
+        await db.query(`ALTER TABLE jobs ADD COLUMN ${columnName} ${definition}`);
+        return true;
+      }
+      return false;
     };
 
+    await ensureJobColumn('slug', 'VARCHAR(200) NULL UNIQUE');
+    await ensureJobColumn('experience_level', "VARCHAR(50) NOT NULL DEFAULT 'mid-level'");
+    await ensureJobColumn('country', 'VARCHAR(100) NULL');
+    await ensureJobColumn('city', 'VARCHAR(100) NULL');
+    await ensureJobColumn('currency', "VARCHAR(5) NULL DEFAULT 'ETB'");
+    await ensureJobColumn('salary_period', "VARCHAR(20) NULL DEFAULT 'monthly'");
+    await ensureJobColumn('years_of_experience_max', 'INT NULL DEFAULT 20');
+    await ensureJobColumn('is_urgent', 'BOOLEAN NOT NULL DEFAULT FALSE');
+    await ensureJobColumn('published_at', 'TIMESTAMP NULL DEFAULT NULL');
     await ensureJobColumn('is_approved', 'BOOLEAN NOT NULL DEFAULT FALSE');
+    const approvalStatusWasAdded = await ensureJobColumn('approval_status', "ENUM('pending', 'approved', 'rejected') NOT NULL DEFAULT 'pending'");
     await ensureJobColumn('reviewed_by', 'INT NULL');
     await ensureJobColumn('reviewed_at', 'TIMESTAMP NULL DEFAULT NULL');
     await ensureJobColumn('rejection_reason', 'TEXT NULL');
     await ensureJobColumn('approved_by', 'INT NULL');
     await ensureJobColumn('approved_at', 'TIMESTAMP NULL DEFAULT NULL');
-    await db.query("UPDATE jobs SET status = 'active', is_approved = TRUE WHERE LOWER(status) = 'published'");
-    await db.query("UPDATE jobs SET is_approved = TRUE WHERE LOWER(status) = 'active' AND is_approved = FALSE");
+    if (approvalStatusWasAdded) {
+      await db.query("UPDATE jobs SET status = 'active', is_approved = TRUE WHERE LOWER(status) = 'published'");
+      await db.query("UPDATE jobs SET is_approved = TRUE WHERE LOWER(status) = 'active' AND is_approved = FALSE");
+      await db.query("UPDATE jobs SET approval_status = CASE WHEN LOWER(status) = 'rejected' THEN 'rejected' WHEN is_approved = TRUE AND LOWER(status) IN ('active', 'published') THEN 'approved' ELSE 'pending' END");
+    }
   } catch (error) {
     console.warn('Job approval columns migration skipped:', error.message);
   }
@@ -429,9 +542,21 @@ const ensureDatabaseSchema = async () => {
     await db.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS work_mode VARCHAR(50) NULL');
     await db.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS location VARCHAR(255) NULL');
     await db.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS gender_preference VARCHAR(50) NULL DEFAULT "Any"');
+    await db.query("ALTER TABLE jobs MODIFY COLUMN job_type VARCHAR(50) NOT NULL DEFAULT 'full-time'");
+    await db.query("ALTER TABLE jobs MODIFY COLUMN work_mode VARCHAR(50) NULL DEFAULT 'hybrid'");
+    await db.query("ALTER TABLE jobs MODIFY COLUMN gender_preference VARCHAR(100) NULL DEFAULT 'any'");
+    await db.query("ALTER TABLE jobs MODIFY COLUMN required_education VARCHAR(100) NULL DEFAULT 'bachelor'");
     await db.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS compensation_currency VARCHAR(10) NULL DEFAULT "ETB"');
     await db.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS salary_min INT NULL');
     await db.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS salary_max INT NULL');
+    await db.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS is_negotiable BOOLEAN NOT NULL DEFAULT TRUE');
+    await db.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS min_experience INT NULL DEFAULT NULL');
+    await db.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS vacancies INT NOT NULL DEFAULT 1');
+    await db.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS required_education VARCHAR(50) NULL DEFAULT "any"');
+    await db.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS is_salary_negotiable BOOLEAN NOT NULL DEFAULT TRUE');
+    await db.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS benefits TEXT NULL');
+    await db.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS years_of_experience_min INT NOT NULL DEFAULT 0');
+    await db.query('UPDATE jobs SET is_negotiable = is_salary_negotiable');
     await db.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS application_deadline DATE NULL');
     await db.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS deadline DATE NULL');
     await db.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS required_skills TEXT NULL');
@@ -445,40 +570,6 @@ const ensureDatabaseSchema = async () => {
   }
 };
 
-// ==========================================
-// 🔑 AUTHENTICATION ROUTES
-// ==========================================
-try {
-  const authRoutes = require('./routes/auth');
-  app.use('/api/auth', authRoutes);
-} catch (err) {
-  console.warn('Notice: ./routes/auth file not loaded directly or optional.');
-}
-
-// ==========================================
-// 📧 NODEMAILER SETUP
-// ==========================================
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  pool: true,
-  maxConnections: 5,
-  maxMessages: 100,
-  rateDelta: 1000,
-  rateLimit: 5,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  }
-});
-
-transporter.verify((error) => {
-  if (error) {
-    console.error('--> [EMAIL SETUP ERROR]:', error.message);
-  } else {
-    console.log('--> [EMAIL SERVER READY]: Fast SMTP connection pool active!');
-  }
-});
-
 const ADMIN_EMAILS = new Set(['tekebaaweke32@gmail.com']);
 
 const resolveEffectiveRole = (role, email) => {
@@ -489,7 +580,7 @@ const resolveEffectiveRole = (role, email) => {
   return safeRoles.includes(value) ? value : 'job_seeker';
 };
 
-const sanitizeUser = (user) => ({
+const sanitizeUser = (user = {}) => ({
   id: user.id,
   full_name: user.full_name,
   email: user.email,
@@ -548,6 +639,27 @@ const upload = multer({
   },
 });
 
+const reportEvidenceUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, reportUploadDir),
+    filename: (_req, file, cb) => {
+      const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+      cb(null, `report-${uniqueSuffix}${path.extname(file.originalname || '').toLowerCase()}`);
+    },
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowedFiles = new Map([['.jpg', 'image/jpeg'], ['.jpeg', 'image/jpeg'], ['.png', 'image/png'], ['.webp', 'image/webp'], ['.pdf', 'application/pdf']]);
+    const extension = path.extname(file.originalname || '').toLowerCase();
+    const allowed = allowedFiles.get(extension) === file.mimetype;
+    cb(allowed ? null : new Error('Evidence must be a JPG, PNG, WebP, or PDF file.'), allowed);
+  },
+});
+const handleReportEvidenceUpload = (req, res, next) => reportEvidenceUpload.single('evidence')(req, res, (error) => {
+  if (error) return res.status(400).json({ success: false, message: error.message || 'Evidence upload failed.' });
+  return next();
+});
+
 const authenticateUser = (req, res, next) => {
   const authHeader = req.headers.authorization || '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
@@ -576,11 +688,17 @@ const requireAdmin = (req, res, next) => {
 
 const adminController = require('./controllers/adminController');
 
+app.post('/api/reports', authenticateUser, handleReportEvidenceUpload, adminController.createReport);
 app.get('/api/admin/overview', authenticateUser, requireAdmin, adminController.getAdminDashboardData);
 app.get('/api/admin/dashboard-stats', authenticateUser, requireAdmin, adminController.getAdminDashboardStats);
+app.get('/api/admin/activity-logs', authenticateUser, requireAdmin, adminController.getAdminActivityLogs);
 app.patch('/api/admin/companies/:companyId/verify', authenticateUser, requireAdmin, adminController.verifyCompany);
 app.patch('/api/admin/company/:id/verify', authenticateUser, requireAdmin, adminController.updateVerificationStatus);
 app.get('/api/admin/companies', authenticateUser, requireAdmin, adminController.getPendingCompanies);
+app.get('/api/admin/reports', authenticateUser, requireAdmin, adminController.getAdminReports);
+app.get('/api/admin/reports/:id/messages', authenticateUser, requireAdmin, adminController.getReportMessages);
+app.post('/api/admin/reports/:id/resolve', authenticateUser, requireAdmin, adminController.resolveAdminReport);
+app.post('/api/admin/reports/:id/reply', authenticateUser, requireAdmin, adminController.replyToReport);
 app.get('/api/admin/jobs', authenticateUser, requireAdmin, adminController.getAllJobsForModeration);
 app.get('/api/admin/jobs/:id/preview', authenticateUser, requireAdmin, adminController.getJobPreview);
 app.patch('/api/admin/users/:userId/status', authenticateUser, requireAdmin, adminController.toggleUserStatus);
@@ -761,6 +879,11 @@ function calculateRealMatch(seekerSkills = '', requiredSkills = '') {
 // 📩 1. SEND OTP API
 // ==========================================
 app.post('/api/send-otp', async (req, res) => {
+  console.log('🚀 [OTP DEBUG] Received request:', {
+    path: req.originalUrl,
+    bodyKeys: Object.keys(req.body || {}),
+    emailDefined: Boolean(req.body?.email),
+  });
   const { email } = req.body || {};
   if (!email) {
     return res.status(400).json({ success: false, message: 'Email is required.' });
@@ -768,15 +891,45 @@ app.post('/api/send-otp', async (req, res) => {
 
   try {
     const normalizedEmail = String(email).trim().toLowerCase();
-    const [rows] = await db.query('SELECT id FROM users WHERE email = ? LIMIT 1', [normalizedEmail]);
+    const [rows] = await db.query('SELECT id, phone FROM users WHERE email = ? LIMIT 1', [normalizedEmail]);
     if (!rows || rows.length === 0) {
       return res.status(404).json({ success: false, message: 'Account not found.' });
     }
 
-    return res.json({ success: true, message: 'OTP flow is configured for this backend.' });
+    const otpResult = await issueOtp({
+      dbClient: db,
+      email: normalizedEmail,
+      phone: rows[0].phone,
+      purpose: 'registration',
+      expiresInMinutes: 3,
+    });
+    const response = {
+      success: true,
+      message: 'OTP sent.',
+      emailDelivered: otpResult.delivery.email,
+      emailError: otpResult.delivery.emailError,
+    };
+    if (process.env.NODE_ENV === 'development') response.devOtp = otpResult.otpCode;
+    if (!otpResult.delivery.email) {
+      return res.status(200).json({
+        success: true,
+        emailDelivered: false,
+        emailError: otpResult.delivery.emailError,
+        message: otpResult.delivery.emailError || 'Email delivery failed. Check the backend SMTP configuration and server logs, then try again.',
+        ...(process.env.NODE_ENV === 'development' ? { devOtp: otpResult.otpCode } : {}),
+      });
+    }
+    return res.json(response);
   } catch (error) {
-    console.error('OTP setup check failed:', error);
-    return res.status(500).json({ success: false, message: 'Unable to process OTP request.' });
+    console.error('❌ [OTP REQUEST ERROR]:', error);
+    if (error.code === 'OTP_RATE_LIMITED') {
+      return res.status(429).json({ success: false, error: error.message });
+    }
+    return res.status(500).json({
+      success: false,
+      error: error.message,
+      ...(process.env.NODE_ENV !== 'production' ? { stack: error.stack } : {}),
+    });
   }
 });
 
@@ -787,7 +940,7 @@ app.post('/api/login', async (req, res) => {
   }
 
   const cleanEmail = String(email).trim().toLowerCase();
-  const enteredOtp = String(otp).trim();
+  const enteredOtp = String(req.body.otp_code || req.body.otp || '').trim();
 
   try {
     const [rows] = await db.query(
@@ -805,7 +958,7 @@ app.post('/api/login', async (req, res) => {
     }
 
     const otpRecord = rows[0];
-    if (new Date() > new Date(otpRecord.expires_at)) {
+    if (new Date(otpRecord.expires_at).getTime() <= Date.now()) {
       await db.query('UPDATE otps SET is_used = 1 WHERE id = ?', [otpRecord.id]);
       return res.status(400).json({
         success: false,
@@ -909,7 +1062,7 @@ app.post('/api/register', validateSignUp, async (req, res) => {
       );
       await db.query('UPDATE otps SET is_used = TRUE WHERE email = ? AND is_used = FALSE', [normalizedEmail]);
 
-      await issueOtp({ dbClient: db, email: normalizedEmail, phone: userPhone, purpose: 'registration' });
+      const otpResult = await issueOtp({ dbClient: db, email: normalizedEmail, phone: userPhone, purpose: 'registration' });
 
       return res.status(201).json({
         success: true,
@@ -917,7 +1070,8 @@ app.post('/api/register', validateSignUp, async (req, res) => {
         email: normalizedEmail,
         role: selectedRole,
         userId: existingUser.id,
-        message: 'ያልተጠናቀቀ ምዝገባ ተገኝቷል። አዲስ የማረጋገጫ ኮድ ተልኳል።'
+        message: 'ያልተጠናቀቀ ምዝገባ ተገኝቷል። አዲስ የማረጋገጫ ኮድ ተልኳል።',
+        ...(process.env.NODE_ENV === 'development' ? { devOtp: otpResult.otpCode } : {}),
       });
     }
 
@@ -945,18 +1099,19 @@ app.post('/api/register', validateSignUp, async (req, res) => {
       user.role = resolvedRole;
     }
 
-    await issueOtp({ dbClient: db, email: normalizedEmail, phone: user.phone, purpose: 'login', expiresInMinutes: 3 });
+    const otpResult = await issueOtp({ dbClient: db, email: normalizedEmail, phone: user.phone, purpose: 'login' });
 
     return res.status(200).json({
       success: true,
       requires_otp: true,
       email: normalizedEmail,
       message: 'OTP verification code sent to your email.',
+      ...(process.env.NODE_ENV === 'development' ? { devOtp: otpResult.otpCode } : {}),
       user: sanitizeUser(user),
     });
   } catch (error) {
     console.error('Login endpoint error:', error);
-    return res.status(500).json({ success: false, message: 'Login failed.' });
+    return res.status(500).json({ success: false, message: error.message || 'Login failed.' });
   }
 });
 
@@ -971,15 +1126,23 @@ app.post('/api/cvs', authenticateUser, upload.single('cv'), async (req, res) => 
       return res.status(404).json({ success: false, message: 'Account not found / መለያ አልተገኘም' });
     }
 
-    const { delivery } = await issueOtp({ dbClient: db, email: normalizedEmail, phone: userRows[0].phone, purpose: 'login' });
+    const otpResult = await issueOtp({ dbClient: db, email: normalizedEmail, phone: userRows[0].phone, purpose: 'login' });
+    const { delivery } = otpResult;
 
-    return res.status(200).json({ success: true, delivery: { emailSent: delivery.email, smsSent: delivery.sms }, message: 'OTP sent to your email.' });
+    return res.status(200).json({
+      success: true,
+      delivery: { emailSent: delivery.email, smsSent: delivery.sms },
+      emailDelivered: delivery.email,
+      emailError: delivery.emailError,
+      message: delivery.email ? 'OTP sent to your email.' : delivery.emailError,
+      ...(process.env.NODE_ENV === 'development' ? { devOtp: otpResult.otpCode } : {}),
+    });
   } catch (error) {
     console.error('Send Login OTP Error:', error);
     if (error.code === 'OTP_RATE_LIMITED') {
       return res.status(429).json({ success: false, message: error.message });
     }
-    return res.status(500).json({ success: false, message: 'Unable to send OTP.' });
+    return res.status(500).json({ success: false, message: error.message || 'Unable to send OTP.' });
   }
 });
 
@@ -992,7 +1155,6 @@ app.use('/api', seekerMatchingRoutes);
 app.use('/api/job-seekers', jobSeekerRoutes);
 app.use('/api/seeker', jobSeekerRoutes);
 app.use('/api/profile', profileRoutes);
-
 app.use((err, _req, res, _next) => {
   console.error('Unhandled server error:', err);
   res.status(err.status || 500).json({ success: false, message: err.message || 'Server error.' });
@@ -1069,6 +1231,30 @@ app.post('/api/jobs', authenticateUser, async (req, res) => {
     const rawMax = data.maximumSalary ?? data.salaryMax ?? data.salary_max ?? data.salaryMaximum;
     const salaryMin = normalizeOptionalNumber(rawMin);
     const salaryMax = normalizeOptionalNumber(rawMax);
+    const rawMinimumExperience = data.min_experience ?? data.minExperience ?? data.years_of_experience_min ?? data.yearsOfExperienceMin;
+    const minExperience = normalizeOptionalNumber(rawMinimumExperience);
+    const yearsOfExperienceMin = minExperience ?? normalizeOptionalNumber(data.years_of_experience_min ?? data.yearsOfExperienceMin) ?? 0;
+    const requiredEducation = normalizeNullableText(data.required_education || data.requiredEducation || data.education) || 'any';
+    const vacancies = normalizeOptionalNumber(data.vacancies ?? data.vacancy_count ?? data.positions) ?? 1;
+    const benefits = normalizeNullableText(data.benefits);
+    const negotiableValue = data.is_negotiable ?? data.is_salary_negotiable;
+    const isNegotiable = negotiableValue === undefined || negotiableValue === null
+      ? true
+      : typeof negotiableValue === 'string'
+        ? ['true', '1'].includes(negotiableValue.toLowerCase())
+        : Boolean(negotiableValue);
+    if (!Number.isInteger(vacancies) || vacancies < 1) {
+      return res.status(400).json({ success: false, error: 'Vacancies must be a whole number of at least 1.' });
+    }
+    if (minExperience !== null && (!Number.isInteger(minExperience) || minExperience < 0)) {
+      return res.status(400).json({ success: false, error: 'Minimum experience must be a non-negative whole number.' });
+    }
+    if (salaryMin !== null && salaryMin < 0 || salaryMax !== null && salaryMax < 0) {
+      return res.status(400).json({ success: false, error: 'Salary amounts cannot be negative.' });
+    }
+    if (salaryMin !== null && salaryMax !== null && salaryMax < salaryMin) {
+      return res.status(400).json({ success: false, error: 'Maximum salary must be greater than or equal to minimum salary.' });
+    }
 
     const deadline = normalizeOptionalDate(data.deadline || data.applicationDeadline || data.application_deadline);
     const scheduledDate = normalizeOptionalDate(
@@ -1099,6 +1285,13 @@ app.post('/api/jobs', authenticateUser, async (req, res) => {
         compensation_currency,
         salary_min,
         salary_max,
+        is_salary_negotiable,
+        is_negotiable,
+        benefits,
+        required_education,
+        min_experience,
+        years_of_experience_min,
+        vacancies,
         application_deadline,
         deadline,
         scheduled_date,
@@ -1106,10 +1299,11 @@ app.post('/api/jobs', authenticateUser, async (req, res) => {
         description,
         status,
         is_approved,
+        approval_status,
         views_count,
         created_at,
         updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
     `;
 
     const params = [
@@ -1126,6 +1320,13 @@ app.post('/api/jobs', authenticateUser, async (req, res) => {
       compensationCurrency,
       salaryMin,
       salaryMax,
+      isNegotiable,
+      isNegotiable,
+      benefits,
+      requiredEducation,
+      minExperience,
+      yearsOfExperienceMin,
+      vacancies,
       deadline,
       deadline,
       scheduledDate,
@@ -1133,6 +1334,7 @@ app.post('/api/jobs', authenticateUser, async (req, res) => {
       description,
       status,
       false,
+      'pending',
       viewsCount,
     ];
 
@@ -1178,16 +1380,16 @@ const handleJobStatusUpdate = async (req, res) => {
     return res.status(400).json({ success: false, error: `Invalid status: ${rawStatus}` });
   }
 
-  const canonicalStatus = ['active', 'published'].includes(cleanStatus)
-    ? 'pending_approval'
-    : cleanStatus === 'rejected'
-      ? 'rejected'
-      : cleanStatus;
+  const canonicalStatus = cleanStatus;
 
   try {
     const [result] = await db.query(
       `UPDATE jobs
-       SET status = ?,
+       SET status = CASE
+             WHEN ? IN ('published', 'active') AND approval_status = 'approved' THEN 'active'
+             WHEN ? IN ('published', 'active') THEN 'pending_approval'
+             ELSE ?
+           END,
            scheduled_date = CASE
              WHEN ? = 'scheduled' THEN COALESCE(scheduled_date, NOW())
              WHEN ? IN ('published', 'active') THEN NULL
@@ -1195,7 +1397,7 @@ const handleJobStatusUpdate = async (req, res) => {
            END,
            updated_at = NOW()
        WHERE id = ? AND employer_id = ?`,
-      [canonicalStatus, cleanStatus, cleanStatus, jobId, employerId]
+      [cleanStatus, cleanStatus, canonicalStatus || cleanStatus, cleanStatus, cleanStatus, jobId, employerId]
     );
 
     if (result.affectedRows === 0) {
@@ -1207,7 +1409,11 @@ const handleJobStatusUpdate = async (req, res) => {
 
       await db.query(
         `UPDATE jobs
-         SET status = ?,
+         SET status = CASE
+               WHEN ? IN ('published', 'active') AND approval_status = 'approved' THEN 'active'
+               WHEN ? IN ('published', 'active') THEN 'pending_approval'
+               ELSE ?
+             END,
              scheduled_date = CASE
                WHEN ? = 'scheduled' THEN COALESCE(scheduled_date, NOW())
                WHEN ? IN ('published', 'active') THEN NULL
@@ -1215,7 +1421,7 @@ const handleJobStatusUpdate = async (req, res) => {
              END,
              updated_at = NOW()
          WHERE id = ?`,
-        [canonicalStatus, cleanStatus, cleanStatus, jobId]
+        [cleanStatus, cleanStatus, canonicalStatus || cleanStatus, cleanStatus, cleanStatus, jobId]
       );
     }
 
@@ -1263,7 +1469,8 @@ const handleGetEmployerMyJobs = async (req, res) => {
 
     const [jobs] = await db.query(
       `SELECT
-         j.*,
+        j.*,
+        DATE_FORMAT(j.scheduled_date, '%Y-%m-%dT%H:%i:%sZ') AS scheduledAt,
          COALESCE((SELECT COUNT(*) FROM applications a WHERE a.job_id = j.id), 0) AS total_applicants,
          COALESCE((SELECT COUNT(*) FROM applications a WHERE a.job_id = j.id AND (a.status = 'pending' OR a.status IS NULL)), 0) AS pending_count,
          COALESCE((SELECT COUNT(*) FROM applications a WHERE a.job_id = j.id AND a.status = 'shortlisted'), 0) AS shortlisted_count,
@@ -1296,7 +1503,10 @@ const handleGetEmployerMyJobs = async (req, res) => {
     return res.json({
       success: true,
       count: jobs.length,
-      jobs: jobs || [],
+      jobs: (jobs || []).map((job) => ({
+        ...job,
+        isScheduled: String(job.status).toLowerCase() === 'scheduled' && Boolean(job.scheduledAt),
+      })),
     });
   } catch (error) {
     console.error('--> [FETCH MY JOBS ERROR]:', error.message);
@@ -1329,7 +1539,7 @@ app.get('/api/jobs', async (req, res) => {
         COALESCE(users.full_name, jobs.company_name, 'Employer') AS employer_name
       FROM jobs
       LEFT JOIN users ON jobs.employer_id = users.id
-      WHERE LOWER(jobs.status) = 'active' AND jobs.is_approved = TRUE
+      WHERE LOWER(jobs.status) = 'active' AND jobs.approval_status = 'approved'
       ORDER BY jobs.created_at DESC
     `);
     res.status(200).json(jobs);
@@ -1346,7 +1556,7 @@ app.get('/api/jobs/:id', async (req, res) => {
              users.full_name AS employer_name
       FROM jobs
       LEFT JOIN users ON users.id = jobs.employer_id
-      WHERE jobs.id = ? AND LOWER(jobs.status) = 'active' AND jobs.is_approved = TRUE
+      WHERE jobs.id = ? AND LOWER(jobs.status) = 'active' AND jobs.approval_status = 'approved'
       LIMIT 1
     `, [req.params.id]);
     if (!job) return res.status(404).json({ success: false, message: 'Published job not found.' });
@@ -1545,9 +1755,29 @@ async function ensureAuthColumns() {
   }
 }
 
+const activateDueScheduledJobs = async () => {
+  try {
+    const [result] = await db.query(
+      `UPDATE jobs
+       SET status = 'active', published_at = COALESCE(published_at, UTC_TIMESTAMP())
+       WHERE status = 'scheduled'
+         AND scheduled_date IS NOT NULL
+         AND scheduled_date <= UTC_TIMESTAMP()`
+    );
+    if (result.affectedRows) {
+      console.log(`--> [SCHEDULED JOBS ACTIVATED] ${result.affectedRows} job(s)`);
+    }
+  } catch (error) {
+    console.error('--> [SCHEDULED JOB ACTIVATION ERROR]:', error.message);
+  }
+};
+
 ensureDatabaseSchema()
   .then(() => ensureAuthColumns())
   .then(() => {
+    activateDueScheduledJobs();
+    const scheduledJobTimer = setInterval(activateDueScheduledJobs, 30_000);
+    scheduledJobTimer.unref();
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
     });

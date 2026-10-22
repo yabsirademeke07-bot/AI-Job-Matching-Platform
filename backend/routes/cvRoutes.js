@@ -9,8 +9,14 @@ const upload = multer({
   dest: path.join(__dirname, '..', 'uploads', 'cvs'),
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, callback) => {
-    const allowed = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain', 'image/png', 'image/jpeg', 'image/webp'];
-    callback(null, allowed.includes(file.mimetype) && ['.pdf', '.docx', '.txt', '.png', '.jpg', '.jpeg', '.webp'].includes(path.extname(file.originalname).toLowerCase()));
+    const allowedExtensions = ['.pdf', '.docx', '.doc', '.txt', '.rtf', '.odt', '.png', '.jpg', '.jpeg', '.webp'];
+    if (allowedExtensions.includes(path.extname(file.originalname).toLowerCase())) {
+      return callback(null, true);
+    }
+
+    const error = new Error('Unsupported file type. Please upload a PDF, DOCX, DOC, TXT, RTF, ODT, PNG, JPG, or WEBP CV file.');
+    error.status = 400;
+    callback(error);
   },
 });
 

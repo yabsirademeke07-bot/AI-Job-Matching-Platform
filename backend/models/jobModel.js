@@ -18,37 +18,56 @@ const normalizeJobRecord = (job = {}) => ({
 
 async function listJobs() {
   const [rows] = await db.execute(
-    `SELECT id, employer_id, title, company_name, description, category, sector,
-            job_type, vacancy_level AS experience_level, location, work_mode,
-            salary_min, salary_max, compensation_currency AS currency, required_skills,
-            status, rejection_reason AS rejectionReason, approved_at AS reviewedAt,
-            approved_by AS reviewedBy, application_deadline, deadline, created_at
-    FROM jobs WHERE LOWER(status) = 'active' AND is_approved = TRUE ORDER BY created_at DESC`
+    `SELECT j.id, j.employer_id, j.title, j.description, j.category, j.job_type, j.experience_level,
+        j.required_skills, j.required_education, j.min_experience, j.years_of_experience_min,
+        COALESCE(cp.company_name, j.company_name, u.full_name, 'Company') AS company_name,
+        j.location, j.work_mode, j.salary_min, j.salary_max, j.currency, j.is_negotiable, j.is_salary_negotiable, j.benefits, j.vacancies, j.status, j.approval_status, j.application_deadline,
+        j.scheduled_date, DATE_FORMAT(j.scheduled_date, '%Y-%m-%dT%H:%i:%sZ') AS scheduledAt,
+        CASE WHEN j.status = 'scheduled' AND j.scheduled_date IS NOT NULL THEN TRUE ELSE FALSE END AS isScheduled,
+        j.created_at
+     FROM jobs j
+     JOIN users u ON u.id = j.employer_id
+     LEFT JOIN company_profiles cp ON cp.employer_id = j.employer_id
+     WHERE LOWER(j.status) IN ('active', 'published')
+       AND j.approval_status = 'approved'
+     ORDER BY j.created_at DESC`
   );
-  return rows.map(normalizeJobRecord);
-}
-
-async function findJobById(id) {
-  const [rows] = await db.execute(
-    `SELECT j.*, j.rejection_reason AS rejectionReason, j.approved_at AS reviewedAt, j.approved_by AS reviewedBy
-     FROM jobs j WHERE j.id = ? LIMIT 1`,
-    [id]
-  );
-  return rows[0] ? normalizeJobRecord(rows[0]) : null;
+  return rows.map((job) => ({ ...job, isScheduled: Boolean(job.isScheduled) }));
 }
 
 async function findPublicJobById(id) {
   const [rows] = await db.execute(
-    `SELECT j.*, j.rejection_reason AS rejectionReason, j.approved_at AS reviewedAt, j.approved_by AS reviewedBy
-     FROM jobs j WHERE j.id = ? AND LOWER(j.status) = 'active' AND j.is_approved = TRUE LIMIT 1`,
+    `SELECT j.id, j.employer_id, j.title, j.description, j.category, j.job_type, j.experience_level,
+        j.required_skills, j.required_education, j.min_experience, j.years_of_experience_min,
+        COALESCE(cp.company_name, j.company_name, u.full_name, 'Company') AS company_name,
+        j.location, j.work_mode, j.salary_min, j.salary_max, j.currency, j.is_negotiable, j.is_salary_negotiable, j.benefits, j.vacancies, j.status, j.approval_status, j.application_deadline,
+        j.scheduled_date, DATE_FORMAT(j.scheduled_date, '%Y-%m-%dT%H:%i:%sZ') AS scheduledAt,
+        CASE WHEN j.status = 'scheduled' AND j.scheduled_date IS NOT NULL THEN TRUE ELSE FALSE END AS isScheduled,
+        j.created_at
+     FROM jobs j
+     JOIN users u ON u.id = j.employer_id
+     LEFT JOIN company_profiles cp ON cp.employer_id = j.employer_id
+     WHERE j.id = ? AND LOWER(j.status) IN ('active', 'published')
+       AND j.approval_status = 'approved'
+     LIMIT 1`,
     [id]
   );
-  return rows[0] ? normalizeJobRecord(rows[0]) : null;
+  return rows[0] ? { ...rows[0], isScheduled: Boolean(rows[0].isScheduled) } : null;
+}
+
+async function findJobById(id) {
+  const [rows] = await db.execute("SELECT *, DATE_FORMAT(scheduled_date, '%Y-%m-%dT%H:%i:%sZ') AS scheduledAt, CASE WHEN status = 'scheduled' AND scheduled_date IS NOT NULL THEN TRUE ELSE FALSE END AS isScheduled FROM jobs WHERE id = ? LIMIT 1", [id]);
+  return rows[0] ? { ...rows[0], isScheduled: Boolean(rows[0].isScheduled) } : null;
 }
 
 async function createJob(job) {
   const title = String(job.title || '').trim();
   const company = String(job.company || job.company_name || '').trim();
+  const rawMinimumExperience = job.min_experience ?? job.minExperience ?? job.years_of_experience_min;
+  const minExperience = rawMinimumExperience === '' || rawMinimumExperience === undefined ? null : Number(rawMinimumExperience);
+  const minimumExperienceYears = minExperience ?? Number(job.years_of_experience_min || 0);
+  const negotiable = job.is_negotiable ?? job.is_salary_negotiable ?? true;
+  const vacancies = Number(job.vacancies ?? job.vacancy_count ?? 1);
   const titleKey = title.toLowerCase();
   const companyKey = company.toLowerCase();
 
@@ -68,9 +87,10 @@ async function createJob(job) {
     `INSERT INTO jobs (
       employer_id, title, company_name, description, category, sector, job_type,
       experience_level, location, work_mode, gender_preference, salary_min,
-      salary_max, currency, required_education, application_deadline,
-      required_skills, status
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+      salary_max, currency, is_negotiable, is_salary_negotiable, benefits,
+      required_education, min_experience, years_of_experience_min, vacancies,
+      application_deadline, required_skills, status, approval_status
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending')`,
     [
       job.employerId,
       job.title,
@@ -86,7 +106,13 @@ async function createJob(job) {
       job.salaryMin || null,
       job.salaryMax || null,
       job.currency || 'ETB',
-      job.education || 'any',
+      negotiable,
+      negotiable,
+      job.benefits || null,
+      job.required_education || job.education || 'any',
+      minExperience,
+      minimumExperienceYears,
+      vacancies,
       job.applicationDeadline || null,
       job.requiredSkills || null,
     ]

@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Check, Mail, Sparkles } from 'lucide-react';
+import { Check, Mail } from 'lucide-react';
 
 const POPULAR_DOMAINS = ['@gmail.com', '@outlook.com', '@yahoo.com', '@hotmail.com', '@icloud.com'];
 
@@ -44,10 +44,6 @@ const EmailInputWithDomains = ({ value = '', onChange, error = '', suggestion = 
 
       {shouldShowSuggestions && (
         <div className="min-h-10 pt-1 animate-fadeIn">
-          <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-extrabold text-slate-500">
-            <Sparkles className="h-3 w-3 text-blue-500" />
-            <span>Quick domain selection:</span>
-          </div>
           <div className="flex flex-wrap gap-1.5">
             {POPULAR_DOMAINS.map((domain) => {
               const selected = value.toLowerCase().endsWith(domain);

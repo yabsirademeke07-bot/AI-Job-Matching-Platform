@@ -27,7 +27,7 @@ import Home from './pages/home/Home';
 import About from './pages/about';
 import Contact from './pages/contact';
 import ExploreJobs from './pages/ExploreJobs';
-import JobDetailsPage from './pages/JobDetails';
+import JobDetailsPage from './pages/Jobdetails';
 import ApplyJob from './pages/ApplyJob';
 import Companies from './pages/Companies';
 import CompanyCommunity from './pages/CompanyCommunity';
@@ -76,14 +76,14 @@ function AppLayout() {
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans">
       {!isAdminRoute && <Navbar />}
-      <main className="flex-1 w-full">
+      <main className={`flex-1 w-full ${!isAdminRoute ? 'pt-20 sm:pt-24' : ''}`}>
         <Routes>
           {/* ========================================== */}
           {/* 1. PUBLIC ROUTES                           */}
           {/* ========================================== */}
           <Route path="/" element={<Home />} />
           <Route path="/jobs" element={<ExploreJobs />} />
-          <Route path="/explore-jobs" element={<ExploreJobs />} />
+          <Route path="/explore-jobs" element={new URLSearchParams(location.search).get('from') === 'dashboard' ? <ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}>{withSeekerSidebar(<ExploreJobs />)}</ProtectedRoute> : <ExploreJobs />} />
 
           <Route path="/job-details/:id" element={<JobDetailsPage />} />
           <Route path="/jobs/:id" element={<JobDetailsPage />} />
@@ -201,7 +201,7 @@ function AppLayout() {
             path="/seeker-dashboard"
             element={
               <ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}>
-                <JobSeekerDashboard />
+                {withSeekerSidebar(<JobSeekerDashboard />)}
               </ProtectedRoute>
             }
           />
@@ -209,7 +209,7 @@ function AppLayout() {
             path="/seeker/dashboard"
             element={
               <ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}>
-                <JobSeekerDashboard />
+                {withSeekerSidebar(<JobSeekerDashboard />)}
               </ProtectedRoute>
             }
           />
@@ -221,7 +221,7 @@ function AppLayout() {
             path="/seekerDashboard"
             element={
               <ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}>
-                <JobSeekerDashboard />
+                {withSeekerSidebar(<JobSeekerDashboard />)}
               </ProtectedRoute>
             }
           />
@@ -229,7 +229,7 @@ function AppLayout() {
             path="/dashboard"
             element={
               <ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}>
-                <JobSeekerDashboard />
+                {withSeekerSidebar(<JobSeekerDashboard />)}
               </ProtectedRoute>
             }
           />
@@ -299,6 +299,14 @@ function AppLayout() {
           />
           <Route
             path="/employer/dashboard"
+            element={
+              <ProtectedRoute allowedRoles={["employer", "company", "recruiter"]}>
+                <EmployerWorkspace />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/employer/ai-matching"
             element={
               <ProtectedRoute allowedRoles={["employer", "company", "recruiter"]}>
                 <EmployerWorkspace />

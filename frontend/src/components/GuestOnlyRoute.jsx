@@ -1,8 +1,9 @@
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { getNextOnboardingStep } from '../utils/applicationFlow';
 import { resolveUserRole } from '../utils/authSession';
 
 export default function GuestOnlyRoute({ children }) {
+  const location = useLocation();
   const user = (() => {
     try {
       return JSON.parse(localStorage.getItem('user') || 'null');
@@ -11,6 +12,7 @@ export default function GuestOnlyRoute({ children }) {
     }
   })();
 
+  if (location.state?.allowLogin) return children;
   if (!localStorage.getItem('token') || !user) return children;
 
   const role = resolveUserRole(user);

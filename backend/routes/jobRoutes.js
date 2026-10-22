@@ -49,6 +49,14 @@ router.post('/apply', async (req, res) => {
     }
 
     try {
+        const [availableJobs] = await db.query(
+            "SELECT id FROM jobs WHERE id = ? AND LOWER(status) IN ('active', 'published') AND approval_status = 'approved' LIMIT 1",
+            [job_id]
+        );
+        if (!availableJobs.length) {
+            return res.status(404).json({ success: false, message: 'This job is no longer available.' });
+        }
+
         // Match Score ማስላት
         const score = calculateRealMatch(seeker_skills, required_skills);
 

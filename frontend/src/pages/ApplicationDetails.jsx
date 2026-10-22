@@ -52,7 +52,7 @@ const normalizeStatus = (value) => {
   if (["review", "in review", "under review", "under-review", "employer reviewed"].includes(status))
     return "Under Review";
   if (["shortlisted", "shortlist"].includes(status)) return "Shortlisted";
-  if (["interview", "interview scheduled", "interview-scheduled"].includes(status))
+  if (["interview", "interviewed", "interview scheduled", "interview-scheduled"].includes(status))
     return "Interview";
   if (["hired", "offer", "accepted"].includes(status)) return "Hired";
   if (["rejected", "declined"].includes(status)) return "Rejected";
@@ -128,10 +128,45 @@ export default function ApplicationDetails() {
       }
     };
     loadApplication();
+    const handleStatusSync = async () => {
+      try {
+        const { data } = await api.get('/seeker/applications');
+        const latest = (data.applications || []).find((item) => String(item.id) === String(id));
+        if (latest) setApplication((current) => ({ ...(current || {}), ...latest }));
+      } catch (refreshError) {
+        console.error('Unable to refresh application status', refreshError);
+      }
+    };
+
+    window.addEventListener('job-matching:updated', handleStatusSync);
     return () => {
       active = false;
+      window.removeEventListener('job-matching:updated', handleStatusSync);
     };
   }, [id, location.state]);
+
+  useEffect(() => {
+    let active = true;
+    const refreshApplication = async () => {
+      try {
+        const { data } = await api.get("/seeker/applications");
+        const latest = (data.applications || []).find(
+          (item) => String(item.id) === String(id),
+        );
+        if (active && latest) {
+          setApplication((current) => ({ ...current, ...latest }));
+        }
+      } catch (refreshError) {
+        console.error("Unable to refresh application status", refreshError);
+      }
+    };
+
+    const intervalId = window.setInterval(refreshApplication, 10000);
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+    };
+  }, [id]);
 
   const statusLabel = useMemo(
     () => normalizeStatus(application?.status),
@@ -245,7 +280,11 @@ export default function ApplicationDetails() {
           ? 4
           : statusLabel === "Shortlisted"
             ? 3
-            : statusLabel === "Under Review" || matchScore != null
+            : statusLabel === "Pending"
+              ? matchScore != null
+                ? 1
+                : 0
+              : statusLabel === "Under Review" || matchScore != null
               ? 2
               : 0;
 
@@ -330,6 +369,15 @@ export default function ApplicationDetails() {
                 );
               })}
             </div>
+            {application.interview?.scheduledAt && (
+              <p className="mt-5 rounded-xl bg-violet-50 px-4 py-3 text-sm font-semibold text-violet-800">
+                Interview scheduled for{" "}
+                {new Date(application.interview.scheduledAt).toLocaleString(
+                  undefined,
+                  { dateStyle: "medium", timeStyle: "short" },
+                )}
+              </p>
+            )}
           </div>
           <div
             id="ai-match"

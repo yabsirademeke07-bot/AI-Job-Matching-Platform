@@ -4,7 +4,7 @@ const path = require('path');
 const authMiddleware = require('../middleware/authMiddleware');
 const {
   getProfile, updateProfile, saveProfile, listCollection, addCollectionItem,
-  deleteCollectionItem, getApplications, uploadCv, updatePersonalInfo, updateSkills
+  deleteCollectionItem, getApplications, getTalentPoolShortlists, uploadCv, updatePersonalInfo, updateSkills
 } = require('../controllers/jobSeekerController');
 
 const router = express.Router();
@@ -26,6 +26,7 @@ router.post('/profile/save', saveProfile);
 router.put('/profile/personal', updatePersonalInfo);
 router.put('/profile/skills', updateSkills);
 router.get('/applications', getApplications);
+router.get('/talent-pool-shortlists', getTalentPoolShortlists);
 router.post('/upload-cv', upload.single('cv'), uploadCv);
 router.get('/:collection', listCollection);
 router.post('/:collection', addCollectionItem);

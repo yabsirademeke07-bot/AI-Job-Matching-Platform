@@ -31,13 +31,13 @@ const ForgotPassword = () => {
     setError('');
 
     try {
-      await API.post('/auth/forgot-password', {
+      const { data } = await API.post('/auth/forgot-password', {
         email: email.trim().toLowerCase(),
       });
 
       setResetEmail(email);
       showSuccess('If an account exists for this email, a verification code has been sent.');
-      navigate('/verify-reset-otp', { replace: true, state: { email: email.trim().toLowerCase() } });
+      navigate('/verify-reset-otp', { replace: true, state: { email: email.trim().toLowerCase(), otpExpiresAt: data.otpExpiresAt } });
     } catch (err) {
       const message = err?.response?.data?.message || 'Unable to send the reset code. Please try again.';
       showError(message);

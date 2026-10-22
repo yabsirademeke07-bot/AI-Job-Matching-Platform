@@ -15,6 +15,7 @@ import {
 
 import { useAuth } from '../context/AuthContext';
 import LogoutFlowModals from './LogoutFlowModals';
+import SeekerAlertsMenu from './seeker/SeekerAlertsMenu';
 import { getNextOnboardingStep } from '../utils/applicationFlow';
 import API from '../services/api';
 import logoImage from '../pages/images/logo1.png';
@@ -212,16 +213,25 @@ export default function Navbar() {
   }, [isAuthenticated, location.pathname]);
 
   return (
-    <header className="navbar sticky top-0 z-[9999] w-full border-b border-slate-200/80 bg-white/95 shadow-sm backdrop-blur-md">
+    <header className="navbar fixed left-0 right-0 top-0 z-50 w-full border-b border-slate-200/80 bg-white/95 shadow-xs backdrop-blur-md transition-all duration-200 dark:border-slate-800 dark:bg-slate-900/95">
       {/* Container: px-4 sm:px-6 lg:px-8 በመጠቀም ወደ ግራ እና ቀኝ ዳር እንዲጠጋ ተደርጓል */}
-      <div className="w-full px-4 sm:px-6 lg:px-8 h-20 sm:h-24 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4">
+      <div className="navbar-main-grid w-full px-3 sm:px-6 lg:px-8 h-20 sm:h-24 grid grid-cols-[minmax(0,1fr)_auto] lg:grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 sm:gap-4">
 
         {/* BRAND LOGO */}
-        <Link to="/" className="group flex shrink-0 items-center gap-3">
-          <img src={logoImage} alt="AI Job Matching" className="h-12 w-12 rounded-full object-cover transition-transform duration-200 group-hover:scale-[1.02] sm:h-14 sm:w-14" />
-          <div className="hidden text-left sm:block">
-            <div className="text-[0.55rem] font-black uppercase tracking-[0.25em] text-sky-600 sm:text-[0.7rem]">AI</div>
-            <div className="text-[0.68rem] font-black uppercase tracking-[0.18em] text-slate-800 sm:text-[0.82rem]">Job Matching</div>
+        <Link to="/" className="navbar-brand-mark group flex min-w-0 shrink items-center gap-2 sm:gap-3">
+          <div className="navbar-brand-image relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-sky-200 bg-gradient-to-br from-sky-100 via-white to-blue-100 shadow-sm ring-2 ring-sky-100 transition-transform duration-200 group-hover:scale-[1.02] sm:h-14 sm:w-14">
+            <img src={logoImage} alt="AI Job Matching" className="h-full w-full object-cover" />
+          </div>
+          <div className="navbar-brand-text flex min-w-0 flex-col justify-center">
+            <div className="flex items-center gap-1.5">
+              <span className="navbar-brand-title whitespace-nowrap text-sm font-black leading-none tracking-tight sm:text-xl">
+                <span className="ml-1.5 font-extrabold text-slate-900">JOB</span>
+                <span className="ml-1 font-extrabold text-blue-600">MATCHING</span>
+              </span>
+            </div>
+            <span className="navbar-brand-tagline mt-0.5 whitespace-nowrap text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+              Smart Career Platform
+            </span>
           </div>
         </Link>
 
@@ -230,7 +240,7 @@ export default function Navbar() {
 
           <Link
             to="/"
-            className={`relative py-1 text-base xl:text-lg font-bold tracking-wide transition-colors duration-200 group ${isActive('/') ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'
+            className={`relative inline-flex items-center py-1 text-lg leading-6 font-bold tracking-wide transition-colors duration-200 group ${isActive('/') ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'
               }`}
           >
             Home
@@ -240,7 +250,7 @@ export default function Navbar() {
 
           <Link
             to="/jobs"
-            className={`relative py-1 text-base xl:text-lg font-bold tracking-wide transition-colors duration-200 group ${isActive('/jobs') || isActive('/explorejobs') ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'
+            className={`relative inline-flex items-center py-1 text-lg leading-6 font-bold tracking-wide transition-colors duration-200 group ${isActive('/jobs') || isActive('/explorejobs') ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'
               }`}
           >
             Explore Jobs
@@ -250,7 +260,7 @@ export default function Navbar() {
 
           <Link
             to="/how-it-works"
-            className={`relative py-1 text-base xl:text-lg font-bold tracking-wide transition-colors duration-200 group ${isActive('/how-it-works') ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'
+            className={`relative inline-flex items-center py-1 text-lg leading-6 font-bold tracking-wide transition-colors duration-200 group ${isActive('/how-it-works') ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'
               }`}
           >
             How It Works
@@ -260,17 +270,17 @@ export default function Navbar() {
 
           <Link
             to="/about"
-            className={`relative py-1 text-base xl:text-lg font-bold tracking-wide transition-colors duration-200 group ${isActive('/about') ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'
+            className={`relative inline-flex items-center py-1 text-lg leading-6 font-bold tracking-wide transition-colors duration-200 group ${isActive('/about') ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'
               }`}
           >
-            About
+            About Us
             <span className={`absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 rounded-full transition-transform duration-300 origin-left ${isActive('/about') ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
               }`} />
           </Link>
 
           <Link
             to="/contact"
-            className={`relative py-1 text-base xl:text-lg font-bold tracking-wide transition-colors duration-200 group ${isActive('/contact') ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'
+            className={`relative inline-flex items-center py-1 text-lg leading-6 font-bold tracking-wide transition-colors duration-200 group ${isActive('/contact') ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'
               }`}
           >
             Contact
@@ -301,7 +311,9 @@ export default function Navbar() {
           )}
         </nav>
 
-        <div className="hidden lg:flex items-center justify-end gap-3 shrink-0">
+        <div className="ml-auto flex min-w-0 items-center justify-end gap-1 sm:gap-2">
+          {isAuthenticated && isSeeker && <SeekerAlertsMenu />}
+          <div className="hidden shrink-0 items-center justify-end gap-3 lg:flex">
           {isAuthenticated && (
             <div ref={profileMenuRef} className="relative">
               <div className="flex min-h-11 items-center gap-2 rounded-xl px-2 py-1.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100">
@@ -353,10 +365,10 @@ export default function Navbar() {
               <Link to="/register" className="brand-button h-12 min-w-[160px] text-base xl:text-lg shadow-[0_10px_18px_rgba(78,150,214,0.25)]"><span>Sign Up</span></Link>
             </>
           )}
-        </div>
+          </div>
 
         {/* MOBILE & TABLET HAMBURGER MENU BUTTON */}
-        <div className="flex items-center lg:hidden ml-auto">
+        <div className="navbar-mobile-menu flex shrink-0 items-center lg:hidden">
           <button
             type="button"
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -369,6 +381,7 @@ export default function Navbar() {
               <Menu className="w-7 h-7 text-slate-800" />
             )}
           </button>
+        </div>
         </div>
 
       </div>
@@ -411,7 +424,7 @@ export default function Navbar() {
               className={`px-4 py-3 rounded-xl font-bold text-base transition-colors ${isActive('/about') ? 'bg-blue-50 text-blue-600' : 'text-slate-700 hover:bg-slate-50'
                 }`}
             >
-              About
+              About Us
             </Link>
 
             <Link
