@@ -1,133 +1,99 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
-const USE_MOCKS = import.meta.env.VITE_USE_PROFILE_MOCKS === 'true';
-import { notifyProfileUpdated } from '../utils/profileUpdateEvent';
+import api from "./api";
+import { notifyProfileUpdated } from "../utils/profileUpdateEvent";
 
-const emptyProfile = {
-  id: '',
-  name: '',
-  headline: '',
-  email: '',
-  phone: '',
-  location: '',
-  linkedin: '',
-  github: '',
-  bio: '',
-  avatarUrl: '',
+export const emptyProfile = {
+  id: "",
+  name: "",
+  headline: "",
+  email: "",
+  phone: "",
+  location: "",
+  bio: "",
   education: [],
-  skills: { Technical: [], Frameworks: [], Tools: [], 'Soft Skills': [] },
+  skills: [],
   experience: [],
+  languages: [],
   certifications: [],
 };
 
-function getStoredProfile() {
-  try {
-    const stored = JSON.parse(localStorage.getItem('userProfile') || 'null');
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
-    return {
-      ...emptyProfile,
-      ...stored,
-      name: stored?.name || user?.full_name || user?.name || '',
-      email: stored?.email || user?.email || '',
-    };
-  } catch {
-    return emptyProfile;
-  }
-}
-
-async function request(path, options, fallback) {
-  try {
-    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-    const response = await fetch(`${API_BASE_URL}${path}`, {
-      ...options,
-      headers: { Accept: 'application/json', ...(options?.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }), ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(options?.headers || {}) },
-    });
-    if (!response.ok) {
-      const details = await response.json().catch(() => ({}));
-      throw new Error(details.message || `Profile request failed with status ${response.status}`);
-    }
-    return await response.json();
-  } catch (error) {
-    if (USE_MOCKS) return typeof fallback === 'function' ? fallback() : fallback;
-    throw error instanceof Error ? error : new Error('Profile request failed');
-  }
-}
-
 export async function getProfile() {
-  const response = await request('/seeker/profile/full', undefined, getStoredProfile);
-  if (!response?.profile) return response;
-  const profile = response.profile;
+  const { data } = await api.get("/seeker/profile/full");
+  if (!data?.profile) return data;
+  const profile = data.profile;
   return {
     ...profile,
     id: profile.id || profile.user_id,
-    name: profile.full_name || profile.name || '',
-    email: profile.email || '',
-    phone: profile.phone || '',
-    location: profile.location || profile.city || '',
-    education: response.education || [],
-    skills: response.skills || {},
-    experience: response.experience || [],
-    languages: response.languages || [],
+    name: profile.full_name || profile.name || "",
+    email: profile.email || "",
+    phone: profile.phone || "",
+    location: profile.location || profile.city || "",
+    education: data.education || [],
+    skills: data.skills || [],
+    experience: data.experience || [],
+    languages: data.languages || [],
+    certifications: data.certifications || [],
   };
 }
 
-export async function updateProfile(data) {
-  const payload = { ...data };
-  localStorage.setItem('userProfile', JSON.stringify(payload));
+export async function updateProfile(profile) {
+  const { data } = await api.put("/seeker/profile", profile);
   notifyProfileUpdated();
-  return request('/seeker/profile', { method: 'PUT', body: JSON.stringify(payload) }, payload);
+  return data?.profile || data?.data || data;
 }
 
 export async function uploadAvatar(file) {
   const formData = new FormData();
-  formData.append('avatar', file);
-  return request('/seeker/profile/avatar', { method: 'POST', body: formData }, () => ({ avatarUrl: URL.createObjectURL(file) }));
+  formData.append("avatar", file);
+  const { data } = await api.post("/seeker/profile/avatar", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
 }
 
-export async function addExperience(data) {
-  return request('/seeker/profile/experience', { method: 'POST', body: JSON.stringify(data) }, () => persistCollection('experience', data));
-}
+const updateCollection = async (key, updater) => {
+  const profile = await getProfile();
+  const currentItems = Array.isArray(profile[key]) ? profile[key] : [];
+  const nextItems = updater(currentItems);
+  const updated = await updateProfile({ ...profile, [key]: nextItems });
+  return { profile: updated, items: nextItems };
+};
 
-export async function addEducation(data) {
-  return request('/seeker/profile/education', { method: 'POST', body: JSON.stringify(data) }, () => persistCollection('education', data));
-}
+const addItem = async (key, item) => {
+  const newItem = { ...item, id: item.id || globalThis.crypto?.randomUUID?.() || `${Date.now()}` };
+  await updateCollection(key, (items) => [...items, newItem]);
+  return newItem;
+};
 
-export async function addCertification(data) {
-  return request('/seeker/profile/certifications', { method: 'POST', body: JSON.stringify(data) }, () => persistCollection('certifications', data));
-}
+const updateItem = async (key, id, changes) => {
+  const { items } = await updateCollection(key, (current) => current.map((item) => String(item.id) === String(id) ? { ...item, ...changes, id: item.id } : item));
+  return items.find((item) => String(item.id) === String(id));
+};
 
-function persistCollection(key, value) {
-  const profile = getStoredProfile();
-  const item = { id: value.id || `${key}-${Date.now()}`, ...value };
-  const next = { ...profile, [key]: [...(profile[key] || []), item] };
-  localStorage.setItem('userProfile', JSON.stringify(next));
-  notifyProfileUpdated();
-  return item;
-}
-
-function updateCollection(key, id, value) {
-  const profile = getStoredProfile();
-  const next = { ...profile, [key]: (profile[key] || []).map((item) => String(item.id) === String(id) ? { ...item, ...value, id: item.id } : item) };
-  localStorage.setItem('userProfile', JSON.stringify(next));
-  notifyProfileUpdated();
-  return next[key].find((item) => String(item.id) === String(id));
-}
-
-function deleteCollection(key, id) {
-  const profile = getStoredProfile();
-  const next = { ...profile, [key]: (profile[key] || []).filter((item) => String(item.id) !== String(id)) };
-  localStorage.setItem('userProfile', JSON.stringify(next));
-  notifyProfileUpdated();
+const deleteItem = async (key, id) => {
+  await updateCollection(key, (items) => items.filter((item) => String(item.id) !== String(id)));
   return { id };
+};
+
+export const addExperience = (data) => addItem("experience", data);
+export const addEducation = (data) => addItem("education", data);
+export const addCertification = (data) => addItem("certifications", data);
+
+export async function updatePersonalInfo(data) {
+  const { data: response } = await api.put("/seeker/profile/personal", data);
+  notifyProfileUpdated();
+  return response;
 }
 
-export async function updatePersonalInfo(data) { return request('/seeker/profile/personal', { method: 'PUT', body: JSON.stringify(data) }, () => { const next = { ...getStoredProfile(), ...data }; localStorage.setItem('userProfile', JSON.stringify(next)); notifyProfileUpdated(); return next; }); }
-export async function updateSkills(skills) { return request('/seeker/profile/skills', { method: 'PUT', body: JSON.stringify({ skills }) }, () => { const next = { ...getStoredProfile(), skills }; localStorage.setItem('userProfile', JSON.stringify(next)); notifyProfileUpdated(); return next; }); }
-export async function updateEducation(id, data) { return request(`/seeker/profile/education/${id}`, { method: 'PUT', body: JSON.stringify(data) }, () => updateCollection('education', id, data)); }
-export async function deleteEducation(id) { return request(`/seeker/profile/education/${id}`, { method: 'DELETE' }, () => deleteCollection('education', id)); }
-export async function updateExperience(id, data) { return request(`/seeker/profile/experience/${id}`, { method: 'PUT', body: JSON.stringify(data) }, () => updateCollection('experience', id, data)); }
-export async function deleteExperience(id) { return request(`/seeker/profile/experience/${id}`, { method: 'DELETE' }, () => deleteCollection('experience', id)); }
-export async function updateCertification(id, data) { return request(`/seeker/profile/certifications/${id}`, { method: 'PUT', body: JSON.stringify(data) }, () => updateCollection('certifications', id, data)); }
-export async function deleteCertification(id) { return request(`/seeker/profile/certifications/${id}`, { method: 'DELETE' }, () => deleteCollection('certifications', id)); }
-export async function updateFullProfile(data) { return updateProfile(data); }
+export async function updateSkills(skills) {
+  const { data } = await api.put("/seeker/profile/skills", { skills });
+  notifyProfileUpdated();
+  return data;
+}
 
-export { emptyProfile };
+export const updateEducation = (id, data) => updateItem("education", id, data);
+export const deleteEducation = (id) => deleteItem("education", id);
+export const updateExperience = (id, data) => updateItem("experience", id, data);
+export const deleteExperience = (id) => deleteItem("experience", id);
+export const updateCertification = (id, data) => updateItem("certifications", id, data);
+export const deleteCertification = (id) => deleteItem("certifications", id);
+export const updateFullProfile = updateProfile;

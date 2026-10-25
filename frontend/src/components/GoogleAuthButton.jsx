@@ -1,16 +1,16 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
+import API from '../services/api';
 
 export const GoogleAuthButton = ({ label = 'Continue with Google' }) => {
   const [isLoading, setIsLoading] = useState(false);
 
   const handleGoogleAuth = () => {
     setIsLoading(true);
-    const configuredUrl = import.meta.env.VITE_BACKEND_URL || import.meta.env.VITE_API_URL || '';
-    const backendUrl = configuredUrl.replace(/\/$/, '');
-    window.location.href = backendUrl.endsWith('/api')
-      ? `${backendUrl}/auth/google`
-      : `${backendUrl}/api/auth/google`;
+    const apiBaseURL = String(API.defaults.baseURL || '/api').replace(/\/+$/, '');
+    window.location.href = apiBaseURL.endsWith('/api')
+      ? `${apiBaseURL}/auth/google`
+      : `${apiBaseURL}/api/auth/google`;
   };
 
   return (

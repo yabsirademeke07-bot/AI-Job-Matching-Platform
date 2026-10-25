@@ -6,3 +6,6 @@ export const sendMessage = (conversationId, message) => api.post(`/employer/mess
 export const markConversationAsRead = (conversationId) => api.patch(`/employer/messages/conversations/${conversationId}/read`);
 export const getUnreadMessageCount = () => api.get('/employer/messages/conversations/unread-count');
 export const deleteConversation = (conversationId) => api.delete(`/employer/messages/conversations/${conversationId}`);
+export const getSeekerConversations = () => api.get('/seeker/messages/conversations');
+export const getSeekerConversation = (conversationId) => api.get(`/seeker/messages/conversations/${encodeURIComponent(String(conversationId))}`);
+export const sendSeekerMessage = (conversationId, message) => api.post(`/seeker/messages/conversations/${encodeURIComponent(String(conversationId))}/messages`, { message });

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { getMockDashboardData, normalizeUser, seekerService, shouldUseSeekerMockFallback } from '../services/seekerService';
+import { normalizeUser, seekerService } from '../services/seekerService';
 import { useAuth } from '../context/AuthContext';
 
 export default function useSeekerDashboard() {
@@ -7,7 +7,6 @@ export default function useSeekerDashboard() {
     const [data, setData] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [isUsingFallback, setIsUsingFallback] = useState(false);
 
     const loadDashboard = useCallback(async () => {
         setIsLoading(true);
@@ -15,15 +14,9 @@ export default function useSeekerDashboard() {
         try {
             const dashboard = await seekerService.getDashboard();
             setData({ ...dashboard, profile: normalizeUser(dashboard.profile, sessionUser) });
-            setIsUsingFallback(false);
         } catch (requestError) {
-            if (!shouldUseSeekerMockFallback()) {
-                setError(requestError?.response?.data?.message || requestError?.message || 'Unable to load your dashboard.');
-                setData(null);
-            } else {
-                setData(getMockDashboardData(sessionUser));
-                setIsUsingFallback(true);
-            }
+            setError(requestError?.response?.data?.message || requestError?.message || 'Unable to load your dashboard.');
+            setData(null);
         } finally {
             setIsLoading(false);
         }
@@ -35,5 +28,5 @@ export default function useSeekerDashboard() {
         loadDashboard();
     }, [loadDashboard]);
 
-    return { ...data, isLoading, error, isUsingFallback, refresh: loadDashboard };
+    return { ...data, isLoading, error, refresh: loadDashboard };
 }

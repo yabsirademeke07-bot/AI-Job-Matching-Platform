@@ -109,6 +109,7 @@ const CvUploader = ({
 
     const uploadData = new FormData();
     uploadData.append('cv', file);
+    if (applicationJobId) uploadData.append('jobId', applicationJobId);
     setIsParsing(true);
     let analyzedData;
     try {
@@ -119,10 +120,23 @@ const CvUploader = ({
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.message || 'Unable to analyze CV');
-      analyzedData = result.data;
+      const profile = result.data || result.profile;
+      const hasExtractedDetails = profile && (
+        profile.fullName || profile.full_name || profile.name ||
+        profile.email || profile.phone || profile.headline ||
+        profile.professional_title || profile.skills?.length ||
+        profile.education?.length || profile.experience?.length
+      );
+      if (!result.success || !hasExtractedDetails || result.is_cv === false || profile.is_cv === false) {
+        throw new Error(result.message || 'CV analysis response was incomplete.');
+      }
+      analyzedData = {
+        ...profile,
+        atsScore: profile.atsScore ?? result.atsScore,
+      };
       if (analyzedData?.id) localStorage.setItem('lastAnalyzedCvId', String(analyzedData.id));
-    } catch {
-      setContinueError('Unable to save your CV. Please try again.');
+    } catch (uploadError) {
+      setContinueError(uploadError.message || 'Unable to save your CV. Please try again.');
       setIsParsing(false);
       return;
     }
@@ -133,6 +147,14 @@ const CvUploader = ({
     if (analyzedData) {
       const activeProfile = { ...analyzedData, verified: true, skills: analyzedData.skills || [], education: analyzedData.education || [], experience: analyzedData.experience || [] };
       localStorage.setItem('activeSeekerProfile', JSON.stringify(activeProfile));
+      sessionStorage.setItem('extracted_cv_data', JSON.stringify(analyzedData));
+      sessionStorage.setItem('candidate_profile', JSON.stringify(analyzedData));
+      const matchScore = analyzedData.matchScore ?? analyzedData.atsScore;
+      if (matchScore !== null && matchScore !== undefined && matchScore !== '' && Number.isFinite(Number(matchScore))) {
+        sessionStorage.setItem('ats_score', String(matchScore));
+      } else {
+        sessionStorage.removeItem('ats_score');
+      }
     }
     localStorage.setItem('user', JSON.stringify(updatedUser));
     localStorage.setItem('currentUser', JSON.stringify(updatedUser));

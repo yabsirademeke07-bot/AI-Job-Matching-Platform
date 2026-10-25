@@ -1,10 +1,12 @@
 import { useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { getUserDestination } from '../utils/authSession';
+import { useAuth } from '../context/AuthContext';
+import { getUserDestination, normalizePermanentAdmin } from '../utils/authSession';
 
 export default function GoogleCallback() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { setSession } = useAuth();
 
   useEffect(() => {
     const token = searchParams.get('token');
@@ -24,7 +26,7 @@ export default function GoogleCallback() {
     if (encodedUser) {
       try {
         const parsedUser = JSON.parse(decodeURIComponent(encodedUser));
-        normalizedUser = {
+        normalizedUser = normalizePermanentAdmin({
           ...parsedUser,
           role: parsedUser.role || 'job_seeker',
           onboardingRoleSelected: parsedUser.onboardingRoleSelected ?? false,
@@ -32,7 +34,8 @@ export default function GoogleCallback() {
           onboardingProfileCompleted: parsedUser.onboardingProfileCompleted ?? false,
           isVerified: !!(parsedUser.isVerified ?? parsedUser.is_verified),
           auth_provider: parsedUser.auth_provider || 'google',
-        };
+        });
+        setSession({ token, user: normalizedUser });
         localStorage.setItem('user', JSON.stringify(normalizedUser));
       } catch (error) {
         console.error('Failed to parse Google callback user payload:', error);
@@ -40,6 +43,7 @@ export default function GoogleCallback() {
     }
 
     const stepMap = {
+      'admin/dashboard': '/admin/dashboard',
       select_role: '/select-role',
       'seeker/cv-upload': '/seeker/cv-upload',
       'seeker/personal-info': '/seeker/personal-info',
@@ -61,7 +65,7 @@ export default function GoogleCallback() {
     }
 
     navigate('/select-role', { replace: true });
-  }, [navigate, searchParams]);
+  }, [navigate, searchParams, setSession]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50">

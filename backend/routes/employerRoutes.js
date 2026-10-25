@@ -4,11 +4,16 @@ const multer = require('multer');
 const path = require('path');
 const crypto = require('crypto');
 const controller = require('../controllers/employerController');
+const smsController = require('../controllers/smsController');
 const matchingController = require('../controllers/employerMatchingController');
 const db = require('../connection');
 const authenticate = require('../middleware/authMiddleware');
 
 const router = express.Router();
+const companyLogoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 1024 * 1024 },
+});
 const employerDocumentDir = path.resolve(__dirname, '..', 'private', 'employer-documents');
 fs.mkdirSync(employerDocumentDir, { recursive: true });
 const tinCertificateUpload = multer({
@@ -43,12 +48,17 @@ const tradeLicenseUpload = multer({
   fileFilter: (_req, file, callback) => {
     const extension = path.extname(file.originalname).toLowerCase();
     const allowedFiles = {
-      '.pdf': 'application/pdf',
-      '.jpg': 'image/jpeg',
-      '.jpeg': 'image/jpeg',
-      '.png': 'image/png',
+      '.pdf': ['application/pdf', 'application/x-pdf'],
+      '.jpg': ['image/jpeg', 'image/jpg'],
+      '.jpeg': ['image/jpeg', 'image/jpg'],
+      '.png': ['image/png'],
     };
-    if (allowedFiles[extension] === file.mimetype) return callback(null, true);
+    const mimeType = String(file.mimetype || '').toLowerCase();
+    const hasAllowedExtension = Boolean(allowedFiles[extension]);
+    const hasAllowedMimeType = !mimeType
+      || ['application/octet-stream', 'binary/octet-stream'].includes(mimeType)
+      || allowedFiles[extension]?.includes(mimeType);
+    if (hasAllowedExtension && hasAllowedMimeType) return callback(null, true);
     return callback(new Error('Please upload a valid document (PDF, PNG, or JPG between 20KB and 10MB).'));
   },
 });
@@ -66,7 +76,10 @@ const parseTradeLicenseUpload = (req, res, next) => {
     const validationMessage = 'Please upload a valid document (PDF, PNG, or JPG between 20KB and 10MB).';
     if (error) {
       const status = error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
-      return res.status(status).json({ success: false, message: validationMessage });
+      const message = error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE'
+        ? 'The business document must be 10 MB or smaller.'
+        : error.message || validationMessage;
+      return res.status(status).json({ success: false, message });
     }
     if (!req.file) return res.status(400).json({ success: false, message: validationMessage });
     if (req.file.size < 20 * 1024) {
@@ -74,6 +87,34 @@ const parseTradeLicenseUpload = (req, res, next) => {
         console.error('Unable to remove undersized trade-license document:', unlinkError.message);
       });
       return res.status(400).json({ success: false, message: validationMessage });
+    }
+    let fileHeader;
+    try {
+      const fileHandle = await fs.promises.open(req.file.path, 'r');
+      try {
+        fileHeader = Buffer.alloc(8);
+        await fileHandle.read(fileHeader, 0, fileHeader.length, 0);
+      } finally {
+        await fileHandle.close();
+      }
+    } catch (inspectionError) {
+      await fs.promises.unlink(req.file.path).catch((unlinkError) => {
+        console.error('Unable to remove unreadable trade-license document:', unlinkError.message);
+      });
+      console.error('Unable to inspect uploaded trade-license document:', inspectionError.message);
+      return res.status(500).json({ success: false, message: 'Unable to inspect the business document.' });
+    }
+    const extension = path.extname(req.file.originalname).toLowerCase();
+    const hasValidSignature = extension === '.pdf'
+      ? fileHeader.subarray(0, 5).toString('ascii') === '%PDF-'
+      : extension === '.png'
+        ? fileHeader.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+        : fileHeader[0] === 0xff && fileHeader[1] === 0xd8 && fileHeader[2] === 0xff;
+    if (!hasValidSignature) {
+      await fs.promises.unlink(req.file.path).catch((unlinkError) => {
+        console.error('Unable to remove invalid trade-license document:', unlinkError.message);
+      });
+      return res.status(400).json({ success: false, message: 'The selected file is not a valid PDF, PNG, or JPG document.' });
     }
     return next();
   });
@@ -110,6 +151,13 @@ router.use((req, res, next) => {
     : next();
 });
 router.get('/employer/profile', controller.getCompanyProfile);
+router.post('/employer/profile/logo', (req, res, next) => {
+  companyLogoUpload.single('logo')(req, res, (error) => {
+    if (!error) return next();
+    const status = error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+    return res.status(status).json({ success: false, message: error.message || 'Unable to process the company logo.' });
+  });
+}, controller.uploadCompanyLogo);
 router.get('/employer/profile/tin-certificate/:filename', controller.getTinCertificate);
 router.get('/employer/profile/trade-license/:filename', controller.getTradeLicense);
 router.put('/employer/profile', controller.updateCompanyProfile);
@@ -121,15 +169,27 @@ router.get('/employer/dashboard-stats', controller.getEmployerDashboardStats);
 router.get('/employer/matching/jobs', matchingController.getJobs);
 router.get('/employer/matching/candidates/:jobId', matchingController.getCandidates);
 router.post('/employer/matching/run/:jobId', matchingController.runMatching);
+router.post('/employer/jobs/:jobId/ai-match-rank', matchingController.rankCandidates);
+router.post('/employer/applications/bulk-status', matchingController.bulkUpdateApplicationStatus);
 router.post('/employer/matching/shortlist', matchingController.shortlist);
 router.get('/employer/dashboard', controller.getDashboardOverview);
 router.get('/employer/applications', controller.getEmployerApplications);
+router.get('/employer/applications/:applicationId/sms', smsController.getEmployerSms);
+router.post('/employer/applications/:applicationId/sms', smsController.dispatchEmployerSms);
+router.patch('/applications/:applicationId/status', controller.updateApplicationStatus);
 router.patch('/employer/applications/:applicationId/status', controller.updateApplicationStatus);
 router.patch('/employer/applications/:applicationId/stage', controller.updateApplicationStatus);
+router.post('/employer/update-status', (req, res, next) => {
+  const applicationId = req.body.applicationId || req.body.application_id;
+  if (!applicationId) return res.status(400).json({ success: false, message: 'An application id is required.' });
+  req.params.applicationId = String(applicationId);
+  return controller.updateApplicationStatus(req, res, next);
+});
 router.get('/employer/jobs', controller.getEmployerJobs);
 router.post('/employer/jobs', controller.createJob);
 router.put('/employer/jobs/:jobId', controller.updateJob);
 router.get('/employer/jobs/:jobId/applications', controller.getJobApplicants);
+router.patch('/applications/:applicationId/notes', controller.saveEmployerApplicationNotes);
 router.get('/jobs/:jobId/top-candidates', controller.getTopCandidates);
 router.get('/employer/jobs/:jobId/top-candidates', controller.getTopCandidates);
 router.get('/employer/job-invitations', controller.getJobInvitations);
@@ -144,6 +204,7 @@ router.get('/employer/onboarding', controller.getEmployerOnboarding);
 router.patch('/employer/onboarding/:taskId', controller.updateEmployerOnboardingTask);
 router.patch('/employer/applications/:applicationId/finalize', controller.finalizeEmployerEmployee);
 router.patch('/employer/jobs/:jobId/status', controller.setJobStatus);
+router.patch('/employer/jobs/:jobId/publish-now', controller.publishJobNow);
 router.delete('/employer/jobs/:jobId', controller.deleteJob);
 router.post('/jobs', controller.createJob);
 router.put('/jobs/:jobId', controller.updateJob);
@@ -172,5 +233,4 @@ router.delete('/employer/notifications/:id', controller.deleteEmployerNotificati
 router.get('/employer/settings', controller.getEmployerSettings);
 router.put('/employer/settings', controller.updateEmployerSettings);
 router.post('/employer/settings', controller.updateEmployerSettings);
-
 module.exports = router;

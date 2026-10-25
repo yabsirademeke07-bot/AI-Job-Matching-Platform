@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { AlertCircle, CheckCircle2, Download, Eye, FileText, Loader2, RefreshCw, Trash2, X } from "lucide-react";
+import { AlertCircle, Check, CheckCircle2, Download, Eye, FileText, Lightbulb, Loader2, RefreshCw, ShieldCheck, Trash2, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
   deleteResume,
@@ -18,38 +18,24 @@ import {
   getPendingApplication,
 } from "../utils/applicationFlow";
 
-const buildGeneratedResume = () => {
-  const profile = JSON.parse(localStorage.getItem('userProfile') || '{}');
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
-  const fullName = [profile.firstName || profile.name || user.full_name || user.name, profile.lastName]
-    .filter(Boolean)
-    .join(' ') || 'Your Name';
-  const email = profile.email || user.email || '';
-  const phone = profile.phone || user.phone || '';
-  const location = profile.location || profile.city || profile.preferredCity || '';
-  const headline = profile.jobCategory || profile.preferredJob || profile.headline || '';
-  const summary = profile.bio || profile.summary || user.bio || '';
-  const skills = Array.isArray(profile.skills) ? profile.skills.filter(Boolean) : [];
-  const education = Array.isArray(profile.education)
-    ? profile.education.filter((item) => item && (item.university || item.degree || item.department || item.graduationYear))
-    : [];
-  const experience = Array.isArray(profile.experience)
-    ? profile.experience.filter((item) => item && (item.company || item.position || item.startDate || item.endDate || item.responsibilities))
-    : [];
-  const languages = Array.isArray(profile.languages) ? profile.languages.filter(Boolean) : [];
-  const links = [
-    profile.linkedin && { label: 'LinkedIn', href: profile.linkedin },
-    profile.github && { label: 'GitHub', href: profile.github },
-    profile.portfolio && { label: 'Portfolio', href: profile.portfolio },
-  ].filter(Boolean);
+function formatFileSize(bytes) {
+  const size = Number(bytes);
+  if (!Number.isFinite(size) || size <= 0) return "Size unavailable";
+  return size >= 1024 * 1024
+    ? `${(size / (1024 * 1024)).toFixed(1)} MB`
+    : `${Math.max(1, Math.round(size / 1024))} KB`;
+}
 
-  return { fullName, email, phone, location, headline, summary, skills, education, experience, languages, links };
-};
+function formatUploadDate(value) {
+  if (!value) return "Upload date unavailable";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Upload date unavailable";
+  return `Uploaded ${date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
+}
 
 export default function MyResume() {
   const navigate = useNavigate();
   const [resume, setResume] = useState(null);
-  const [generatedResume, setGeneratedResume] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -62,8 +48,6 @@ export default function MyResume() {
     setError("");
     try {
       setResume(await getResume());
-      const stored = JSON.parse(localStorage.getItem('generatedCv') || 'null');
-      if (stored) setGeneratedResume(stored);
     } catch (requestError) {
       setError(requestError?.message || "Unable to load your resume.");
     } finally {
@@ -103,12 +87,6 @@ export default function MyResume() {
     }
   };
 
-  const handleCreateResume = () => {
-    const generated = buildGeneratedResume();
-    setGeneratedResume(generated);
-    localStorage.setItem('generatedCv', JSON.stringify(generated));
-  };
-
   const handleDelete = async () => {
     if (!resume) return;
     setSaving(true);
@@ -116,7 +94,6 @@ export default function MyResume() {
       await deleteResume(resume.id);
       localStorage.removeItem('generatedCv');
       setResume(null);
-      setGeneratedResume(null);
       setModal(null);
       setToast("Resume deleted successfully");
     } catch (requestError) {
@@ -147,19 +124,10 @@ export default function MyResume() {
   };
 
   const handleReplaceCv = () => {
-    navigate('/upload-cv', { state: { replaceMode: true } });
+    setModal('replace');
   };
 
   const openUpload = () => setModal('upload');
-
-  const handleContinue = () => {
-    const pending = getPendingApplication();
-    if (pending?.jobId) {
-      continueApplicationFlow(navigate, { jobId: pending.jobId });
-    } else {
-      navigate('/dashboard');
-    }
-  };
 
   if (loading)
     return (
@@ -171,14 +139,17 @@ export default function MyResume() {
     );
 
   const hasResume = Boolean(resume);
+  const resumeSkills = Array.isArray(resume?.skills) ? resume.skills.filter(Boolean) : [];
+  const fileType = String(resume?.fileType || resume?.mime_type?.split("/")?.pop() || "FILE").toUpperCase();
+  const atsCompatibleFormat = ["PDF", "DOCX"].includes(fileType);
 
   return (
     <main className="information-page min-h-screen bg-slate-50 px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-5xl">
-        <div className="mb-8">
-          <h1 className="text-3xl font-black text-slate-900">My Resume</h1>
-          <p className="mt-2 text-sm text-slate-600">
-            Manage your resume and prepare for job applications.
+      <div className="mx-auto w-full max-w-5xl space-y-10 pb-12">
+        <div>
+          <h1 className="text-3xl font-black italic tracking-tight text-slate-900 sm:text-4xl">My Resume</h1>
+          <p className="mt-1.5 max-w-2xl text-xs italic leading-relaxed text-slate-500 sm:text-sm">
+            Your uploaded CV is synced with our matching engine and used for 1-Click job applications. Keep it updated with your latest skills, certifications, and experience to maximize interview shortlists.
           </p>
         </div>
 
@@ -189,53 +160,60 @@ export default function MyResume() {
           </div>
         )}
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+        <div className="flex min-h-[300px] flex-col justify-between space-y-8 rounded-3xl border border-slate-200/90 border-t-4 border-t-sky-500 bg-gradient-to-br from-white via-white to-sky-50/30 p-8 py-10 shadow-[0_12px_35px_-8px_rgba(2,132,199,0.1),0_4px_16px_rgba(0,0,0,0.03)] sm:p-10 sm:py-12">
           {hasResume ? (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-lg font-black text-slate-900">Your Resume</h2>
-                <p className="mt-1 text-sm text-slate-600">
-                  Your CV is available and ready for job applications.
-                </p>
+            <div>
+              <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-start">
+                <div className="flex min-w-0 items-center gap-4">
+                  <span className="flex h-16 w-16 shrink-0 flex-col items-center justify-center rounded-2xl border border-sky-200 bg-sky-50 text-sky-600 shadow-xs">
+                    <FileText className="h-7 w-7" aria-hidden="true" />
+                  </span>
+                  <div className="min-w-0">
+                    <h2 className="truncate text-lg font-bold tracking-tight text-slate-900 sm:text-xl">{resume.fileName || "Resume file"}</h2>
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                      <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">{fileType} document</span>
+                      <span>{formatFileSize(resume.fileSize || resume.file_size)}</span>
+                      <span>{formatUploadDate(resume.uploadedAt || resume.upload_date)}</span>
+                    </div>
+                  </div>
+                </div>
+                <span className="inline-flex w-fit shrink-0 items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
+                  <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+                  Active CV
+                </span>
               </div>
 
-              <div className="border-b border-slate-100 pb-6">
-                <p className="text-sm text-slate-600">
-                  {resume.fileName}
-                </p>
-              </div>
-
-              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+              <div className="mt-10 flex flex-wrap items-center gap-4 border-t border-slate-100 pt-8 sm:gap-5">
                 <button
                   type="button"
                   onClick={handleViewResume}
-                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-5 py-3 text-base font-extrabold text-blue-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-blue-100 hover:shadow-md"
+                  className="inline-flex items-center gap-2.5 rounded-xl border border-sky-300 bg-sky-100 px-5 py-3 text-xs font-bold text-sky-700 shadow-xs transition hover:bg-sky-200"
                 >
-                  <Eye className="h-4 w-4" />
+                  <Eye className="h-4 w-4 text-sky-600" aria-hidden="true" />
                   View Resume
                 </button>
                 <button
                   type="button"
                   onClick={handleDownload}
-                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-5 py-3 text-base font-extrabold text-indigo-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-indigo-100 hover:shadow-md"
+                  className="inline-flex items-center gap-2.5 rounded-xl border-2 border-slate-200 bg-white px-5 py-3 text-xs font-bold text-slate-800 shadow-xs transition hover:border-slate-300 hover:bg-slate-50"
                 >
-                  <Download className="h-4 w-4" />
+                  <Download className="h-4 w-4" aria-hidden="true" />
                   Download Resume
                 </button>
                 <button
                   type="button"
                   onClick={handleReplaceCv}
-                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-5 py-3 text-base font-extrabold text-amber-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-amber-100 hover:shadow-md"
+                  className="inline-flex items-center gap-2.5 rounded-xl bg-sky-600 px-5 py-3 text-xs font-bold text-white shadow-sm shadow-sky-600/25 transition hover:bg-sky-500"
                 >
-                  <RefreshCw className="h-5 w-5" />
+                  <RefreshCw className="h-4 w-4" aria-hidden="true" />
                   Replace CV
                 </button>
                 <button
                   type="button"
                   onClick={() => setModal('delete')}
-                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-5 py-3 text-base font-extrabold text-red-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-red-100 hover:shadow-md"
+                  className="ml-auto inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-white px-4 py-3 text-xs font-semibold text-rose-600 transition hover:bg-rose-50 sm:ml-auto"
                 >
-                  <Trash2 className="h-5 w-5" />
+                  <Trash2 className="h-4 w-4" aria-hidden="true" />
                   Delete Resume
                 </button>
               </div>
@@ -244,7 +222,7 @@ export default function MyResume() {
             <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center">
               <h3 className="text-lg font-black text-slate-900">No resume uploaded yet</h3>
               <p className="mt-2 text-sm text-slate-600">
-                Your CV is not uploaded yet. Upload it during the profile setup flow to continue.
+                Upload your current CV to keep your resume and job applications in one place.
               </p>
               <button type="button" onClick={openUpload} className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--brand-primary)] px-5 text-sm font-bold text-white hover:bg-[var(--brand-primary-hover)]">
                 <FileText className="h-4 w-4" /> Upload Resume
@@ -252,6 +230,63 @@ export default function MyResume() {
             </div>
           )}
         </div>
+
+        <section className="grid grid-cols-1 gap-7 md:grid-cols-2" aria-label="Resume insights and tips">
+          <article className="rounded-2xl border border-slate-200/90 bg-white p-7 shadow-sm transition-shadow hover:shadow-md">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-base font-extrabold text-slate-900">ATS Profile Health</h2>
+                <p className="mt-1 text-xs text-slate-500">Resume readiness and application status</p>
+              </div>
+              <span className="rounded-xl border border-sky-100 bg-sky-50 p-2.5 text-sky-600">
+                <ShieldCheck className="h-5 w-5" aria-hidden="true" />
+              </span>
+            </div>
+            <div className="mt-5 space-y-3 border-t border-slate-100 pt-4">
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="text-slate-600">Status</span>
+                <span className={`inline-flex items-center gap-1.5 font-semibold ${hasResume ? "text-emerald-700" : "text-slate-500"}`}>
+                  {hasResume && <CheckCircle2 className="h-4 w-4" aria-hidden="true" />}
+                  {hasResume ? "Verified & Parsed" : "No CV uploaded"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-600">Skills extracted</span>
+                <span className="font-bold text-slate-900">{hasResume ? resumeSkills.length : "—"}</span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-600">File format</span>
+                <span className={`inline-flex items-center gap-1 font-semibold ${atsCompatibleFormat ? "text-sky-700" : "text-slate-500"}`}>
+                  {atsCompatibleFormat && <Check className="h-3.5 w-3.5" aria-hidden="true" />}
+                  {hasResume ? (atsCompatibleFormat ? `${fileType} Supported` : `${fileType} format`) : "No CV uploaded"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="text-slate-600">Usage</span>
+                <span className={`font-semibold ${hasResume ? "text-sky-700" : "text-slate-500"}`}>
+                  {hasResume ? "Active for 1-Click Apply" : "Not active"}
+                </span>
+              </div>
+            </div>
+          </article>
+
+          <article className="rounded-2xl border border-slate-200/90 bg-white p-7 shadow-sm transition-shadow hover:shadow-md">
+            <div className="flex items-start gap-3">
+              <span className="rounded-xl border border-amber-100 bg-amber-50 p-2.5 text-amber-600">
+                <Lightbulb className="h-5 w-5" aria-hidden="true" />
+              </span>
+              <div>
+                <h2 className="text-base font-extrabold text-slate-900">Tips for Higher Shortlisting</h2>
+                <p className="mt-1 text-xs text-slate-500">A few ways to make your resume easier to review</p>
+              </div>
+            </div>
+            <ul className="mt-5 space-y-3 text-sm text-slate-600">
+              <li className="flex gap-2.5"><Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden="true" /><span>Keep your resume concise and focused, ideally under two pages.</span></li>
+              <li className="flex gap-2.5"><Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden="true" /><span>Describe achievements with clear outcomes and measurable results.</span></li>
+              <li className="flex gap-2.5"><Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden="true" /><span>Use a readable PDF or DOCX and tailor skills to each role.</span></li>
+            </ul>
+          </article>
+        </section>
       </div>
 
       {modal === 'delete' && (
@@ -266,6 +301,14 @@ export default function MyResume() {
         <UploadResumeModal
           onClose={() => setModal(null)}
           onSubmit={(formData) => submitFile(formData, uploadResume)}
+          isSaving={saving}
+        />
+      )}
+
+      {modal === 'replace' && (
+        <ReplaceResumeModal
+          onClose={() => setModal(null)}
+          onSubmit={(formData) => submitFile(formData, replaceResume)}
           isSaving={saving}
         />
       )}

@@ -4,6 +4,7 @@ import './login.css';
 import GoogleAuthButton from '../components/GoogleAuthButton';
 import { continueApplicationFlow, getNextOnboardingStep, getPendingApplication } from '../utils/applicationFlow';
 import { useAuth } from '../context/AuthContext';
+import API from '../services/api';
 import { useToast } from '../hooks/useToast.js';
 import { scrollToFeedback } from '../utils/scrollHelper.js';
 import { resolveUserRole } from '../utils/authSession';
@@ -34,9 +35,6 @@ const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
-
-  const API_URL = import.meta.env.VITE_BACKEND_URL || '/api';
-  const AUTH_API_URL = `${API_URL.replace(/\/$/, '')}/auth`;
 
   const validateForm = () => {
     const nextErrors = {};
@@ -108,12 +106,13 @@ const Login = () => {
     setIsLoading(true);
 
     try {
-      const res = await fetch(`${AUTH_API_URL}/login-init`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: formData.emailOrPhone.trim().toLowerCase(), password: formData.password }),
+      const res = await API.post('/auth/login-init', {
+        email: formData.emailOrPhone.trim().toLowerCase(),
+        password: formData.password,
+      }, {
+        validateStatus: () => true,
       });
-      const data = await res.json().catch(() => ({}));
+      const { data } = res;
 
       if (res.status === 403 && data.requires_verification) {
         navigate('/verify-otp', {
@@ -162,7 +161,9 @@ const Login = () => {
         return;
       }
     } catch (error) {
-      showError(error.message || 'Unable to sign in. Please try again.');
+      showError(error.response
+        ? error.response.data?.message || 'Unable to sign in. Please try again.'
+        : 'Unable to reach the authentication server. Check the backend service and VITE_API_URL configuration.');
     } finally {
       setIsLoading(false);
     }

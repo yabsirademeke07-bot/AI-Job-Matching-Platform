@@ -9,6 +9,11 @@
 
 @import "tailwindcss";
 
+.signup-password-input::-ms-reveal,
+.signup-password-input::-ms-clear {
+  display: none;
+}
+
 @keyframes slideIn {
   from { opacity: 0; transform: translateX(1.5rem); }
   to { opacity: 1; transform: translateX(0); }
@@ -22,6 +27,99 @@
 @keyframes toastCountdown {
   from { width: 100%; }
   to { width: 0%; }
+}
+
+@keyframes recommendationCardEnter {
+  from {
+    opacity: 0;
+    transform: translateY(3rem) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes recommendationSubtitleEnter {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes dashboardHeaderEnter {
+  from {
+    opacity: 0;
+    transform: translateY(-1rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.settings-tab-panel {
+  animation: settingsTabPanelEnter 300ms ease-out both;
+}
+
+@keyframes settingsTabPanelEnter {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.settings-success-toast {
+  animation: settingsSuccessToastEnter 240ms ease-out both;
+}
+
+@keyframes settingsSuccessToastEnter {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.recommendation-card-enter {
+  animation: recommendationCardEnter 700ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+.dashboard-header-enter {
+  animation: dashboardHeaderEnter 500ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.application-overview-card-enter {
+  animation: recommendationCardEnter 500ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+.recommendation-subtitle-enter {
+  animation: recommendationSubtitleEnter 500ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .recommendation-card-enter,
+  .recommendation-subtitle-enter,
+  .dashboard-header-enter,
+  .application-overview-card-enter {
+    animation: none;
+  }
+
+  .settings-tab-panel,
+  .settingsSuccessToastEnter {
+    animation: none;
+  }
 }
 
 /* The employer workspace keeps only its dark-mode action in the secondary
@@ -87,6 +185,14 @@ body {
 
 * {
   box-sizing: border-box;
+}
+
+.scrollbar-none {
+  scrollbar-width: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
 }
 
 .navbar {
@@ -492,7 +598,6 @@ select:focus-visible {
     color: #0f172a;
     scrollbar-color: #94a3b8 #f8fafc;
     scrollbar-width: thin;
-    overscroll-behavior: contain;
   }
 
   .jobs-page .explore-sidebar::-webkit-scrollbar {
@@ -818,6 +923,10 @@ main>section:nth-of-type(3) aside>div:last-child {
   background-color: #ffffff;
 }
 
+.information-page.dashboard-canvas {
+  background-color: #f8fafc !important;
+}
+
 .dashboard-sidebar-scroll {
   scrollbar-width: thin;
   scrollbar-color: #94a3b8 #f8fafc;
@@ -853,13 +962,9 @@ main>section:nth-of-type(3) aside>div:last-child {
 }
 
 /* Keep seeker profile labels and fields visually consistent with the brand. */
-.profile-readable label {
-  color: var(--brand-deep) !important;
-}
-
-.profile-readable input,
-.profile-readable textarea,
-.profile-readable select {
+.profile-readable input:not(.profile-field-control),
+.profile-readable textarea:not(.profile-field-control),
+.profile-readable select:not(.profile-field-control) {
   background-color: var(--brand-soft) !important;
   border-color: var(--brand-border) !important;
 }
@@ -971,6 +1076,15 @@ main table thead {
 
 main table thead th {
   color: #ffffff !important;
+}
+
+#applicants-table-section table thead {
+  background-color: #eff6ff !important;
+  border-color: #dbeafe !important;
+}
+
+#applicants-table-section table thead th {
+  color: #334155 !important;
 }
 
 .seeker-dashboard .dashboard-hero {

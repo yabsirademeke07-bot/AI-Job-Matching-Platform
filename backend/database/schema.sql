@@ -30,6 +30,9 @@ CREATE TABLE IF NOT EXISTS users (
     is_verified BOOLEAN DEFAULT FALSE,
     auth_status ENUM('pending_verification', 'active') NOT NULL DEFAULT 'pending_verification',
     is_active BOOLEAN DEFAULT TRUE,
+    seeker_onboarded BOOLEAN NOT NULL DEFAULT FALSE,
+    employer_onboarded BOOLEAN NOT NULL DEFAULT FALSE,
+    last_active_role ENUM('seeker', 'employer', 'admin') DEFAULT 'seeker',
     onboarding_completed BOOLEAN DEFAULT FALSE,
     cv_url VARCHAR(255) DEFAULT NULL,
     cv_status ENUM('uploaded', 'skipped', 'none') NOT NULL DEFAULT 'none',
@@ -37,6 +40,10 @@ CREATE TABLE IF NOT EXISTS users (
     onboarding_step_completed ENUM('cv_upload', 'manual_profile', 'completed') NOT NULL DEFAULT 'cv_upload',
     profile_picture_url VARCHAR(255),
     avatar_url VARCHAR(255) NULL,
+    telegram_chat_id VARCHAR(50) NULL DEFAULT NULL,
+    telegram_username VARCHAR(100) NULL DEFAULT NULL,
+    is_telegram_alerts_active BOOLEAN NOT NULL DEFAULT TRUE,
+    is_alerts_enabled BOOLEAN NOT NULL DEFAULT FALSE,
     google_id VARCHAR(255) NULL,
     auth_provider VARCHAR(50) NOT NULL DEFAULT 'email',
     last_active_page VARCHAR(100) DEFAULT '/dashboard',
@@ -46,7 +53,8 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_email (email),
-    INDEX idx_role (role)
+    INDEX idx_role (role),
+    INDEX idx_users_telegram_chat_id (telegram_chat_id)
 );
 
 -- Job Seeker Profiles
@@ -188,6 +196,46 @@ CREATE TABLE IF NOT EXISTS company_profiles (
     INDEX idx_verified (is_verified)
 );
 
+CREATE TABLE IF NOT EXISTS company_reviews (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    company_profile_id INT NOT NULL,
+    candidate_id INT NOT NULL,
+    application_id INT NOT NULL,
+    title VARCHAR(160) NOT NULL,
+    narrative TEXT NOT NULL,
+    role_title VARCHAR(150) DEFAULT NULL,
+    work_mode VARCHAR(80) DEFAULT NULL,
+    interview_rating TINYINT UNSIGNED NOT NULL,
+    culture_rating TINYINT UNSIGNED NOT NULL,
+    communication_rating TINYINT UNSIGNED NOT NULL,
+    pros TEXT DEFAULT NULL,
+    cons TEXT DEFAULT NULL,
+    recommends BOOLEAN NOT NULL DEFAULT FALSE,
+    is_anonymous BOOLEAN NOT NULL DEFAULT FALSE,
+    employer_response TEXT DEFAULT NULL,
+    employer_responded_at TIMESTAMP NULL DEFAULT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_company_review_application (company_profile_id, application_id),
+    INDEX idx_company_reviews_created (company_profile_id, created_at),
+    FOREIGN KEY (company_profile_id) REFERENCES company_profiles(id) ON DELETE CASCADE,
+    FOREIGN KEY (candidate_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS company_questions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    company_profile_id INT NOT NULL,
+    asker_id INT NOT NULL,
+    question VARCHAR(1000) NOT NULL,
+    answer TEXT DEFAULT NULL,
+    answered_by INT DEFAULT NULL,
+    answered_at TIMESTAMP NULL DEFAULT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_company_questions_created (company_profile_id, created_at),
+    FOREIGN KEY (company_profile_id) REFERENCES company_profiles(id) ON DELETE CASCADE,
+    FOREIGN KEY (asker_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (answered_by) REFERENCES users(id) ON DELETE SET NULL
+);
+
 CREATE TABLE IF NOT EXISTS employers (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL UNIQUE,
@@ -208,6 +256,7 @@ CREATE TABLE IF NOT EXISTS employers (
     culture TEXT DEFAULT NULL,
     benefits TEXT DEFAULT NULL,
     founded_year INT DEFAULT NULL,
+    is_verified BOOLEAN NOT NULL DEFAULT FALSE,
     userId INT NULL UNIQUE,
     companyName VARCHAR(150) DEFAULT NULL,
     company_size VARCHAR(50) DEFAULT NULL,
@@ -278,6 +327,7 @@ CREATE TABLE IF NOT EXISTS employer_settings (
     weeklyDigest BOOLEAN DEFAULT FALSE,
     notificationEmail VARCHAR(150),
     teamPermissions JSON,
+    workspacePreferences JSON,
     createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
@@ -346,54 +396,56 @@ CREATE TABLE IF NOT EXISTS jobs (
     id INT AUTO_INCREMENT PRIMARY KEY,
     employer_id INT NOT NULL,
     title VARCHAR(150) NOT NULL,
-    company_name VARCHAR(255),
+    company_name VARCHAR(255) NOT NULL,
     slug VARCHAR(200) UNIQUE,
     description LONGTEXT NOT NULL,
-    category VARCHAR(100),
-    sector VARCHAR(150),
+    sector VARCHAR(150) NOT NULL DEFAULT 'General',
+    sub_sectors TEXT NULL,
     job_type VARCHAR(50) NOT NULL DEFAULT 'full-time',
     experience_level ENUM('entry-level', 'mid-level', 'senior-level', 'executive') DEFAULT 'mid-level',
-    location VARCHAR(100),
-    country VARCHAR(100),
-    city VARCHAR(100),
-    state_province VARCHAR(100),
-    work_mode VARCHAR(50) DEFAULT 'hybrid',
+    work_mode VARCHAR(50) NOT NULL DEFAULT 'hybrid',
+    location VARCHAR(150) NULL,
+    state_province VARCHAR(100) NULL,
+    work_address VARCHAR(255) NULL,
     gender_preference VARCHAR(100) DEFAULT 'any',
-    salary_min INT,
-    salary_max INT,
-    currency VARCHAR(5) DEFAULT 'USD',
-    salary_period ENUM('hourly', 'monthly', 'yearly') DEFAULT 'yearly',
+    salary_min INT NULL,
+    salary_max INT NULL,
+    currency VARCHAR(10) DEFAULT 'ETB',
+    salary_period ENUM('hourly', 'monthly', 'yearly') DEFAULT 'monthly',
     is_salary_negotiable BOOLEAN DEFAULT TRUE,
-    is_negotiable BOOLEAN NOT NULL DEFAULT TRUE,
-    benefits TEXT,
     vacancies INT NOT NULL DEFAULT 1,
     required_skills TEXT,
-    required_education VARCHAR(100) DEFAULT 'bachelor',
-    min_experience INT DEFAULT NULL,
-    years_of_experience_min INT DEFAULT 0,
-    years_of_experience_max INT DEFAULT 20,
-    application_deadline DATE,
+    education_qualification VARCHAR(100) NOT NULL DEFAULT 'Bachelor''s Degree',
+    benefits TEXT NULL,
+    deadline DATE NULL,
     scheduled_date DATETIME NULL,
     is_urgent BOOLEAN DEFAULT FALSE,
-    status VARCHAR(30) NOT NULL DEFAULT 'pending_approval',
+    is_featured BOOLEAN DEFAULT FALSE,
+    featured_until DATETIME NULL,
+    status ENUM('draft', 'pending', 'published', 'active', 'paused', 'closed', 'expired') NOT NULL DEFAULT 'draft',
     approval_status ENUM('pending', 'approved', 'rejected') NOT NULL DEFAULT 'pending',
     is_approved BOOLEAN NOT NULL DEFAULT FALSE,
-    rejection_reason TEXT,
     approved_by INT NULL,
     approved_at TIMESTAMP NULL DEFAULT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT FALSE,
+    rejection_reason TEXT NULL,
     reviewed_by INT NULL,
     reviewed_at TIMESTAMP NULL DEFAULT NULL,
-    is_featured BOOLEAN DEFAULT FALSE,
-    featured_until DATETIME,
     view_count INT DEFAULT 0,
     application_count INT DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     published_at TIMESTAMP NULL DEFAULT NULL,
     closed_at TIMESTAMP NULL DEFAULT NULL,
+
     FOREIGN KEY (employer_id) REFERENCES users(id) ON DELETE CASCADE,
     INDEX idx_status (status),
-    INDEX idx_country_city (country, city),
+    INDEX idx_status_active (status, is_active),
+    INDEX idx_approval_status (approval_status),
+    INDEX idx_is_active (is_active),
+    INDEX idx_jobs_deadline (deadline),
+    INDEX idx_location (location),
+    INDEX idx_sector (sector),
     INDEX idx_salary (salary_min, salary_max),
     FULLTEXT INDEX ft_title_desc (title, description)
 );
@@ -469,7 +521,10 @@ CREATE TABLE IF NOT EXISTS applications (
     ai_match_score DECIMAL(5, 2),
     skills_match_score DECIMAL(5, 2),
     experience_match_score DECIMAL(5, 2),
+    title_match_score DECIMAL(5, 2),
+    domain_match_score DECIMAL(5, 2),
     education_match_score DECIMAL(5, 2),
+    soft_skills_match_score DECIMAL(5, 2),
     location_match_score DECIMAL(5, 2),
     salary_match_score DECIMAL(5, 2),
     work_mode_match_score DECIMAL(5, 2),
@@ -498,6 +553,83 @@ CREATE TABLE IF NOT EXISTS applications (
     INDEX idx_ai_score (ai_match_score),
     INDEX idx_job_ai_match_score (job_id, ai_match_score DESC),
     UNIQUE KEY unique_application_candidate_job (job_id, job_seeker_id)
+);
+
+CREATE TABLE IF NOT EXISTS application_timeline_events (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    application_id INT NOT NULL,
+    stage_name VARCHAR(80) NOT NULL,
+    status_note TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (application_id) REFERENCES applications(id) ON DELETE CASCADE,
+    INDEX idx_application_timeline (application_id, created_at)
+);
+
+CREATE TABLE IF NOT EXISTS candidate_application_notes (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    application_id INT NOT NULL UNIQUE,
+    note_text TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (application_id) REFERENCES applications(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS telegram_notification_events (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    job_id INT NOT NULL,
+    event_type ENUM('deadline_reminder') NOT NULL,
+    event_date DATE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE,
+    UNIQUE KEY uq_telegram_job_event_date (job_id, event_type, event_date),
+    INDEX idx_telegram_event_date (event_type, event_date)
+);
+
+CREATE TABLE IF NOT EXISTS telegram_link_verifications (
+    user_id INT PRIMARY KEY,
+    chat_id VARCHAR(50) NOT NULL,
+    telegram_username VARCHAR(100) NULL,
+    code_hash CHAR(64) NOT NULL,
+    attempts TINYINT UNSIGNED NOT NULL DEFAULT 0,
+    requested_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at DATETIME NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_telegram_verification_expiry (expires_at)
+);
+
+CREATE TABLE IF NOT EXISTS telegram_bot_link_tokens (
+    user_id INT PRIMARY KEY,
+    token_hash CHAR(64) NOT NULL,
+    expires_at DATETIME NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_telegram_bot_link_expiry (expires_at)
+);
+
+CREATE TABLE IF NOT EXISTS telegram_admin_sso_tokens (
+    token_hash CHAR(64) PRIMARY KEY,
+    user_id INT NOT NULL,
+    expires_at DATETIME NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_telegram_admin_sso_expiry (expires_at)
+);
+
+CREATE TABLE IF NOT EXISTS telegram_candidate_match_events (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NOT NULL,
+      job_id INT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_telegram_candidate_job_match (user_id, job_id),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS telegram_admin_daily_stats (
+      stat_date DATE PRIMARY KEY,
+      status ENUM('sending', 'sent', 'failed') NOT NULL DEFAULT 'sending',
+      locked_at DATETIME NOT NULL,
+      sent_at DATETIME NULL
 );
 
 CREATE TABLE IF NOT EXISTS offers (
@@ -554,6 +686,7 @@ CREATE TABLE IF NOT EXISTS interviews (
     duration_minutes INT DEFAULT 60,
     interview_url VARCHAR(255),
     interview_status ENUM('scheduled', 'in-progress', 'completed', 'rescheduled', 'cancelled') DEFAULT 'scheduled',
+    candidate_response ENUM('pending', 'accepted', 'reschedule_requested', 'declined') DEFAULT 'pending',
     interviewer_id INT,
     notes TEXT,
     interviewer_feedback TEXT,
@@ -673,9 +806,71 @@ CREATE TABLE IF NOT EXISTS notification_preferences (
     email_ai_recommendations BOOLEAN DEFAULT TRUE,
     push_notifications_enabled BOOLEAN DEFAULT TRUE,
     daily_digest BOOLEAN DEFAULT FALSE,
+    telegram_alerts_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    application_updates BOOLEAN NOT NULL DEFAULT TRUE,
+    interview_reminders BOOLEAN NOT NULL DEFAULT TRUE,
+    matching_job_recommendations BOOLEAN NOT NULL DEFAULT FALSE,
+    chat_messages BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS notification_logs (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    recipient_role ENUM('seeker', 'employer', 'admin') NOT NULL,
+    recipient_chat_id VARCHAR(50) NOT NULL,
+    event_type VARCHAR(60) NOT NULL,
+    title VARCHAR(150) NOT NULL,
+    delivered BOOLEAN NOT NULL DEFAULT FALSE,
+    sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_notification_logs_sent_at (sent_at),
+    INDEX idx_notification_logs_event_type (event_type)
+);
+
+CREATE TABLE IF NOT EXISTS sms_notification_preferences (
+    user_id INT NOT NULL PRIMARY KEY,
+    sms_alerts_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS sms_communications (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    application_id INT NOT NULL,
+    sender_employer_id INT NOT NULL,
+    recipient_seeker_id INT NOT NULL,
+    message_body VARCHAR(160) NOT NULL,
+    sent_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    delivery_status VARCHAR(20) NOT NULL,
+    provider_message_id VARCHAR(100) NULL,
+    communication_type VARCHAR(20) NOT NULL DEFAULT 'employer',
+    parent_communication_id BIGINT NULL,
+    FOREIGN KEY (application_id) REFERENCES applications(id) ON DELETE CASCADE,
+    FOREIGN KEY (sender_employer_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (recipient_seeker_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (parent_communication_id) REFERENCES sms_communications(id) ON DELETE SET NULL,
+    INDEX idx_sms_recipient_sent (recipient_seeker_id, sent_at),
+    INDEX idx_sms_application_sent (application_id, sent_at),
+    UNIQUE KEY uq_sms_parent_reply (parent_communication_id)
+);
+
+CREATE TABLE IF NOT EXISTS dispatched_events (
+    event_key VARCHAR(120) PRIMARY KEY,
+    recipient_id VARCHAR(50) NOT NULL,
+    dispatched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS notification_failure_logs (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    recipient_id VARCHAR(50) NOT NULL,
+    event_type VARCHAR(60) NOT NULL,
+    error_code VARCHAR(60) NOT NULL,
+    payload JSON NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_notification_failure_created (created_at),
+    INDEX idx_notification_failure_event (event_type)
 );
 
 -- ============================================================================

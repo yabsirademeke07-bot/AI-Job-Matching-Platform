@@ -9,10 +9,15 @@ function calculateMatchScore(seekerSkills = [], requiredSkills = []) {
 }
 
 async function createMatch({ jobId, jobSeekerId, score, coverLetter }) {
+  const [[job]] = await db.execute(
+    'SELECT employer_id FROM jobs WHERE id = ? LIMIT 1',
+    [jobId],
+  );
+  if (!job) throw new Error('The selected job does not exist.');
   const [result] = await db.execute(
-    `INSERT INTO applications (job_id, job_seeker_id, ai_match_score, skills_match_score, seeker_cover_letter)
-     VALUES (?, ?, ?, ?, ?)`,
-    [jobId, jobSeekerId, score, score, coverLetter || null]
+    `INSERT INTO applications (job_id, job_seeker_id, employer_id, ai_match_score, skills_match_score, seeker_cover_letter)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [jobId, jobSeekerId, job.employer_id, score, score, coverLetter || null]
   );
   return result.insertId;
 }

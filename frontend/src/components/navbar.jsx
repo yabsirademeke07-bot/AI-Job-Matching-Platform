@@ -1,22 +1,25 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
-  LogIn,
   LogOut,
   User,
-  LayoutDashboard,
   Menu,
-  UserPlus,
   X,
   ChevronDown,
   Play,
   Repeat,
+  Bell,
+  Maximize2,
+  MessageSquareText,
+  Minimize2,
+  ShieldCheck,
 } from 'lucide-react';
 
 import { useAuth } from '../context/AuthContext';
 import LogoutFlowModals from './LogoutFlowModals';
 import SeekerAlertsMenu from './seeker/SeekerAlertsMenu';
 import { getNextOnboardingStep } from '../utils/applicationFlow';
+import { resolveUserRole } from '../utils/authSession';
 import API from '../services/api';
 import logoImage from '../pages/images/logo1.png';
 
@@ -28,22 +31,21 @@ export default function Navbar() {
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [logoutSession, setLogoutSession] = useState(null);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0);
+  const [isScrolled, setIsScrolled] = useState(() => typeof window !== 'undefined' && window.scrollY > 30);
   const profileMenuRef = useRef(null);
 
   const isActive = (path) => location.pathname === path;
+  const isHomePage = location.pathname === '/';
+  const isTransparentHome = isHomePage && !isScrolled && !isMobileMenuOpen;
   // የ Role ዓይነቶች ማረጋገጫ
   const role = (user?.role || user?.userType || '').toString().trim().toLowerCase().replace(/[\s-]+/g, '_');
+  const isAdmin = ['admin', 'super_admin'].includes(resolveUserRole(user));
   const isEmployer = ['employer', 'company', 'recruiter'].includes(role);
-  const isAdmin = ['admin', 'super_admin'].includes(role);
   const isSeeker = ['job_seeker', 'seeker', 'jobseeker', 'user', 'employee'].includes(role);
   const isSeekerDashboardPage = ['/dashboard', '/seeker-dashboard', '/seekerDashboard'].includes(location.pathname);
-
-  const employerOnboardingPaths = ['/employer-info', '/employee-info', '/employer/onboarding', '/employer/setup'];
-  const isEmployerOnboardingPage = employerOnboardingPaths.includes(location.pathname)
-    || location.pathname.startsWith('/employer-info/')
-    || location.pathname.startsWith('/employee-info/')
-    || location.pathname.startsWith('/employer/onboarding/')
-    || location.pathname.startsWith('/employer/setup/');
 
   const isEmployerDashboardRoute = location.pathname === '/employer-dashboard'
     || location.pathname.startsWith('/employer-dashboard/')
@@ -52,16 +54,27 @@ export default function Navbar() {
     || location.pathname === '/employer/dashboard'
     || location.pathname.startsWith('/employer/dashboard/');
 
-  const isInsideDashboard = isEmployerDashboardRoute
-    || location.pathname.startsWith('/seeker')
-    || location.pathname.startsWith('/admin')
-    || location.pathname.includes('dashboard');
-  const hasEnteredDashboard = isAuthenticated && (
-    localStorage.getItem('hasEnteredDashboard') === 'true'
-    || isInsideDashboard
-  );
   const displayName = user?.name || user?.full_name || user?.email || 'User';
   const avatarUrl = user?.avatarUrl || user?.avatar_url;
+  const getInitials = (name) => {
+    if (!name) return 'SD';
+    const parts = String(name).trim().split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return String(name).slice(0, 2).toUpperCase();
+  };
+  const toggleFullscreen = async () => {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+        setIsFullscreen(false);
+      } else {
+        await document.documentElement.requestFullscreen();
+        setIsFullscreen(true);
+      }
+    } catch (error) {
+      console.error('Unable to toggle fullscreen:', error);
+    }
+  };
 
   const getStoredUser = () => {
     try {
@@ -78,6 +91,7 @@ export default function Navbar() {
     const employerRoles = ['employer', 'company', 'recruiter'];
 
     if (seekerRoles.includes(role)) {
+      if (storedUser.seeker_onboarded === true || storedUser.has_cv === true || storedUser.onboardingCvUploaded === true) return false;
       const hasUploadedCv = Boolean(localStorage.getItem('pending_cv_data') || storedUser.onboardingCvUploaded || storedUser.has_cv || storedUser.cvFileName);
       const isProfileComplete = Boolean(storedUser.profileCompleted || storedUser.onboardingProfileCompleted || storedUser.profileComplete);
       return !isProfileComplete || !hasUploadedCv;
@@ -92,7 +106,7 @@ export default function Navbar() {
 
   const getRoleLabel = (roleName) => {
     const normalized = String(roleName || '').toLowerCase().replace(/[\s-]+/g, '_');
-    if (['admin', 'super_admin'].includes(normalized)) return 'Admin';
+    if (['admin', 'super_admin'].includes(normalized)) return 'Account';
     if (['employer', 'company', 'recruiter'].includes(normalized)) return 'Employer';
     if (['job_seeker', 'seeker', 'jobseeker', 'user', 'employee'].includes(normalized)) return 'Job Seeker';
     return 'Job Seeker';
@@ -107,6 +121,10 @@ export default function Navbar() {
     setProfileMenuOpen(false);
 
     if (seekerRoles.includes(activeRole)) {
+      if (storedUser.seeker_onboarded === true || storedUser.has_cv === true || storedUser.onboardingCvUploaded === true) {
+        navigate('/dashboard', { replace: true });
+        return;
+      }
       try {
         const { data } = await API.get('/seeker/profile-status');
         const step = String(data?.onboarding_step || 'cv_upload');
@@ -154,15 +172,6 @@ export default function Navbar() {
     navigate(getNextOnboardingStep(), { replace: true });
   };
 
-  const handleAvatarClick = (e) => {
-    e.stopPropagation();
-    setProfileMenuOpen((open) => !open);
-  };
-
-  const resumeOnboarding = () => {
-    handleResumeProgress();
-  };
-
   const toggleProfileMenu = () => {
     setProfileMenuOpen((open) => !open);
   };
@@ -170,18 +179,21 @@ export default function Navbar() {
   const handleSwitchRole = () => {
     setProfileMenuOpen(false);
     localStorage.removeItem('activeRole');
-    navigate('/role-selection', { replace: true });
+    navigate('/select-role', { replace: true });
   };
 
-  const goToDashboard = () => {
-    setProfileMenuOpen(false);
-    navigate(isEmployer ? '/employer/dashboard' : isAdmin ? '/admin-dashboard' : '/dashboard');
-  };
   const handleLogout = () => {
     setProfileMenuOpen(false);
     setLogoutSession({ token, user });
     setLogoutOpen(true);
   };
+
+  useEffect(() => {
+    const updateScrollState = () => setIsScrolled(window.scrollY > 30);
+    updateScrollState();
+    window.addEventListener('scroll', updateScrollState, { passive: true });
+    return () => window.removeEventListener('scroll', updateScrollState);
+  }, [location.pathname]);
 
   useEffect(() => {
     const closeProfileMenu = (event) => {
@@ -192,28 +204,38 @@ export default function Navbar() {
   }, []);
 
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || !isEmployer) return undefined;
 
-    const dashboardPaths = [
-      '/employer/dashboard',
-      '/employer-dashboard',
-      '/dashboard',
-      '/seeker-dashboard',
-    ];
+    let mounted = true;
+    const loadUnreadNotifications = () => API.get('/employer/notifications/unread-count')
+      .then(({ data }) => {
+        if (mounted) setUnreadNotificationCount(Number(data?.data?.count ?? data?.count ?? 0));
+      })
+      .catch((error) => console.error('Unable to load unread notification count:', error));
+    const loadUnreadMessages = () => API.get('/employer/messages/conversations/unread-count')
+      .then(({ data }) => {
+        if (mounted) setUnreadMessageCount(Number(data?.data?.count ?? data?.count ?? 0));
+      })
+      .catch((error) => console.error('Unable to load unread message count:', error));
+    const refreshCounts = () => {
+      loadUnreadNotifications();
+      loadUnreadMessages();
+    };
 
-    const hasReachedDashboard = dashboardPaths.includes(location.pathname)
-      || location.pathname.startsWith('/employer/dashboard/')
-      || location.pathname.startsWith('/employer-dashboard/')
-      || location.pathname.startsWith('/seeker-dashboard/')
-      || location.pathname.startsWith('/dashboard/');
-
-    if (hasReachedDashboard) {
-      localStorage.setItem('hasEnteredDashboard', 'true');
-    }
-  }, [isAuthenticated, location.pathname]);
+    refreshCounts();
+    const intervalId = window.setInterval(refreshCounts, 15000);
+    window.addEventListener('employer-notifications:updated', loadUnreadNotifications);
+    window.addEventListener('employer-messages:updated', loadUnreadMessages);
+    return () => {
+      mounted = false;
+      window.clearInterval(intervalId);
+      window.removeEventListener('employer-notifications:updated', loadUnreadNotifications);
+      window.removeEventListener('employer-messages:updated', loadUnreadMessages);
+    };
+  }, [isAuthenticated, isEmployer, user?.id]);
 
   return (
-    <header className="navbar fixed left-0 right-0 top-0 z-50 w-full border-b border-slate-200/80 bg-white/95 shadow-xs backdrop-blur-md transition-all duration-200 dark:border-slate-800 dark:bg-slate-900/95">
+    <header className={`navbar fixed left-0 top-0 z-50 w-full transition-all duration-300 ${isTransparentHome ? 'border-transparent bg-transparent text-white shadow-none' : 'border-b border-slate-200/80 bg-white/95 text-slate-700 shadow-md backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/95'}`}>
       {/* Container: px-4 sm:px-6 lg:px-8 በመጠቀም ወደ ግራ እና ቀኝ ዳር እንዲጠጋ ተደርጓል */}
       <div className="navbar-main-grid w-full px-3 sm:px-6 lg:px-8 h-20 sm:h-24 grid grid-cols-[minmax(0,1fr)_auto] lg:grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 sm:gap-4">
 
@@ -224,12 +246,12 @@ export default function Navbar() {
           </div>
           <div className="navbar-brand-text flex min-w-0 flex-col justify-center">
             <div className="flex items-center gap-1.5">
-              <span className="navbar-brand-title whitespace-nowrap text-sm font-black leading-none tracking-tight sm:text-xl">
-                <span className="ml-1.5 font-extrabold text-slate-900">JOB</span>
-                <span className="ml-1 font-extrabold text-blue-600">MATCHING</span>
+              <span className="navbar-brand-title whitespace-nowrap text-sm font-black italic leading-none tracking-tight sm:text-xl">
+                <span className={`ml-1.5 font-black italic ${isTransparentHome ? 'text-white' : 'text-slate-900'}`}>JOB</span>
+                <span className={`ml-1 font-black italic ${isTransparentHome ? 'text-white' : 'text-blue-600'}`}>MATCHING</span>
               </span>
             </div>
-            <span className="navbar-brand-tagline mt-0.5 whitespace-nowrap text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+            <span className={`navbar-brand-tagline mt-0.5 whitespace-nowrap text-[10px] font-bold italic uppercase tracking-widest ${isTransparentHome ? 'text-white/80' : 'text-slate-400'}`}>
               Smart Career Platform
             </span>
           </div>
@@ -240,97 +262,117 @@ export default function Navbar() {
 
           <Link
             to="/"
-            className={`relative inline-flex items-center py-1 text-lg leading-6 font-bold tracking-wide transition-colors duration-200 group ${isActive('/') ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'
+            className={`relative inline-flex items-center py-1 text-base font-bold italic leading-6 tracking-wide transition-colors duration-200 group ${isActive('/') ? (isTransparentHome ? 'text-sky-300' : 'text-sky-600') : (isTransparentHome ? 'text-white hover:text-sky-300' : 'text-slate-700 hover:text-sky-600')
               }`}
           >
             Home
-            <span className={`absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 rounded-full transition-transform duration-300 origin-left ${isActive('/') ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
+            <span className={`absolute bottom-0 left-0 w-full h-0.5 ${isTransparentHome ? 'bg-sky-400' : 'bg-sky-600'} rounded-full transition-transform duration-300 origin-left ${isActive('/') ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
               }`} />
           </Link>
 
           <Link
             to="/jobs"
-            className={`relative inline-flex items-center py-1 text-lg leading-6 font-bold tracking-wide transition-colors duration-200 group ${isActive('/jobs') || isActive('/explorejobs') ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'
+            className={`relative inline-flex items-center py-1 text-base font-bold italic leading-6 tracking-wide transition-colors duration-200 group ${isActive('/jobs') || isActive('/explorejobs') ? (isTransparentHome ? 'text-sky-300' : 'text-sky-600') : (isTransparentHome ? 'text-white hover:text-sky-300' : 'text-slate-700 hover:text-sky-600')
               }`}
           >
             Explore Jobs
-            <span className={`absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 rounded-full transition-transform duration-300 origin-left ${isActive('/jobs') || isActive('/explorejobs') ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
+            <span className={`absolute bottom-0 left-0 w-full h-0.5 ${isTransparentHome ? 'bg-sky-400' : 'bg-sky-600'} rounded-full transition-transform duration-300 origin-left ${isActive('/jobs') || isActive('/explorejobs') ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
               }`} />
           </Link>
 
           <Link
             to="/how-it-works"
-            className={`relative inline-flex items-center py-1 text-lg leading-6 font-bold tracking-wide transition-colors duration-200 group ${isActive('/how-it-works') ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'
+            className={`relative inline-flex items-center py-1 text-base font-bold italic leading-6 tracking-wide transition-colors duration-200 group ${isActive('/how-it-works') ? (isTransparentHome ? 'text-sky-300' : 'text-sky-600') : (isTransparentHome ? 'text-white hover:text-sky-300' : 'text-slate-700 hover:text-sky-600')
               }`}
           >
             How It Works
-            <span className={`absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 rounded-full transition-transform duration-300 origin-left ${isActive('/how-it-works') ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
+            <span className={`absolute bottom-0 left-0 w-full h-0.5 ${isTransparentHome ? 'bg-sky-400' : 'bg-sky-600'} rounded-full transition-transform duration-300 origin-left ${isActive('/how-it-works') ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
               }`} />
           </Link>
 
           <Link
             to="/about"
-            className={`relative inline-flex items-center py-1 text-lg leading-6 font-bold tracking-wide transition-colors duration-200 group ${isActive('/about') ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'
+            className={`relative inline-flex items-center py-1 text-base font-bold italic leading-6 tracking-wide transition-colors duration-200 group ${isActive('/about') ? (isTransparentHome ? 'text-sky-300' : 'text-sky-600') : (isTransparentHome ? 'text-white hover:text-sky-300' : 'text-slate-700 hover:text-sky-600')
               }`}
           >
             About Us
-            <span className={`absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 rounded-full transition-transform duration-300 origin-left ${isActive('/about') ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
+            <span className={`absolute bottom-0 left-0 w-full h-0.5 ${isTransparentHome ? 'bg-sky-400' : 'bg-sky-600'} rounded-full transition-transform duration-300 origin-left ${isActive('/about') ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
               }`} />
           </Link>
 
           <Link
             to="/contact"
-            className={`relative inline-flex items-center py-1 text-lg leading-6 font-bold tracking-wide transition-colors duration-200 group ${isActive('/contact') ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'
+            className={`relative inline-flex items-center py-1 text-base font-bold italic leading-6 tracking-wide transition-colors duration-200 group ${isActive('/contact') ? (isTransparentHome ? 'text-sky-300' : 'text-sky-600') : (isTransparentHome ? 'text-white hover:text-sky-300' : 'text-slate-700 hover:text-sky-600')
               }`}
           >
             Contact
-            <span className={`absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 rounded-full transition-transform duration-300 origin-left ${isActive('/contact') ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
+            <span className={`absolute bottom-0 left-0 w-full h-0.5 ${isTransparentHome ? 'bg-sky-400' : 'bg-sky-600'} rounded-full transition-transform duration-300 origin-left ${isActive('/contact') ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
               }`} />
           </Link>
 
-          {/* ተጠቃሚው Login ካደረገ የሚታዩ Dashboard Links */}
-          {!isEmployerOnboardingPage && isAuthenticated && isEmployer && hasEnteredDashboard && (
-            <Link to="/employer/dashboard" className="text-xs font-extrabold bg-indigo-50 text-indigo-600 px-3.5 py-1.5 rounded-full hover:bg-indigo-100 transition flex items-center gap-2 shrink-0">
-              <LayoutDashboard className="w-4 h-4" />
-              <span>Employer dashboard</span>
-            </Link>
-          )}
-
-          {isAuthenticated && isAdmin && hasEnteredDashboard && (
-            <Link to="/admin-dashboard" className="text-xs font-extrabold bg-purple-50 text-purple-600 px-3.5 py-1.5 rounded-full hover:bg-purple-100 transition flex items-center gap-2 shrink-0">
-              <LayoutDashboard className="w-4 h-4" />
-              <span>Admin dashbord</span>
-            </Link>
-          )}
-
-          {isAuthenticated && isSeeker && hasEnteredDashboard && (
-            <Link to="/seeker-dashboard" className="text-xs font-extrabold bg-blue-50 text-blue-600 px-3.5 py-1.5 rounded-full hover:bg-blue-100 transition flex items-center gap-2 shrink-0">
-              <LayoutDashboard className="w-4 h-4" />
-              <span>Seeker Dashboard</span>
-            </Link>
-          )}
         </nav>
 
         <div className="ml-auto flex min-w-0 items-center justify-end gap-1 sm:gap-2">
           {isAuthenticated && isSeeker && <SeekerAlertsMenu />}
+          {isAuthenticated && isEmployer && isEmployerDashboardRoute && (
+            <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
+              <button
+                type="button"
+                onClick={() => navigate('/employer/dashboard?view=notifications')}
+                className={`relative rounded-xl p-2 transition sm:p-2.5 ${isTransparentHome ? 'text-white hover:bg-white/10 hover:text-sky-300' : 'text-slate-600 hover:bg-slate-100 hover:text-sky-600'}`}
+                aria-label={`Notifications${unreadNotificationCount ? `, ${unreadNotificationCount} unread` : ''}`}
+                title="Notifications"
+              >
+                <Bell className="h-5 w-5" />
+                {unreadNotificationCount > 0 && (
+                  <span className="absolute -top-1 -right-1.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-600 px-1 text-[10px] font-black text-white shadow-md shadow-rose-500/40 animate-pulse">
+                    {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
+                  </span>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/employer/dashboard?view=messages')}
+                className={`relative rounded-xl p-2 transition sm:p-2.5 ${isTransparentHome ? 'text-white hover:bg-white/10 hover:text-sky-300' : 'text-slate-600 hover:bg-slate-100 hover:text-sky-600'}`}
+                aria-label={`Messages${unreadMessageCount ? `, ${unreadMessageCount} unread` : ''}`}
+                title="Messages"
+              >
+                <MessageSquareText className="h-5 w-5" />
+                {unreadMessageCount > 0 && (
+                  <span className="absolute -top-1 -right-1.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-600 px-1 text-[10px] font-black text-white shadow-md shadow-rose-500/40 animate-pulse">
+                    {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
+                  </span>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={toggleFullscreen}
+                className={`rounded-xl p-2 transition sm:p-2.5 ${isTransparentHome ? 'text-white hover:bg-white/10 hover:text-sky-300' : 'text-slate-600 hover:bg-slate-100 hover:text-sky-600'}`}
+                aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+                title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+              >
+                {isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
+              </button>
+            </div>
+          )}
           <div className="hidden shrink-0 items-center justify-end gap-3 lg:flex">
           {isAuthenticated && (
             <div ref={profileMenuRef} className="relative">
-              <div className="flex min-h-11 items-center gap-2 rounded-xl px-2 py-1.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100">
-                <button
-                  id="user-avatar-circle"
-                  type="button"
-                  onClick={handleAvatarClick}
-                  className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 font-black text-blue-700 shadow-sm ring-2 ring-white transition hover:bg-blue-200"
-                  aria-label="Resume progress shortcut"
-                >
-                  <span className="select-none">Y</span>
-                </button>
-                <button type="button" onClick={toggleProfileMenu} className="flex items-center gap-1.5 text-slate-700" aria-expanded={profileMenuOpen} aria-haspopup="menu" aria-label="Open account menu">
-                  <span className="max-w-40 truncate font-bold text-slate-700">{displayName}</span>
-                  <ChevronDown className={`h-4 w-4 transition-transform ${profileMenuOpen ? 'rotate-180' : ''}`} />
-                </button>
-              </div>
+              <button
+                id="user-avatar-circle"
+                type="button"
+                onClick={toggleProfileMenu}
+                className={`flex min-h-11 items-center gap-2 rounded-xl px-2 py-1.5 text-sm font-bold italic transition ${isTransparentHome ? 'text-white hover:bg-white/10' : 'text-slate-700 hover:bg-slate-100'}`}
+                aria-expanded={profileMenuOpen}
+                aria-haspopup="menu"
+                aria-label="Open account menu"
+              >
+                {avatarUrl
+                  ? <img src={avatarUrl} alt="" className="h-9 w-9 rounded-full object-cover shadow-sm ring-2 ring-white" />
+                  : <span className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 text-sm font-black italic text-blue-700 shadow-sm">{getInitials(user?.name || user?.full_name)}</span>}
+                <span className={`max-w-40 truncate font-bold italic ${isTransparentHome ? 'text-white' : 'text-slate-800'}`}>{displayName}</span>
+                <ChevronDown className={`h-4 w-4 transition-transform ${profileMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
               {profileMenuOpen && (
                 <div className="absolute right-0 top-full z-50 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl" role="menu">
                   <div className="flex items-center justify-between border-b border-slate-100 px-3 py-3">
@@ -339,18 +381,27 @@ export default function Navbar() {
                       <span className="mt-1 inline-flex w-fit items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-700">{getRoleLabel(role)}</span>
                     </div>
                   </div>
-                  <button type="button" onClick={() => { setProfileMenuOpen(false); handleResumeProgress(); }} className="mt-1 flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-bold text-slate-700 transition hover:bg-blue-50 hover:text-blue-700" role="menuitem">
-                    <Play className="h-4 w-4" />
-                    <span>Continue Profile Setup</span>
-                  </button>
-                  <button type="button" onClick={() => { setProfileMenuOpen(false); navigate('/profile/me'); }} className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-bold text-slate-700 transition hover:bg-blue-50 hover:text-blue-700" role="menuitem">
-                    <User className="h-4 w-4" />
-                    <span>My Profile</span>
-                  </button>
-                  <button type="button" onClick={handleSwitchRole} className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-bold text-slate-700 transition hover:bg-slate-100" role="menuitem">
-                    <Repeat className="h-4 w-4" />
-                    <span>Switch Role</span>
-                  </button>
+                  {isAdmin ? (
+                    <button type="button" onClick={() => { setProfileMenuOpen(false); navigate('/admin/dashboard'); }} className="mt-1 flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-bold text-blue-700 transition hover:bg-blue-50" role="menuitem">
+                      <ShieldCheck className="h-4 w-4" />
+                      <span>Admin Dashboard</span>
+                    </button>
+                  ) : (
+                    <>
+                      <button type="button" onClick={() => { setProfileMenuOpen(false); handleResumeProgress(); }} className="mt-1 flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-bold text-slate-700 transition hover:bg-blue-50 hover:text-blue-700" role="menuitem">
+                        <Play className="h-4 w-4" />
+                        <span>Continue Setup</span>
+                      </button>
+                      <button type="button" onClick={() => { setProfileMenuOpen(false); navigate('/profile/me'); }} className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-bold text-slate-700 transition hover:bg-blue-50 hover:text-blue-700" role="menuitem">
+                        <User className="h-4 w-4" />
+                        <span>My Profile</span>
+                      </button>
+                      <button type="button" onClick={handleSwitchRole} className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-bold text-slate-700 transition hover:bg-slate-100" role="menuitem">
+                        <Repeat className="h-4 w-4" />
+                        <span>Switch Role</span>
+                      </button>
+                    </>
+                  )}
                   <button type="button" onClick={handleLogout} className="mt-1 flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-bold text-red-600 transition hover:bg-red-50" role="menuitem">
                     <LogOut className="h-4 w-4" />
                     <span>Logout</span>
@@ -373,12 +424,12 @@ export default function Navbar() {
             type="button"
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             aria-label="Toggle navigation menu"
-            className="p-2.5 rounded-xl text-slate-700 hover:bg-slate-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500 transition-colors cursor-pointer"
+            className={`p-2.5 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-blue-500 transition-colors cursor-pointer ${isTransparentHome ? 'text-white hover:bg-white/10' : 'text-slate-700 hover:bg-slate-100'}`}
           >
             {isMobileMenuOpen ? (
               <X className="w-7 h-7 text-blue-600" />
             ) : (
-              <Menu className="w-7 h-7 text-slate-800" />
+              <Menu className={`w-7 h-7 ${isTransparentHome ? 'text-white' : 'text-slate-800'}`} />
             )}
           </button>
         </div>
@@ -394,7 +445,7 @@ export default function Navbar() {
             <Link
               to="/"
               onClick={() => setIsMobileMenuOpen(false)}
-              className={`px-4 py-3 rounded-xl font-bold text-base transition-colors ${isActive('/') ? 'bg-blue-50 text-blue-600' : 'text-slate-700 hover:bg-slate-50'
+              className={`px-4 py-3 rounded-xl font-bold italic text-base transition-colors ${isActive('/') ? 'bg-blue-50 text-blue-600' : 'text-slate-700 hover:bg-slate-50'
                 }`}
             >
               Home
@@ -403,7 +454,7 @@ export default function Navbar() {
             <Link
               to="/jobs"
               onClick={() => setIsMobileMenuOpen(false)}
-              className={`px-4 py-3 rounded-xl font-bold text-base transition-colors ${isActive('/jobs') || isActive('/explorejobs') ? 'bg-blue-50 text-blue-600' : 'text-slate-700 hover:bg-slate-50'
+              className={`px-4 py-3 rounded-xl font-bold italic text-base transition-colors ${isActive('/jobs') || isActive('/explorejobs') ? 'bg-blue-50 text-blue-600' : 'text-slate-700 hover:bg-slate-50'
                 }`}
             >
               Explore Jobs
@@ -412,7 +463,7 @@ export default function Navbar() {
             <Link
               to="/how-it-works"
               onClick={() => setIsMobileMenuOpen(false)}
-              className={`px-4 py-3 rounded-xl font-bold text-base transition-colors ${isActive('/how-it-works') ? 'bg-blue-50 text-blue-600' : 'text-slate-700 hover:bg-slate-50'
+              className={`px-4 py-3 rounded-xl font-bold italic text-base transition-colors ${isActive('/how-it-works') ? 'bg-blue-50 text-blue-600' : 'text-slate-700 hover:bg-slate-50'
                 }`}
             >
               How It Works
@@ -421,7 +472,7 @@ export default function Navbar() {
             <Link
               to="/about"
               onClick={() => setIsMobileMenuOpen(false)}
-              className={`px-4 py-3 rounded-xl font-bold text-base transition-colors ${isActive('/about') ? 'bg-blue-50 text-blue-600' : 'text-slate-700 hover:bg-slate-50'
+              className={`px-4 py-3 rounded-xl font-bold italic text-base transition-colors ${isActive('/about') ? 'bg-blue-50 text-blue-600' : 'text-slate-700 hover:bg-slate-50'
                 }`}
             >
               About Us
@@ -430,42 +481,19 @@ export default function Navbar() {
             <Link
               to="/contact"
               onClick={() => setIsMobileMenuOpen(false)}
-              className={`px-4 py-3 rounded-xl font-bold text-base transition-colors ${isActive('/contact') ? 'bg-blue-50 text-blue-600' : 'text-slate-700 hover:bg-slate-50'
+              className={`px-4 py-3 rounded-xl font-bold italic text-base transition-colors ${isActive('/contact') ? 'bg-blue-50 text-blue-600' : 'text-slate-700 hover:bg-slate-50'
                 }`}
             >
               Contact
             </Link>
 
-            {/* Mobile User Consoles */}
-            {!isEmployerOnboardingPage && isAuthenticated && isEmployer && hasEnteredDashboard && (
-              <Link
-                to="/employer/dashboard"
-                onClick={() => setIsMobileMenuOpen(false)}
-                className="mx-2 my-1 px-4 py-3 rounded-xl text-sm font-extrabold bg-indigo-50 text-indigo-600 flex items-center gap-2"
-              >
-                <LayoutDashboard className="w-4 h-4" />
-                <span>Employer dashboard</span>
-              </Link>
-            )}
-
-            {isAuthenticated && isAdmin && hasEnteredDashboard && (
-              <Link
-                to="/admin-dashboard"
-                onClick={() => setIsMobileMenuOpen(false)}
-                className="mx-2 my-1 px-4 py-3 rounded-xl text-sm font-extrabold bg-purple-50 text-purple-600 flex items-center gap-2"
-              >
-                <LayoutDashboard className="w-4 h-4" />
-                <span>Admin dashboard</span>
-              </Link>
-            )}
-
             {isAuthenticated && (
               <div ref={profileMenuRef} className="relative pt-3 mt-2 border-t border-slate-100">
-                <button type="button" onClick={handleResumeProgress} className="flex min-h-11 w-full items-center gap-3 rounded-xl px-4 py-2 text-left text-sm font-bold text-slate-700 hover:bg-slate-50" aria-expanded={profileMenuOpen} aria-haspopup="menu" aria-label="Open account menu">
-                  {avatarUrl ? <img src={avatarUrl} alt="" className="w-9 h-9 rounded-full object-cover" /> : <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center">{displayName.charAt(0).toUpperCase()}</div>}
+                <button type="button" onClick={handleResumeProgress} className="flex min-h-11 w-full items-center gap-3 rounded-xl px-4 py-2 text-left text-sm font-bold italic text-slate-700 hover:bg-slate-50" aria-expanded={profileMenuOpen} aria-haspopup="menu" aria-label="Open account menu">
+                  {avatarUrl ? <img src={avatarUrl} alt="" className="w-9 h-9 rounded-full object-cover" /> : <div className="w-9 h-9 rounded-full bg-blue-100 text-sm font-black italic text-blue-700 flex items-center justify-center shadow-sm">{getInitials(user?.name || user?.full_name)}</div>}
                   <span className="flex-1 truncate">{displayName}</span><ChevronDown className={`h-4 w-4 transition-transform ${profileMenuOpen ? 'rotate-180' : ''}`} />
                 </button>
-                {profileMenuOpen && <div className="mt-1 space-y-1 px-1"><button type="button" onClick={() => { handleResumeProgress(); setIsMobileMenuOpen(false); }} className="flex min-h-11 w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700"><Play className="w-5 h-5" /><span>{isOnboardingInProgress() ? 'Continue Profile Setup' : 'Dashboard / My Profile'}</span></button><button type="button" onClick={() => { goToDashboard(); setIsMobileMenuOpen(false); }} className="flex min-h-11 w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-bold text-slate-700 hover:bg-slate-50"><LayoutDashboard className="w-5 h-5" /><span>Go to Dashboard</span></button><button type="button" onClick={() => { handleLogout(); setIsMobileMenuOpen(false); }} className="flex min-h-11 w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-bold text-red-600 hover:bg-red-50"><LogOut className="w-5 h-5" /><span>Log Out</span></button></div>}
+                {profileMenuOpen && <div className="mt-1 space-y-1 px-1"><button type="button" onClick={() => { handleResumeProgress(); setIsMobileMenuOpen(false); }} className="flex min-h-11 w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700"><Play className="w-5 h-5" /><span>{isOnboardingInProgress() ? 'Continue Setup' : 'My Profile'}</span></button><button type="button" onClick={() => { handleLogout(); setIsMobileMenuOpen(false); }} className="flex min-h-11 w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-bold text-red-600 hover:bg-red-50"><LogOut className="w-5 h-5" /><span>Log Out</span></button></div>}
               </div>
             )}
             {!isAuthenticated && !isSeekerDashboardPage && (

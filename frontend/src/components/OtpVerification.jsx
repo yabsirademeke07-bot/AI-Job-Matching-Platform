@@ -4,6 +4,7 @@ import api from '../services/api';
 import { getPendingApplication } from '../utils/applicationFlow';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../hooks/useToast.js';
+import { resolveUserRole } from '../utils/authSession';
 import { Cpu, RefreshCw, ShieldCheck, Sparkles, Target } from 'lucide-react';
 
 const OTP_TIMER_SECONDS = 60;
@@ -106,6 +107,11 @@ const OtpVerification = () => {
         onboardingProfileCompleted: data.user.onboardingProfileCompleted ?? false,
       };
       setSession({ token: data.token, user: verifiedUser });
+
+      if (['admin', 'super_admin'].includes(resolveUserRole(verifiedUser))) {
+        navigate(data.redirect_to || '/admin/dashboard', { replace: true });
+        return;
+      }
 
       const params = new URLSearchParams();
       if (userIdFromUrl) params.set('userId', userIdFromUrl);

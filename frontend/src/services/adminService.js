@@ -1,38 +1,13 @@
 import api from './api';
 
-const emptyOverview = {
-  data: { usersCount: 0, seekersCount: 0, employersTotal: 0, employersVerified: 0, totalJobs: 0, activeJobsCount: 0, totalApplications: 0, successfulHires: 0, pendingReports: 0, avgMatchScore: 0 },
-  users: [], companies: [], jobs: [], applications: [], reports: [], notifications: [], logs: [],
-};
-
 export const getAdminDashboardStats = async () => {
-  try {
-    const { data } = await api.get('/admin/dashboard-stats');
-    return data.stats;
-  } catch (error) {
-    console.warn('Admin dashboard stats unavailable; using fallback metrics.', error.message);
-    return null;
-  }
+  const { data } = await api.get('/admin/dashboard-stats');
+  return data.stats;
 };
 
 export const getAdminOverview = async () => {
-  try {
-    const { data } = await api.get('/admin/overview');
-    return {
-      ...emptyOverview,
-      ...data,
-      data: { ...emptyOverview.data, ...(data.data || {}) },
-      users: Array.isArray(data.users) ? data.users : [],
-      companies: Array.isArray(data.companies) ? data.companies : [],
-      jobs: Array.isArray(data.jobs) ? data.jobs : [],
-      applications: Array.isArray(data.applications) ? data.applications : [],
-      reports: Array.isArray(data.reports) ? data.reports : [],
-      notifications: Array.isArray(data.notifications) ? data.notifications : [],
-    };
-  } catch (error) {
-    console.warn('Admin API unavailable; showing an empty operational state.', error.message);
-    return { ...emptyOverview, offline: true };
-  }
+  const { data } = await api.get('/admin/overview');
+  return data;
 };
 
 export const updateUserStatus = (userId, status) => api.patch(`/admin/users/${userId}/status`, { status });

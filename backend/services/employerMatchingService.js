@@ -1,4 +1,4 @@
-const DEFAULT_WEIGHTS = { skills: 40, experience: 30, education: 15, location: 15 };
+const DEFAULT_WEIGHTS = { skills: 40, experience: 30, title: 20, education: 10, location: 0 };
 
 const parseJson = (value, fallback = []) => {
   if (value === null || value === undefined || value === '') return fallback;
@@ -59,6 +59,7 @@ function getCandidateData(row) {
     email: row.email,
     avatarUrl: row.avatar_url,
     currentTitle: row.headline || snapshot.headline || parsedProfile.headline || cvData.headline || 'Candidate',
+    title: row.headline || snapshot.headline || parsedProfile.headline || cvData.professional_title || cvData.headline || '',
     profile: {
       skills,
       experience,
@@ -72,12 +73,17 @@ function getCandidateData(row) {
     cvUrl: row.file_url || row.cv_url || null,
     cvFileName: row.file_name || null,
     status: row.status || null,
+    appliedAt: row.applied_at || null,
     matchScore: Number(row.ai_match_score || 0),
     ai_score: Number(row.ai_match_score || 0),
     compatibility_score: Number(row.ai_match_score || 0),
     skillsScore: Number(row.skills_match_score || 0),
     experienceScore: Number(row.experience_match_score || 0),
+    titleScore: Number(row.title_match_score || 0),
+    titleScore: Number(row.title_match_score || 0),
+    domainScore: Number(row.domain_match_score || 0),
     educationScore: Number(row.education_match_score || 0),
+    softSkillsScore: Number(row.soft_skills_match_score || 0),
     locationScore: Number(row.location_match_score || 0),
     matchSummary: row.ai_match_summary || '',
     match_summary: row.ai_match_summary || '',
@@ -125,8 +131,8 @@ function calculateCandidateMatch(candidate, job, weights = DEFAULT_WEIGHTS) {
   const skillsScore = requiredSkills.length ? (matchedSkills.length / requiredSkills.length) * 100 : 70;
 
   const years = durationYears(candidate.profile.experience);
-  const requiredYears = Math.max(0, Number(job.years_of_experience_min || 0));
-  const requestedLevel = normalize(job.vacancy_level || job.experience_level);
+  const requiredYears = 0;
+  const requestedLevel = normalize(job.experience_level);
   const candidateLevel = normalize(candidate.profile.experienceLevel);
   const seniorityRank = (level) => level.includes('executive') ? 4 : level.includes('senior') ? 3 : level.includes('mid') ? 2 : level.includes('entry') || level.includes('junior') ? 1 : 0;
   const yearsScore = requiredYears ? Math.min(100, (years / requiredYears) * 100) : 80;
@@ -134,6 +140,22 @@ function calculateCandidateMatch(candidate, job, weights = DEFAULT_WEIGHTS) {
     ? (seniorityRank(candidateLevel) >= seniorityRank(requestedLevel) ? 100 : 60)
     : 75;
   const experienceScore = Math.round((yearsScore * 0.7) + (levelScore * 0.3));
+
+  const ignoredTitleTerms = new Set(['a', 'an', 'and', 'for', 'in', 'of', 'the', 'to', 'with']);
+  const titleTerms = (value) => [...new Set(
+    normalize(value).split(' ').filter((term) => term.length > 1 && !ignoredTitleTerms.has(term)),
+  )];
+  const requiredTitleTerms = titleTerms(job.title);
+  const candidateTitleTerms = new Set(titleTerms([
+    candidate.title,
+    ...candidate.profile.experience.map((item) =>
+      typeof item === 'string'
+        ? ''
+        : [item?.title, item?.position, item?.job_title, item?.role].filter(Boolean).join(' ')),
+  ].filter(Boolean).join(' ')));
+  const titleScore = requiredTitleTerms.length
+    ? Math.round(requiredTitleTerms.filter((term) => candidateTitleTerms.has(term)).length / requiredTitleTerms.length * 100)
+    : 100;
 
   const educationText = [candidate.profile.educationLevel, ...candidate.profile.education.map((item) => typeof item === 'string' ? item : [item?.degree, item?.field_of_study, item?.institution].filter(Boolean).join(' '))].join(' ');
   const requiredEducation = normalize(job.required_education || 'any');
@@ -160,7 +182,8 @@ function calculateCandidateMatch(candidate, job, weights = DEFAULT_WEIGHTS) {
       : requiredMode.includes('remote') ? 85 : 35;
   const workLocationScore = Math.round((modeScore + locationScore) / 2);
 
-  const score = Math.round((skillsScore * weights.skills + experienceScore * weights.experience + educationScore * weights.education + workLocationScore * weights.location) / 100);
+  const score = Math.round((skillsScore * weights.skills + experienceScore * weights.experience
+    + titleScore * weights.title + educationScore * weights.education + workLocationScore * weights.location) / 100);
   const missingSkills = requiredSkills.filter((skill) => !matchedSkills.includes(skill));
   const strengths = matchedSkills.slice(0, 3);
   if (years >= requiredYears && years > 0) strengths.push(`${years} years of relevant experience`);
@@ -172,6 +195,7 @@ function calculateCandidateMatch(candidate, job, weights = DEFAULT_WEIGHTS) {
     compatibility_score: score,
     skillsScore: Math.round(skillsScore),
     experienceScore,
+    titleScore,
     educationScore,
     locationScore: workLocationScore,
     matchedSkills,

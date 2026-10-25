@@ -1,9 +1,13 @@
+import { useEffect, useRef, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import API from './services/api';
+import { resolveUserRole } from './utils/authSession';
 
 // Layout Components
 import Navbar from './components/navbar';
 import Footer from './components/Footer';
+import AdminAccessRoute from './components/AdminAccessRoute';
 
 // Auth Components & Pages
 import Login from './pages/login';
@@ -47,6 +51,7 @@ import EditProfile from './pages/EditProfile';
 import CertificatePreview from './pages/CertificatePreview';
 import MyApplications from './pages/MyApplications';
 import ApplicationDetails from './pages/ApplicationDetails';
+import ApplicationSubmit from './pages/ApplicationSubmit';
 import InterviewDetails from './pages/InterviewDetails';
 import SeekerModulePage from './pages/SeekerModulePage';
 import SeekerDocumentation from './pages/Seekerdocumentation';
@@ -59,7 +64,6 @@ import CvCheck from './pages/Cvcheck';
 
 // Admin Pages
 import AdminDashboard from './pages/AdminDashboard';
-import AdminApproval from './pages/AdminApproval';
 
 // Shared Pages
 import Communication from './pages/communication';
@@ -67,21 +71,97 @@ import SeekerPageLayout from './components/SeekerPageLayout';
 
 const withSeekerSidebar = (page) => <SeekerPageLayout>{page}</SeekerPageLayout>;
 
+function TelegramLandingRoute() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { setSession, isAuthenticated, user } = useAuth();
+  const searchParams = new URLSearchParams(location.search);
+  const tab = searchParams.get('tab');
+  const view = searchParams.get('view');
+  const telegramStartParam = window.Telegram?.WebApp?.initDataUnsafe?.start_param
+    || searchParams.get('tgWebAppStartParam')
+    || '';
+  const telegramJobId = telegramStartParam.match(/^job_(\d+)$/)?.[1];
+  const jobId = searchParams.get('jobId') || telegramJobId;
+  const authToken = searchParams.get('auth_token');
+  const adminAction = searchParams.get('admin_action');
+  const processedToken = useRef('');
+  const [ssoPending, setSsoPending] = useState(Boolean(authToken));
+  const adminDestination = adminAction === 'post-job'
+    ? '/admin/jobs?intent=post'
+    : adminAction === 'application-stats'
+      ? '/admin/applications'
+      : '/admin/dashboard';
+
+  useEffect(() => {
+    if (!authToken || processedToken.current === authToken) return;
+    processedToken.current = authToken;
+
+    const cleanParams = new URLSearchParams(location.search);
+    cleanParams.delete('auth_token');
+    navigate({ pathname: '/', search: cleanParams.toString() ? `?${cleanParams.toString()}` : '' }, { replace: true });
+
+    API.post('/auth/telegram-sso/exchange', { token: authToken })
+      .then(({ data }) => {
+        if (!data?.token || !data?.user) throw new Error('Admin sign-in response was incomplete.');
+        setSession({ token: data.token, user: data.user });
+        navigate(data.redirect_to === '/admin/dashboard' ? adminDestination : '/admin/dashboard', { replace: true });
+      })
+      .catch((error) => {
+        console.error('Telegram admin sign-in failed:', error.response?.data?.message || error.message);
+        setSsoPending(false);
+        navigate('/login?error=telegram_admin_auth_failed', { replace: true });
+      });
+  }, [adminDestination, authToken, location.search, navigate, setSession]);
+
+  if (authToken || ssoPending) {
+    return <div className="flex min-h-screen items-center justify-center text-sm font-semibold text-slate-600">Signing in to the admin workspace...</div>;
+  }
+
+  const destination = (view === 'miniapp' || telegramJobId)
+    ? jobId ? `/job-details/${encodeURIComponent(jobId)}` : '/explore-jobs'
+    : tab === 'explore'
+    ? jobId ? `/job-details/${encodeURIComponent(jobId)}` : '/explore-jobs'
+    : tab === 'matrix'
+      ? '/employer/dashboard'
+    : tab === 'admin' && ['admin', 'super_admin'].includes(resolveUserRole(user))
+      ? adminDestination
+    : {
+      applications: '/applications',
+      admin: '/admin/dashboard',
+      seeker: '/seeker/dashboard',
+    }[tab];
+
+  if (!destination || (tab === 'admin' && (!isAuthenticated || !['admin', 'super_admin'].includes(resolveUserRole(user))))) {
+    return <Home />;
+  }
+  const params = new URLSearchParams(location.search);
+  params.delete('tab');
+  if (view === 'miniapp' || telegramJobId) params.set('view', 'miniapp');
+  if (telegramJobId) params.set('jobId', telegramJobId);
+  if (tab === 'matrix') params.set('view', 'applications');
+  const search = params.toString();
+  return <Navigate to={`${destination}${search ? `?${search}` : ''}`} replace />;
+}
+
 function AppLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const isAdminRoute = location.pathname.startsWith('/admin') || location.pathname === '/admin-dashboard';
+  const isTelegramMiniApp = new URLSearchParams(location.search).get('view') === 'miniapp';
+  const isStandaloneApplicationRoute = /^\/applications\/[^/]+(?:\/review)?\/?$/.test(location.pathname);
+  const isHomePage = location.pathname === '/';
   const continueFromProfile = (profile) => navigate('/ai-career-matches', { replace: true, state: { profile } });
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans">
-      {!isAdminRoute && <Navbar />}
-      <main className={`flex-1 w-full ${!isAdminRoute ? 'pt-20 sm:pt-24' : ''}`}>
+      {!isAdminRoute && !isStandaloneApplicationRoute && !isTelegramMiniApp && <Navbar />}
+      <main className={`flex-1 w-full ${!isAdminRoute && !isStandaloneApplicationRoute && !isHomePage ? 'pt-20 sm:pt-24' : ''}`}>
         <Routes>
           {/* ========================================== */}
           {/* 1. PUBLIC ROUTES                           */}
           {/* ========================================== */}
-          <Route path="/" element={<Home />} />
+          <Route path="/" element={<TelegramLandingRoute />} />
           <Route path="/jobs" element={<ExploreJobs />} />
           <Route path="/explore-jobs" element={<ExploreJobs />} />
 
@@ -148,6 +228,7 @@ function AppLayout() {
             }
           />
           <Route path="/employer/onboarding" element={<ProtectedRoute allowedRoles={["employer", "company", "recruiter"]}><CompanyInfo /></ProtectedRoute>} />
+          <Route path="/onboarding/employer" element={<ProtectedRoute allowedRoles={["employer", "company", "recruiter"]}><CompanyInfo /></ProtectedRoute>} />
           <Route
             path="/employee-profile-completion"
             element={
@@ -163,6 +244,7 @@ function AppLayout() {
           <Route path="/personalInfo" element={<Navigate to="/seeker/personal-info" replace />} />
           <Route path="/seeker/personal-info" element={<ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}><Profile onContinue={continueFromProfile} /></ProtectedRoute>} />
           <Route path="/ai-career-matches" element={<ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}><AICareerMatches /></ProtectedRoute>} />
+          <Route path="/ai-matching" element={<ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}><AICareerMatches /></ProtectedRoute>} />
           <Route
             path="/upload-cv"
             element={
@@ -181,6 +263,7 @@ function AppLayout() {
           />
           <Route path="/seeker/upload-cv" element={<Navigate to="/seeker/cv-upload" replace />} />
           <Route path="/seeker/cv-upload" element={<ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}><CvUploadScreen /></ProtectedRoute>} />
+          <Route path="/onboarding/seeker" element={<ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}><CvUploadScreen /></ProtectedRoute>} />
           <Route
             path="/cv-builder"
             element={
@@ -241,7 +324,9 @@ function AppLayout() {
           <Route path="/profile/edit" element={<ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}>{withSeekerSidebar(<EditProfile />)}</ProtectedRoute>} />
           <Route path="/profile/certificates/:id" element={<ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}>{withSeekerSidebar(<CertificatePreview />)}</ProtectedRoute>} />
           <Route path="/applications" element={<ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}>{withSeekerSidebar(<MyApplications />)}</ProtectedRoute>} />
-          <Route path="/applications/:id" element={<ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}>{withSeekerSidebar(<ApplicationDetails />)}</ProtectedRoute>} />
+          <Route path="/my-applications" element={<ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}>{withSeekerSidebar(<MyApplications />)}</ProtectedRoute>} />
+          <Route path="/applications/:id/review" element={<ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}><ApplicationSubmit /></ProtectedRoute>} />
+          <Route path="/applications/:id" element={<ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}><ApplicationDetails /></ProtectedRoute>} />
           <Route path="/interviews/:id" element={<ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}>{withSeekerSidebar(<InterviewDetails />)}</ProtectedRoute>} />
           <Route
             path="/match-results"
@@ -269,6 +354,7 @@ function AppLayout() {
           />
           <Route path="/CvAnalysis" element={<ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}><CvAnalysis /></ProtectedRoute>} />
           <Route path="/cv-analysis" element={<ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}><CvAnalysis /></ProtectedRoute>} />
+          <Route path="/cv-extraction" element={<ProtectedRoute allowedRoles={["job_seeker", "seeker", "jobseeker", "user", "employee"]}><CvAnalysis /></ProtectedRoute>} />
           <Route
             path="/seeker-docs"
             element={
@@ -398,25 +484,26 @@ function AppLayout() {
           {/* ========================================== */}
           {/* 5. ADMIN PROTECTED ROUTES                  */}
           {/* ========================================== */}
-          <Route path="/admin/dashboard" element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminDashboard /></ProtectedRoute>} />
-          <Route path="/admin/users" element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminDashboard /></ProtectedRoute>} />
-          <Route path="/admin/employers" element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminDashboard /></ProtectedRoute>} />
-          <Route path="/admin/jobs" element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminDashboard /></ProtectedRoute>} />
-          <Route path="/admin/applications" element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminDashboard /></ProtectedRoute>} />
-          <Route path="/admin/ai-matching" element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminDashboard /></ProtectedRoute>} />
-          <Route path="/admin/analytics" element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminDashboard /></ProtectedRoute>} />
-          <Route path="/admin/activity-log" element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminDashboard /></ProtectedRoute>} />
-          <Route path="/admin/reports" element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminDashboard /></ProtectedRoute>} />
-          <Route path="/admin/notifications" element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminDashboard /></ProtectedRoute>} />
-          <Route path="/admin/settings" element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><AdminDashboard /></ProtectedRoute>} />
-          <Route path="/admin-dashboard" element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><Navigate to="/admin/dashboard" replace /></ProtectedRoute>} />
-          <Route path="/admin/desk" element={<ProtectedRoute allowedRoles={["admin", "super_admin"]}><Navigate to="/admin/dashboard" replace /></ProtectedRoute>} />
+          <Route path="/admin" element={<AdminAccessRoute><Navigate to="/admin/dashboard" replace /></AdminAccessRoute>} />
+          <Route path="/admin/dashboard" element={<AdminAccessRoute><AdminDashboard /></AdminAccessRoute>} />
+          <Route path="/admin/users" element={<AdminAccessRoute><AdminDashboard /></AdminAccessRoute>} />
+          <Route path="/admin/employers" element={<AdminAccessRoute><AdminDashboard /></AdminAccessRoute>} />
+          <Route path="/admin/jobs" element={<AdminAccessRoute><AdminDashboard /></AdminAccessRoute>} />
+          <Route path="/admin/applications" element={<AdminAccessRoute><AdminDashboard /></AdminAccessRoute>} />
+          <Route path="/admin/ai-matching" element={<AdminAccessRoute><AdminDashboard /></AdminAccessRoute>} />
+          <Route path="/admin/analytics" element={<AdminAccessRoute><AdminDashboard /></AdminAccessRoute>} />
+          <Route path="/admin/activity-log" element={<AdminAccessRoute><AdminDashboard /></AdminAccessRoute>} />
+          <Route path="/admin/reports" element={<AdminAccessRoute><AdminDashboard /></AdminAccessRoute>} />
+          <Route path="/admin/notifications" element={<AdminAccessRoute><AdminDashboard /></AdminAccessRoute>} />
+          <Route path="/admin/settings" element={<AdminAccessRoute><AdminDashboard /></AdminAccessRoute>} />
+          <Route path="/admin-dashboard" element={<AdminAccessRoute><Navigate to="/admin/dashboard" replace /></AdminAccessRoute>} />
+          <Route path="/admin/desk" element={<AdminAccessRoute><Navigate to="/admin/dashboard" replace /></AdminAccessRoute>} />
           <Route
             path="/admin-approval"
             element={
-              <ProtectedRoute allowedRoles={["admin"]}>
-                <AdminApproval />
-              </ProtectedRoute>
+              <AdminAccessRoute>
+                <Navigate to="/admin/jobs?status=pending" replace />
+              </AdminAccessRoute>
             }
           />
 
@@ -462,7 +549,7 @@ function AppLayout() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
-      {!isAdminRoute && <Footer />}
+      {!isAdminRoute && !isStandaloneApplicationRoute && !isTelegramMiniApp && <Footer />}
     </div>
   );
 }

@@ -38,6 +38,8 @@ import {
 import { useAuth } from "../context/AuthContext";
 import AdminReports from "../components/admin/AdminReports";
 import AdminActivityLog from "../components/admin/AdminActivityLog";
+import TelegramConnectCard from "../components/TelegramConnectCard";
+import { getMetricCardClassName, metricCardIconClassName } from "../components/dashboard/metricCardStyles";
 
 const tabs = [
   ["overview", "/admin/dashboard", "Dashboard", BarChart3],
@@ -52,21 +54,6 @@ const tabs = [
   ["notifications", "/admin/notifications", "Notifications", Bell],
   ["settings", "/admin/settings", "Settings", Settings],
 ];
-const fallback = {
-  totalUsers: 0,
-  jobSeekersCount: 0,
-  employersCount: 0,
-  activeJobs: 0,
-  avgMatchScore: 0,
-  moderationQueueCount: 0,
-  pipeline: {
-    pending: 0,
-    shortlisted: 0,
-    interviewing: 0,
-    hired: 0,
-    rejected: 0,
-  },
-};
 const statusClass = {
   hired: "bg-emerald-50 text-emerald-700",
   shortlisted: "bg-blue-50 text-blue-700",
@@ -75,6 +62,8 @@ const statusClass = {
 };
 const formatDate = (value) =>
   value ? new Date(value).toLocaleDateString() : "Not provided";
+const isPendingJob = (job) =>
+  ["pending", "pending_approval"].includes(String(job?.approval_status || "").toLowerCase());
 const hasCompanyVerificationDocuments = (company) =>
   String(company?.employer_type || 'company').toLowerCase() === 'individual' ||
   Boolean(String(company?.tin_number || '').trim() && (
@@ -97,7 +86,7 @@ function AdminDashboard() {
   const navigate = useNavigate();
   const activeTab =
     tabs.find(([id, path]) => path === location.pathname)?.[0] || "overview";
-  const [stats, setStats] = useState(fallback);
+  const [stats, setStats] = useState(null);
   const [overview, setOverview] = useState({
     applications: [],
     companies: [],
@@ -106,28 +95,19 @@ function AdminDashboard() {
     reports: [],
     notifications: [],
     logs: [],
-    stats: fallback,
   });
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     let mounted = true;
-    Promise.allSettled([getAdminDashboardStats(), getAdminOverview()])
-      .then(([statsResult, overviewResult]) => {
+    const loadDashboard = async () => {
+      try {
+        const [liveStats, data] = await Promise.all([getAdminDashboardStats(), getAdminOverview()]);
         if (!mounted) return;
-        const liveStats =
-          statsResult.status === "fulfilled" ? statsResult.value : null;
-        const data =
-          overviewResult.status === "fulfilled"
-            ? overviewResult.value
-            : { applications: [], companies: [] };
-        setStats({
-          ...fallback,
-          ...(liveStats || {}),
-          pipeline: { ...fallback.pipeline, ...(liveStats?.pipeline || {}) },
-        });
+        setStats(liveStats);
         setOverview({
           applications: data.applications || [],
           companies: data.companies || [],
@@ -140,16 +120,35 @@ function AdminDashboard() {
           categories: data.categories || [],
           candidateCategories: data.candidateCategories || [],
           offline: data.offline === true,
-          stats: liveStats || fallback,
+          stats: liveStats,
         });
-      })
-      .finally(() => mounted && setLoading(false));
+      } catch (error) {
+        if (mounted) setLoadError(error.response?.data?.message || error.message || "Unable to load admin dashboard data.");
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+    loadDashboard();
     return () => {
       mounted = false;
     };
   }, []);
 
   const go = (path) => navigate(path);
+  if (loading)
+    return (
+      <div className="min-h-screen bg-slate-50 p-8 text-center text-sm font-semibold text-slate-500">
+        Loading admin workspace...
+      </div>
+    );
+  if (loadError)
+    return (
+      <div className="mx-auto mt-12 max-w-xl rounded-2xl border border-rose-200 bg-white p-8 text-center shadow-sm">
+        <p role="alert" className="text-sm font-semibold text-rose-700">{loadError}</p>
+        <button type="button" onClick={() => window.location.reload()} className="mt-4 rounded-xl bg-blue-700 px-4 py-2 text-sm font-bold text-white">Retry</button>
+      </div>
+    );
+
   const cards = [
     [
       "01",
@@ -160,23 +159,23 @@ function AdminDashboard() {
     ],
     [
       "02",
-      `${stats.activeJobs} Live`,
-      "Open Job Listings",
-      "Currently receiving verified candidate applications and AI skill screenings.",
+      `${stats.activeJobs} Active`,
+      "Approved / Active Jobs",
+      `${stats.totalJobs} total jobs currently registered in the database.`,
       "/admin/jobs?status=published",
     ],
     [
       "03",
-      `${stats.avgMatchScore}%`,
-      "Average Fit Ratio",
-      "Calculated from automated resume parsings and qualification signals.",
+      `${stats.pendingApprovalJobs} Pending`,
+      "Pending Approval",
+      "Jobs awaiting an admin approval decision.",
       "/admin/ai-matching",
     ],
     [
       "04",
-      `${stats.moderationQueueCount} Pending`,
-      "Moderation Queue",
-      "Pending jobs, company verifications, and reports awaiting admin decision.",
+      `${stats.rejectedClosedJobs} Closed`,
+      "Rejected / Closed Jobs",
+      "Jobs rejected or closed in the database.",
       "/admin/jobs?status=pending",
     ],
   ];
@@ -231,23 +230,17 @@ function AdminDashboard() {
     map: (renderCompany) => pendingCompanies.slice(0, 4).map(renderCompany),
   };
 
-  if (loading)
-    return (
-      <div className="min-h-screen bg-slate-50 p-8 text-center text-sm font-semibold text-slate-500">
-        Loading admin workspace...
-      </div>
-    );
   return (
-    <div className="admin-shell min-h-screen bg-slate-50 text-slate-900 lg:flex">
-      <aside className={`admin-sidebar w-full shrink-0 border-r border-[var(--brand-deep)] bg-[var(--brand-deep)] text-white lg:min-h-screen lg:w-64 ${sidebarOpen ? "block" : "hidden lg:block"}`}>
+    <div className="admin-shell min-h-screen bg-[#f8fafc] text-slate-900 lg:flex">
+      <aside className={`admin-sidebar w-full shrink-0 border-r border-slate-200/90 bg-white text-slate-900 lg:min-h-screen lg:w-64 ${sidebarOpen ? "block" : "hidden lg:block"}`}>
         <div className="sticky top-0 p-5 lg:h-screen">
           <div className="flex items-center gap-3">
-            <div className="rounded-xl bg-white/15 p-2.5 text-white">
+            <div className="rounded-xl border border-sky-100 bg-sky-50 p-2.5 text-sky-700">
               <ShieldCheck className="h-5 w-5" />
             </div>
             <div>
-              <p className="font-black text-white">SmartRecruit AI</p>
-              <p className="text-xs text-white/75">Admin workspace</p>
+              <p className="font-black text-slate-900">SmartRecruit AI</p>
+              <p className="text-xs text-slate-500">Admin workspace</p>
             </div>
           </div>
           <nav
@@ -259,7 +252,7 @@ function AdminDashboard() {
                 key={id}
                 type="button"
                 onClick={() => { setSidebarOpen(false); go(path); }}
-                className={`flex items-center gap-3 border-l-4 px-3 py-2.5 text-left text-sm font-medium transition-colors ${activeTab === id ? "border-white bg-[var(--brand-primary)] text-white font-semibold" : "border-transparent text-white/85 hover:bg-white/10 hover:text-white"}`}
+                className={`flex items-center gap-3 rounded-xl border px-3.5 py-2.5 text-left text-xs transition-all ${activeTab === id ? "border-sky-100 bg-sky-50 font-bold text-sky-700 shadow-xs" : "border-transparent font-medium text-slate-600 hover:bg-slate-100/80 hover:text-slate-900"}`}
               >
                 <Icon className="h-4 w-4 shrink-0" />
                 <span>{label}</span>
@@ -273,7 +266,7 @@ function AdminDashboard() {
               logout();
               navigate("/login", { replace: true });
             }}
-            className="mt-8 inline-flex w-full items-center gap-2 rounded-xl bg-rose-600 px-3 py-2 text-xs font-bold text-white hover:bg-rose-700"
+            className="mt-8 inline-flex w-full items-center gap-2 rounded-xl border border-rose-200 bg-white px-3 py-2 text-xs font-bold text-rose-600 transition hover:bg-rose-50"
           >
             <LogOut className="h-4 w-4 shrink-0" />
             Logout
@@ -566,11 +559,13 @@ function AdminDashboard() {
                 <div className="flex items-center justify-between">
                   <h2 className="text-lg font-black">Pending Verification</h2>
                   <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-700">
-                    {companies.length || 5}
+                    {pendingCompanies.length}
                   </span>
                 </div>
                 <div className="mt-5 divide-y divide-slate-100">
-                  {companies.map((company) => (
+                  {pendingCompanies.length === 0 ? (
+                    <p className="py-4 text-sm text-slate-500">No pending company verification requests.</p>
+                  ) : pendingCompanies.slice(0, 4).map((company) => (
                     <div key={company.id} className="py-4 first:pt-0">
                       <p className="font-bold">{company.company_name}</p>
                       <p className="mt-1 text-xs text-slate-500">
@@ -602,9 +597,7 @@ function AdminOverview({ stats, overview, go, adminName }) {
   const [range, setRange] = useState("7d");
   const [now, setNow] = useState(() => new Date());
   const performance = overview.performance || [];
-  const pendingJobs = (overview.jobs || []).filter((job) =>
-    ["pending", "pending_approval", "draft"].includes(String(job.status || "").toLowerCase()),
-  );
+  const pendingJobs = (overview.jobs || []).filter(isPendingJob);
   const candidateCategories = (overview.candidateCategories || []).filter((item) => {
     const category = String(item.category || "").trim().toLowerCase();
     return category && !["select sector", "select category", "not specified", "n/a"].includes(category);
@@ -709,7 +702,10 @@ function AdminOverview({ stats, overview, go, adminName }) {
 
   const kpis = [
     { label: "Total candidates", value: candidateCount, note: `${Number(stats.candidateGrowthPercent || 0) >= 0 ? "+" : ""}${Number(stats.candidateGrowthPercent || 0)}% from last month`, Icon: Users, tone: "bg-blue-50 text-blue-700", trend: true, path: "/admin/users" },
+    { label: "Total jobs posted", value: Number(stats.totalJobs || 0), note: "All database job listings", Icon: BriefcaseBusiness, tone: "bg-sky-50 text-sky-700", path: "/admin/jobs" },
+    { label: "Pending approval", value: Number(stats.pendingApprovalJobs || 0), note: "Awaiting an admin decision", Icon: Clock3, tone: "bg-amber-50 text-amber-700", path: "/admin/jobs?status=pending" },
     { label: "Active jobs", value: activeJobs, note: `+${Number(stats.newJobsThisWeek || 0)} new this week`, Icon: BriefcaseBusiness, tone: "bg-emerald-50 text-emerald-700", path: "/admin/jobs" },
+    { label: "Rejected / closed", value: Number(stats.rejectedClosedJobs || 0), note: "No longer accepting applicants", Icon: X, tone: "bg-slate-100 text-slate-700", path: "/admin/jobs" },
     { label: "AI match rate", value: `${Number(stats.avgMatchScore || 0)}%`, note: "Average compatibility score", Icon: Sparkles, tone: "bg-violet-50 text-violet-700", path: "/admin/ai-matching" },
     { label: "Registered companies", value: Number(stats.employersCount || 0), note: `${Number(overview.companies?.filter((company) => company.verification_status === "verified").length || 0)} verified profiles`, Icon: Building2, tone: "bg-amber-50 text-amber-700", path: "/admin/employers" },
   ];
@@ -737,11 +733,13 @@ function AdminOverview({ stats, overview, go, adminName }) {
 
       <section aria-label="Platform metrics" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {kpis.map(({ label, value, note, Icon, tone, trend, path }) => (
-          <button key={label} type="button" onClick={() => go(path)} className="group rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-            <div className="flex items-center justify-between"><span className={`flex h-10 w-10 items-center justify-center rounded-xl ${tone}`}><Icon className="h-5 w-5" /></span><ArrowUpRight className="h-4 w-4 text-slate-300 transition group-hover:text-blue-600" /></div>
-            <p className="mt-5 text-sm font-semibold text-slate-500">{label}</p>
-            <p className="mt-1 text-3xl font-black tabular-nums text-slate-950">{typeof value === "number" ? value.toLocaleString() : value}</p>
-            <p className={`mt-2 inline-flex items-center gap-1 text-xs font-semibold ${trend ? "text-emerald-700" : "text-slate-500"}`}>{trend && <TrendingUp className="h-3.5 w-3.5" />}{note}</p>
+          <button key={label} type="button" onClick={() => go(path)} className={getMetricCardClassName()}>
+            <div className="flex w-full items-start justify-end gap-2"><span className={`flex h-10 w-10 items-center justify-center rounded-xl ${metricCardIconClassName} ${tone}`}><Icon className="h-5 w-5" /></span><ArrowUpRight className="h-4 w-4 text-slate-300 transition group-hover:text-blue-600" /></div>
+            <div className="w-full">
+              <p className="mt-5 text-sm font-semibold text-slate-500">{label}</p>
+              <p className="mt-1 text-3xl font-black tabular-nums text-slate-950">{typeof value === "number" ? value.toLocaleString() : value}</p>
+              <p className={`mt-2 inline-flex items-center gap-1 text-xs font-semibold ${trend ? "text-emerald-700" : "text-slate-500"}`}>{trend && <TrendingUp className="h-3.5 w-3.5" />}{note}</p>
+            </div>
           </button>
         ))}
       </section>
@@ -806,8 +804,8 @@ function AdminOverview({ stats, overview, go, adminName }) {
           {recentJobs.length ? <div className="overflow-x-auto"><table className="w-full min-w-[610px] text-left text-sm"><thead className="border-y border-slate-100 bg-slate-50 text-[10px] font-bold uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3">Job</th><th className="px-4 py-3">Location</th><th className="px-4 py-3">Date</th><th className="px-4 py-3">Status</th><th className="px-4 py-3 text-right"> </th></tr></thead><tbody className="divide-y divide-slate-100">{recentJobs.map((job) => {
             const status = String(job.status || "pending").toLowerCase();
             const isActive = ["active", "published"].includes(status);
-            const isPending = ["pending", "pending_approval", "draft"].includes(status);
-            const company = job.company_name || job.employer_name || "Company";
+            const isPending = isPendingJob(job);
+            const company = job.company_name || "Company not specified";
             return <tr key={job.id} className="hover:bg-slate-50/70"><td className="px-4 py-3"><div className="flex min-w-0 items-center gap-3"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-xs font-black text-blue-700">{String(company).trim().slice(0, 1).toUpperCase()}</span><div className="min-w-0"><p className="max-w-40 truncate text-xs font-bold text-slate-800">{job.title || "Untitled job"}</p><p className="max-w-40 truncate text-[10px] text-slate-500">{company}{job.category ? ` · ${job.category}` : ""}</p></div></div></td><td className="max-w-28 truncate px-4 py-3 text-xs text-slate-500">{job.location || "Not provided"}</td><td className="whitespace-nowrap px-4 py-3 text-xs text-slate-500">{job.created_at ? new Date(job.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "—"}</td><td className="px-4 py-3"><span className={`rounded-full px-2 py-1 text-[10px] font-bold capitalize ${isActive ? "bg-emerald-100 text-emerald-700" : isPending ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600"}`}>{isActive ? "Active" : isPending ? "Pending" : status.replaceAll("_", " ")}</span></td><td className="px-4 py-3 text-right"><button type="button" onClick={() => go("/admin/jobs")} className="rounded-md px-2 py-1 text-xs font-bold text-blue-700 hover:bg-blue-50">Manage</button></td></tr>;
           })}</tbody></table></div> : <div className="px-5 py-10 text-center"><BriefcaseBusiness className="mx-auto h-7 w-7 text-slate-300" /><p className="mt-2 text-sm font-semibold text-slate-700">No job listings yet</p><p className="mt-1 text-xs text-slate-500">New opportunities will appear here.</p></div>}
         </section>
@@ -848,23 +846,19 @@ function AdminModule({ tab, overview, go }) {
                   : [];
   const handleJobModeration = async (job, action, reason = '') => {
     const normalizedReason = String(reason || '').trim();
-    if (normalizedReason.length < 20) {
+    if (action === 'reject' && normalizedReason.length < 20) {
       setFeedback({ type: "error", message: "Please provide a reason of at least 20 characters." });
       return false;
     }
-    if (action === 'approve' && !hasJobApprovalDocuments(job)) {
-      window.alert('Employer TIN and trade license details are required before approving this job.');
-      return false;
-    }
     setProcessingId(job.id);
-    const nextStatus = action === "approve" ? "active" : "rejected";
+    const nextApprovalStatus = action === "approve" ? "approved" : "rejected";
     setJobRows((current) => current.map((item) => String(item.id) === String(job.id)
-      ? { ...item, status: nextStatus, rejection_reason: normalizedReason || null, is_approved: action === "approve", isApproved: action === "approve" }
+      ? { ...item, approval_status: nextApprovalStatus, rejection_reason: action === "reject" ? normalizedReason : null, is_approved: action === "approve", isApproved: action === "approve" }
       : item));
     try {
       await moderateJob(job.id, action, normalizedReason);
       setSelectedJob((current) => current && String(current.id) === String(job.id)
-        ? { ...current, status: nextStatus, rejection_reason: normalizedReason || null }
+        ? { ...current, approval_status: nextApprovalStatus, rejection_reason: action === "reject" ? normalizedReason : null, is_approved: action === "approve" }
         : current);
       return true;
     } catch (error) {
@@ -876,10 +870,6 @@ function AdminModule({ tab, overview, go }) {
     }
   };
   const startJobModeration = (job, action) => {
-    if (action === 'approve' && !hasJobApprovalDocuments(job)) {
-      window.alert('Employer TIN and trade license details are required before approving this job.');
-      return;
-    }
     setModeratingJob(job);
     setModerationAction(action);
     setModerationReason('');
@@ -944,6 +934,9 @@ function AdminModule({ tab, overview, go }) {
           <p className="mt-2 text-xs text-slate-500">Role: admin</p>
         </ModuleCard>
         <ModuleCard title="Platform Settings">
+          <div className="mb-5">
+            <TelegramConnectCard />
+          </div>
           <label className="flex items-center justify-between text-sm font-semibold text-slate-700">
             Maintenance mode
             <input type="checkbox" className="h-4 w-4 accent-blue-600" />
@@ -988,8 +981,8 @@ function AdminModule({ tab, overview, go }) {
       <table className="w-full min-w-[680px] text-left text-sm">
         <thead className="border-b border-slate-100 bg-slate-50 text-xs font-bold uppercase tracking-widest text-slate-500">
           <tr>
-            <th className="p-4">Name / Title</th>
-            <th className="p-4">Email / Company</th>
+            <th className="p-4">Job Title</th>
+            <th className="p-4">Company Name</th>
             <th className="p-4">Status</th>
             <th className="p-4">Date</th>
             <th className="p-4 text-right">Action</th>
@@ -1000,20 +993,24 @@ function AdminModule({ tab, overview, go }) {
             rows.map((row) => (
               <tr key={row.id}>
                 <td className="p-4 font-semibold text-slate-800">
-                  {row.full_name ||
-                    row.company_name ||
-                    row.title ||
-                    row.candidate_name ||
-                    row.reporter_name ||
-                    row.recipient_name}
+                  {tab === "jobs"
+                    ? row.title || "Untitled job"
+                    : row.full_name ||
+                      row.company_name ||
+                      row.title ||
+                      row.candidate_name ||
+                      row.reporter_name ||
+                      row.recipient_name}
                 </td>
                 <td className="p-4 text-slate-600">
-                  {row.email ||
-                    row.rep_email ||
-                    row.employer_name ||
-                    row.job_title ||
-                    row.message ||
-                    "-"}
+                  {tab === "jobs"
+                    ? row.company_name || row.profile_company_name || row.employer_name || "-"
+                    : row.email ||
+                      row.rep_email ||
+                      row.employer_name ||
+                      row.job_title ||
+                      row.message ||
+                      "-"}
                 </td>
                 <td className="p-4">
                   <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
@@ -1031,7 +1028,7 @@ function AdminModule({ tab, overview, go }) {
                   {tab === "jobs" ? (
                     <div className="flex flex-wrap justify-end gap-2">
                       <button type="button" onClick={() => setSelectedJob(row)} className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Details</button>
-                      {String(row.status || "").toLowerCase() === "rejected" ? <span className="rounded-xl border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700">✕ Rejected</span> : String(row.status || "").toLowerCase() === "active" || String(row.status || "").toLowerCase() === "published" && (row.is_approved === true || row.is_approved === 1 || row.isApproved === true) ? <span className="rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">✓ Approved</span> : <><button type="button" disabled={processingId === row.id || !hasJobApprovalDocuments(row)} title={hasJobApprovalDocuments(row) ? 'Approve job' : 'Employer TIN and trade license are required.'} onClick={() => startJobModeration(row, "approve")} className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">Approve</button><button type="button" disabled={processingId === row.id} onClick={() => startJobModeration(row, "reject")} className="rounded-lg bg-rose-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-50">Reject</button></>}
+                      {String(row.approval_status || "").toLowerCase() === "rejected" ? <span className="rounded-xl border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700">✕ Rejected</span> : String(row.approval_status || "").toLowerCase() === "approved" ? <span className="rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">✓ Approved</span> : <><button type="button" disabled={processingId === row.id} title="Approve job" onClick={() => startJobModeration(row, "approve")} className="rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">Approve</button><button type="button" disabled={processingId === row.id} onClick={() => startJobModeration(row, "reject")} className="rounded-lg bg-rose-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-50">Reject</button></>}
                     </div>
                   ) : tab === "companies" ? (
                     <div className="flex justify-end gap-2">
@@ -1079,9 +1076,9 @@ function AdminModule({ tab, overview, go }) {
               <div className="rounded-xl border border-slate-100 bg-slate-50 p-3"><p className="text-xs text-slate-500">Trade license / registration</p><p className="mt-1 break-words font-bold text-slate-900">{selectedJob.employer_trade_license_number || 'Not provided'}</p></div>
               <div className="rounded-xl border border-slate-100 bg-slate-50 p-3"><p className="text-xs text-slate-500">License document</p><p className="mt-1 break-words text-sm font-bold text-slate-900">{getSafeLicenseDocumentUrl(selectedJob.employer_trade_license_url) ? <a href={getSafeLicenseDocumentUrl(selectedJob.employer_trade_license_url)} target="_blank" rel="noreferrer" className="text-blue-700 underline">Open license</a> : selectedJob.employer_trade_license_url ? 'Document link unavailable' : 'Not provided'}</p></div>
             </div>
-            {!hasJobApprovalDocuments(selectedJob) && <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">Approval is unavailable until the employer provides a TIN and trade license number or document.</p>}
+            {!hasJobApprovalDocuments(selectedJob) && <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">Employer TIN or trade license documentation is incomplete. Admin approval is still available.</p>}
             <p className="mt-6 whitespace-pre-wrap text-sm leading-7 text-slate-700">{selectedJob.description || "No job description provided."}</p>
-            <div className="mt-6 flex flex-wrap justify-end gap-2"><button type="button" disabled={processingId === selectedJob.id || !hasJobApprovalDocuments(selectedJob)} title={hasJobApprovalDocuments(selectedJob) ? 'Approve job' : 'Employer TIN and trade license are required.'} onClick={() => startJobModeration(selectedJob, "approve")} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">Approve</button><button type="button" disabled={processingId === selectedJob.id} onClick={() => startJobModeration(selectedJob, "reject")} className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700 disabled:opacity-50">Reject</button></div>
+            <div className="mt-6 flex flex-wrap justify-end gap-2"><button type="button" disabled={processingId === selectedJob.id} title="Approve job" onClick={() => startJobModeration(selectedJob, "approve")} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">Approve Anyway (Admin Bypass)</button><button type="button" disabled={processingId === selectedJob.id} onClick={() => startJobModeration(selectedJob, "reject")} className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700 disabled:opacity-50">Reject</button></div>
           </div>
         </div>
       )}

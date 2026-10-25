@@ -1,6 +1,6 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import API from '../services/api';
-import { clearActiveSession, persistSession, readStoredUser } from '../utils/authSession';
+import { clearActiveSession, normalizePermanentAdmin, persistSession, readStoredUser } from '../utils/authSession';
 
 const AuthContext = createContext({
   user: null,
@@ -26,18 +26,22 @@ export const AuthProvider = ({ children }) => {
 
   const login = async ({ email, password }) => {
     const { data } = await API.post('/login', { email, password });
-    const session = { token: data.token, user: data.user };
+    const session = { token: data.token, user: normalizePermanentAdmin(data.user) };
     persistSession(session);
     setToken(session.token);
     setUser(session.user);
     return session;
   };
 
-  const setSession = (session) => {
-    persistSession(session);
+  const setSession = useCallback((session) => {
+    const normalizedSession = {
+      ...session,
+      user: normalizePermanentAdmin(session?.user),
+    };
+    persistSession(normalizedSession);
     if (session?.token) setToken(session.token);
-    if (session?.user) setUser(session.user);
-  };
+    if (normalizedSession.user) setUser(normalizedSession.user);
+  }, []);
 
   const logout = () => {
     clearActiveSession();

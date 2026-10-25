@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
   BriefcaseBusiness,
-  Check,
   CheckCircle2,
   Download,
   ExternalLink,
@@ -14,21 +13,12 @@ import {
 } from "lucide-react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
-  getApplicationById,
   getJobById,
   withdrawApplication,
 } from "../services/jobService";
 import api from "../services/api";
 
-const stages = [
-  "Applied",
-  "AI Matched",
-  "Employer Reviewed",
-  "Shortlisted",
-  "Interview Scheduled",
-  "Final Decision",
-];
-const blockedStatuses = ["hired", "rejected", "withdrawn"];
+const blockedStatuses = ["hired", "offer", "accepted", "rejected", "withdrawn"];
 
 const formatDate = (value) => {
   if (!value) return "Date unavailable";
@@ -42,6 +32,27 @@ const formatDate = (value) => {
       });
 };
 
+const toList = (value) => {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== "string" || !value.trim()) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [parsed];
+  } catch {
+    return value.split(/[,;|]/).map((item) => item.trim()).filter(Boolean);
+  }
+};
+
+const skillLabel = (skill) =>
+  typeof skill === "string"
+    ? skill
+    : skill?.skill_name || skill?.name || skill?.skill || "";
+
+const formatPercent = (value) =>
+  value !== null && value !== undefined && Number.isFinite(Number(value))
+    ? `${Number(value).toFixed(2)}%`
+    : "Not available";
+
 const normalizeStatus = (value) => {
   const status = String(value || "Under Review")
     .toLowerCase()
@@ -54,7 +65,9 @@ const normalizeStatus = (value) => {
   if (["shortlisted", "shortlist"].includes(status)) return "Shortlisted";
   if (["interview", "interviewed", "interview scheduled", "interview-scheduled"].includes(status))
     return "Interview";
-  if (["hired", "offer", "accepted"].includes(status)) return "Hired";
+  if (status === "screening") return "Screening";
+  if (status === "hired") return "Hired";
+  if (["offer", "accepted"].includes(status)) return "Accepted";
   if (["rejected", "declined"].includes(status)) return "Rejected";
   if (status === "withdrawn") return "Withdrawn";
 
@@ -71,6 +84,7 @@ const statusTone = (status) =>
     Shortlisted: "bg-emerald-50 text-emerald-800",
     Interview: "bg-violet-50 text-violet-800",
     Hired: "bg-emerald-50 text-emerald-800",
+    Accepted: "bg-emerald-50 text-emerald-800",
     Rejected: "bg-red-50 text-red-800",
     Withdrawn: "bg-slate-100 text-slate-600",
   })[status] || "bg-slate-100 text-slate-700";
@@ -103,26 +117,26 @@ export default function ApplicationDetails() {
     let active = true;
     const loadApplication = async () => {
       setLoading(true);
-      const routedApplication = location.state?.application;
-      const stored =
-        routedApplication && String(routedApplication.id) === String(id)
-          ? routedApplication
-          : getApplicationById(id);
       try {
-        const { data: applicationsData } = await api.get('/seeker/applications');
-        const liveApplication = (applicationsData.applications || []).find((item) => String(item.id) === String(id));
-        const resolvedApplication = liveApplication || stored;
+        const { data: applicationData } = await api.get(`/seeker/applications/${encodeURIComponent(String(id))}`);
+        const resolvedApplication = applicationData.application;
         if (!resolvedApplication) throw new Error('Application not found');
-        if (active) setApplication(resolvedApplication);
+        if (active) {
+          setApplication(resolvedApplication);
+          setJob(resolvedApplication.job || null);
+        }
         const jobId = resolvedApplication.jobId || resolvedApplication.job_id;
         if (jobId) {
-          const jobData = await getJobById(jobId);
-          if (active) setJob(jobData);
+          try {
+            const jobData = await getJobById(jobId);
+            if (active) setJob({ ...jobData, ...(resolvedApplication.job || {}) });
+          } catch (jobError) {
+            console.warn("Using the saved job snapshot for application details", jobError);
+          }
         }
       } catch (loadError) {
         console.error("Unable to load application details", loadError);
-        if (stored && active) setApplication(stored);
-        else if (active) setError("This application could not be found.");
+        if (active) setError(loadError.response?.data?.message || "This application could not be found.");
       } finally {
         if (active) setLoading(false);
       }
@@ -130,8 +144,8 @@ export default function ApplicationDetails() {
     loadApplication();
     const handleStatusSync = async () => {
       try {
-        const { data } = await api.get('/seeker/applications');
-        const latest = (data.applications || []).find((item) => String(item.id) === String(id));
+        const { data } = await api.get(`/seeker/applications/${encodeURIComponent(String(id))}`);
+        const latest = data.application;
         if (latest) setApplication((current) => ({ ...(current || {}), ...latest }));
       } catch (refreshError) {
         console.error('Unable to refresh application status', refreshError);
@@ -149,10 +163,8 @@ export default function ApplicationDetails() {
     let active = true;
     const refreshApplication = async () => {
       try {
-        const { data } = await api.get("/seeker/applications");
-        const latest = (data.applications || []).find(
-          (item) => String(item.id) === String(id),
-        );
+        const { data } = await api.get(`/seeker/applications/${encodeURIComponent(String(id))}`);
+        const latest = data.application;
         if (active && latest) {
           setApplication((current) => ({ ...current, ...latest }));
         }
@@ -174,7 +186,7 @@ export default function ApplicationDetails() {
   );
   const canWithdraw =
     !blockedStatuses.includes((application?.status || "").toLowerCase()) &&
-    !["Hired", "Rejected", "Withdrawn"].includes(statusLabel);
+    !["Hired", "Accepted", "Rejected", "Withdrawn"].includes(statusLabel);
   const applicationJobId = application?.jobId || application?.job_id;
 
   const handleViewOriginalJob = () => {
@@ -183,10 +195,6 @@ export default function ApplicationDetails() {
         "The original job information is currently unavailable.",
       );
       return;
-    }
-    const submittedJob = application?.job;
-    if (submittedJob && String(submittedJob.id) === String(applicationJobId)) {
-      localStorage.setItem("jobDetailsPreview", JSON.stringify(submittedJob));
     }
     setOriginalJobError("");
     navigate(`/job-details/${encodeURIComponent(String(applicationJobId))}`);
@@ -271,39 +279,42 @@ export default function ApplicationDetails() {
     application.matchBreakdown?.overall ??
     job?.matchBreakdown?.overall;
   const matchBreakdown = application.matchBreakdown || {};
-  const activeStage =
-    statusLabel === "Withdrawn"
-      ? -1
-      : ["Hired", "Rejected"].includes(statusLabel)
-        ? 5
-        : statusLabel === "Interview"
-          ? 4
-          : statusLabel === "Shortlisted"
-            ? 3
-            : statusLabel === "Pending"
-              ? matchScore != null
-                ? 1
-                : 0
-              : statusLabel === "Under Review" || matchScore != null
-              ? 2
-              : 0;
+  const candidate = application.candidate || {};
+  const extractedData = application.resumeSnapshot?.extractedData || {};
+  const candidateSkills = toList(candidate.skills || extractedData.skills).map(skillLabel).filter(Boolean);
+  const candidateEducation = toList(candidate.education || extractedData.education);
+  const requiredSkills = toList(job?.required_skills || job?.requiredSkills).map(skillLabel).filter(Boolean);
+  const matchingSkills = application.matchingSkills?.length
+    ? application.matchingSkills
+    : requiredSkills.filter((required) => candidateSkills.some((skill) => skill.toLowerCase().includes(required.toLowerCase()) || required.toLowerCase().includes(skill.toLowerCase())));
+  const missingSkills = application.missingSkills?.length
+    ? application.missingSkills
+    : requiredSkills.filter((required) => !matchingSkills.some((matched) => matched.toLowerCase() === required.toLowerCase()));
+  const salaryMinimum = job?.salary_min ?? job?.salaryMin;
+  const salaryMaximum = job?.salary_max ?? job?.salaryMax;
+  const salary = salaryMinimum || salaryMaximum
+    ? `${job?.currency || "ETB"} ${salaryMinimum || ""}${salaryMinimum && salaryMaximum ? " - " : ""}${salaryMaximum || ""}`
+    : "Not listed";
 
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-8 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-5xl">
-        <nav aria-label="Breadcrumb" className="mb-6 text-sm text-slate-500">
-          <span>Application Details</span>
-        </nav>
-        <button type="button" onClick={() => navigate("/applications")} className="mb-5 inline-flex min-h-10 items-center gap-2 text-sm font-bold text-[var(--brand-deep)] hover:underline">
-          <ArrowLeft className="h-4 w-4" /> Back to My Applications
+        <button
+          type="button"
+          onClick={() => navigate("/applications")}
+          className="mb-4 inline-flex items-center gap-2 rounded-xl bg-[var(--brand-primary)] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[var(--brand-primary-hover)]"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to My Applications
         </button>
-        <section className="rounded-3xl border border-[var(--brand-border)] bg-white p-6 shadow-sm sm:p-8">
-          <div className="flex flex-col gap-5 border-b border-slate-100 pb-7 sm:flex-row sm:items-start sm:justify-between">
+        <section className="rounded-3xl border border-[var(--brand-border)] bg-white p-6 pb-3 shadow-sm sm:p-8 sm:pb-4">
+          <div className="border-b border-slate-100 pb-7">
+            <p className="mb-3 w-full text-center text-lg font-bold text-slate-900">
+              Application Details
+            </p>
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--brand-deep)]">
-                Application Details
-              </p>
-              <h1 className="mt-2 text-3xl font-black text-slate-900">
+              <h1 className="text-3xl font-black text-slate-900">
                 {job?.title || application.jobTitle || "Job application"}
               </h1>
               <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-600">
@@ -330,67 +341,38 @@ export default function ApplicationDetails() {
             >
               {statusLabel}
             </span>
-          </div>
-          <div className="mt-7 rounded-2xl border border-slate-200 p-5">
-            <h2 className="text-lg font-bold text-slate-900">
-              Application progress
-            </h2>
-            <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-6">
-              {stages.map((stage, index) => {
-                const completed =
-                  (activeStage >= 0 && index < activeStage) ||
-                  (activeStage === 5 && index === 5);
-                const current =
-                  index === activeStage &&
-                  !["Hired", "Rejected"].includes(statusLabel);
-                return (
-                  <div
-                    key={stage}
-                    className="flex items-start gap-3 lg:block lg:text-center"
-                  >
-                    <span
-                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold lg:mx-auto ${completed ? "bg-[var(--brand-primary)] text-white" : current ? "border-2 border-[var(--brand-primary)] bg-[var(--brand-soft)] text-[var(--brand-deep)]" : "bg-slate-100 text-slate-400"}`}
-                    >
-                      {completed ? <Check className="h-5 w-5" /> : index + 1}
-                    </span>
-                    <div className="pt-1 lg:pt-3">
-                      <p className="text-sm font-bold text-slate-800">
-                        {stage}
-                      </p>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {completed
-                          ? "Completed"
-                          : current
-                            ? "In Progress"
-                            : "Waiting"}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })}
             </div>
-            {application.interview?.scheduledAt && (
-              <p className="mt-5 rounded-xl bg-violet-50 px-4 py-3 text-sm font-semibold text-violet-800">
-                Interview scheduled for{" "}
-                {new Date(application.interview.scheduledAt).toLocaleString(
-                  undefined,
-                  { dateStyle: "medium", timeStyle: "short" },
-                )}
-              </p>
-            )}
           </div>
+          <div className="mt-7 grid items-start gap-6 lg:grid-cols-2">
+          <section className="rounded-2xl border border-slate-200 p-5 lg:col-start-1 lg:row-start-1">
+            <h2 className="text-lg font-bold text-slate-900">Candidate snapshot</h2>
+            <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+              <div><dt className="text-slate-500">Name</dt><dd className="mt-1 font-semibold text-slate-900">{candidate.name || "Not available"}</dd></div>
+              <div><dt className="text-slate-500">Contact</dt><dd className="mt-1 font-semibold text-slate-900">{candidate.email || candidate.phone || "Not available"}</dd></div>
+              {candidate.email && candidate.phone && <div><dt className="text-slate-500">Phone</dt><dd className="mt-1 font-semibold text-slate-900">{candidate.phone}</dd></div>}
+              <div><dt className="text-slate-500">Education</dt><dd className="mt-1 font-semibold text-slate-900">{candidate.educationLevel || candidateEducation.map((item) => typeof item === "string" ? item : [item.degree, item.field_of_study, item.institution || item.school_name].filter(Boolean).join(" · ")).filter(Boolean).join(", ") || "Not available"}</dd></div>
+            </dl>
+            <div className="mt-4">
+              <p className="text-sm font-bold text-slate-700">Skills in submitted CV/profile</p>
+              {candidateSkills.length ? (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {candidateSkills.map((skill) => <span key={skill} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">{skill}</span>)}
+                </div>
+              ) : <p className="mt-2 text-sm text-slate-500">No skills were saved with this application.</p>}
+            </div>
+          </section>
           <div
             id="ai-match"
-            className="mt-6 scroll-mt-6 rounded-2xl border border-slate-200 p-5"
+            className="scroll-mt-6 rounded-2xl border border-slate-200 p-5 lg:col-start-1 lg:row-start-2"
           >
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="flex items-center gap-2 text-lg font-bold text-slate-900">
-                <Sparkles className="h-5 w-5 text-[var(--brand-deep)]" /> AI
+                <Sparkles className="h-5 w-5 text-[var(--brand-deep)]" /> ATS
                 Match Score
               </h2>
               <div className="text-right">
                 <p className="text-3xl font-black text-[var(--brand-deep)]">
-                  {matchScore != null ? `${matchScore}%` : "--"}
+                  {matchScore != null ? formatPercent(matchScore) : "--"}
                 </p>
                 <p className="text-sm font-bold text-slate-500">
                   {matchScore >= 80
@@ -403,25 +385,25 @@ export default function ApplicationDetails() {
             </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-3">
               {[
-                ["Skills Match", application.skillsMatch ?? matchBreakdown.skills],
-                ["Experience Match", application.experienceMatch ?? matchBreakdown.experience],
-                ["Education Match", application.educationMatch ?? matchBreakdown.education],
+                ["Skills Match", application.skillsMatchScore ?? application.skillsMatch ?? matchBreakdown.skills],
+                ["Experience Match", application.experienceMatchScore ?? application.experienceMatch ?? matchBreakdown.experience],
+                ["Education Match", application.educationMatchScore ?? application.educationMatch ?? matchBreakdown.education],
               ].map(([label, value]) => (
                 <div key={label} className="rounded-xl bg-slate-50 p-3">
                   <p className="text-xs text-slate-500">{label}</p>
                   <p className="mt-1 font-bold text-slate-900">
-                    {value != null ? `${value}%` : "Not available"}
+                    {formatPercent(value)}
                   </p>
                 </div>
               ))}
             </div>
-            {(application.matchingSkills || job?.skills)?.length > 0 && (
+            {matchingSkills.length > 0 && (
               <div className="mt-4">
                 <p className="text-sm font-bold text-slate-700">
                   Matching skills
                 </p>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  {(application.matchingSkills || job.skills).map((skill) => (
+                  {matchingSkills.map((skill) => (
                     <span
                       key={skill}
                       className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700"
@@ -433,13 +415,13 @@ export default function ApplicationDetails() {
                 </div>
               </div>
             )}
-            {(application.missingSkills || job?.missingSkills)?.length > 0 && (
+            {missingSkills.length > 0 && (
               <div className="mt-4">
                 <p className="text-sm font-bold text-slate-700">
                   Missing or improvement areas
                 </p>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  {(application.missingSkills || job.missingSkills).map(
+                  {missingSkills.map(
                     (skill) => (
                       <span
                         key={skill}
@@ -453,7 +435,7 @@ export default function ApplicationDetails() {
               </div>
             )}
           </div>
-          <div className="mt-6 rounded-2xl border border-slate-200 p-5">
+          <div className="rounded-2xl border border-slate-200 p-5 lg:col-start-1 lg:row-start-3">
             <h2 className="text-lg font-bold text-slate-900">
               Submitted materials
             </h2>
@@ -515,7 +497,19 @@ export default function ApplicationDetails() {
               </div>
             </div>
           </div>
-          <div className="mt-7 flex flex-col gap-3 border-t border-slate-100 pt-6 sm:flex-row sm:flex-wrap">
+          <section className="rounded-2xl border border-slate-200 p-5 lg:col-start-2 lg:row-start-1 lg:row-span-3">
+            <h2 className="text-lg font-bold text-slate-900">Job details</h2>
+            <p className="mt-3 whitespace-pre-line text-sm leading-6 text-slate-600">{job?.description || "Job description unavailable."}</p>
+            <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+              <div><dt className="text-slate-500">Salary</dt><dd className="mt-1 font-semibold text-slate-900">{salary}</dd></div>
+              <div><dt className="text-slate-500">Location</dt><dd className="mt-1 font-semibold text-slate-900">{job?.location || application.location || "Not listed"}</dd></div>
+              <div><dt className="text-slate-500">Work arrangement</dt><dd className="mt-1 font-semibold capitalize text-slate-900">{job?.work_mode || "Not listed"}</dd></div>
+              <div><dt className="text-slate-500">Education / experience</dt><dd className="mt-1 font-semibold text-slate-900">{[job?.required_education, job?.experience_level].filter(Boolean).join(" · ") || "Not listed"}</dd></div>
+            </dl>
+            {requiredSkills.length > 0 && <div className="mt-4"><p className="text-sm font-bold text-slate-700">Required skills</p><div className="mt-2 flex flex-wrap gap-2">{requiredSkills.map((skill) => <span key={skill} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">{skill}</span>)}</div></div>}
+          </section>
+          <div className="mt-1 border-t border-slate-100 pt-4 lg:col-span-2">
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             {statusLabel === "Interview" && application.interviewId && (
               <button
                 type="button"
@@ -558,12 +552,23 @@ export default function ApplicationDetails() {
                 Application Withdrawn
               </span>
             )}
+            </div>
           </div>
           {originalJobError && (
-            <p role="alert" className="mt-3 text-sm font-semibold text-red-700">
+            <p role="alert" className="mt-2 text-sm font-semibold text-red-700 lg:col-span-2">
               {originalJobError}
             </p>
           )}
+          <div className="flex justify-center lg:col-span-2">
+            <button
+              type="button"
+              onClick={() => navigate("/dashboard")}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[var(--brand-primary)] px-5 py-2.5 text-sm font-bold text-white hover:bg-[var(--brand-primary-hover)]"
+            >
+              Go to Dashboard <ArrowLeft className="h-4 w-4 rotate-180" />
+            </button>
+          </div>
+          </div>
         </section>
       </div>
       {toast && (

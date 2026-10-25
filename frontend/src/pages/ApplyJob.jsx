@@ -1,26 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { ArrowLeft, CheckCircle2, FileText, Loader2, Sparkles } from 'lucide-react';
+import { ArrowLeft, FileText, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { getJobById } from '../services/jobService';
-import { clearPendingApplication, continueApplicationFlow, getApplicationForJob, getApplicationRequirements, getPendingApplication, recordApplication } from '../utils/applicationFlow';
-import { useToast } from '../hooks/useToast.js';
-import { scrollToFeedback } from '../utils/scrollHelper.js';
+import { clearPendingApplication, continueApplicationFlow, getApplicationRequirements, getPendingApplication } from '../utils/applicationFlow';
 import api from '../services/api';
 
 const APPLICATION_PREPARE_TIMEOUT_MS = 12000;
-
-function getFallbackJob(jobId) {
-  try {
-    const pending = JSON.parse(localStorage.getItem('pendingApplicationJob') || 'null');
-    if (pending && String(pending.id || pending.jobId) === String(jobId)) return pending;
-    const preview = JSON.parse(localStorage.getItem('jobDetailsPreview') || 'null');
-    if (preview && String(preview.id || preview.jobId) === String(jobId)) return preview;
-  } catch (error) {
-    console.warn('Unable to read stored application job:', error);
-  }
-  return null;
-}
 
 function withTimeout(promise, timeoutMs) {
   let timeoutId;
@@ -35,17 +21,12 @@ export default function ApplyJob() {
   const navigate = useNavigate();
   const location = useLocation();
   const { isAuthenticated } = useAuth();
-  const { showSuccess, showError } = useToast();
 
   const [job, setJob] = useState(null);
   const [coverLetter, setCoverLetter] = useState('');
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [toast, setToast] = useState('');
-  const [existingApplication, setExistingApplication] = useState(() => getApplicationForJob(id));
-  const [matchScore, setMatchScore] = useState(null);
-  const [matchBreakdown, setMatchBreakdown] = useState(null);
+  const [existingApplication, setExistingApplication] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -61,7 +42,7 @@ export default function ApplyJob() {
         const hasPendingJob = pending?.jobId === String(id);
         const shouldRedirect = hasPendingJob
           ? !requirements.isAuthenticated || !requirements.otpVerified || !seekerRoles.includes(requirements.role) || !requirements.hasSatisfiedCvPreference || !requirements.profileCompleted
-          : !isAuthenticated || (!requirements.hasSatisfiedCvPreference && !getFallbackJob(id));
+          : !isAuthenticated || !requirements.hasSatisfiedCvPreference;
 
         if (shouldRedirect) {
           if (hasPendingJob) continueApplicationFlow(navigate, { jobId: id });
@@ -70,34 +51,45 @@ export default function ApplyJob() {
           return;
         }
 
-        const fallbackJob = getFallbackJob(id);
         const jobResponse = await withTimeout(getJobById(id), APPLICATION_PREPARE_TIMEOUT_MS);
         const jobData = jobResponse?.job || jobResponse;
+        let existing = null;
+        try {
+          const { data: applicationsData } = await api.get('/seeker/applications');
+          existing = (applicationsData?.applications || []).find((application) => (
+            String(application.job_id || application.jobId || application.job?.id) === String(id)
+          )) || null;
+        } catch (applicationsError) {
+          console.error('Unable to check for an existing application:', applicationsError);
+          if (isMounted) {
+            setErrorMessage('We could not check your previous applications. Duplicate applications are blocked when you submit.');
+          }
+        }
         if (isMounted) {
           const resolvedJob = jobData ? {
             ...jobData,
             company: jobData.company || jobData.companyName || jobData.company_name || 'Company',
             companyName: jobData.companyName || jobData.company || jobData.company_name || 'Company',
             location: jobData.location || jobData.city || 'Location not specified',
-          } : fallbackJob;
+          } : null;
           setJob(resolvedJob);
+          setExistingApplication(existing || null);
           if (!resolvedJob) setErrorMessage('Unable to load application details. Please try again.');
-        }
-        try {
-          const { data: matchData } = await withTimeout(api.get(`/jobs/${encodeURIComponent(id)}/match-score`), APPLICATION_PREPARE_TIMEOUT_MS);
-          if (isMounted && matchData?.success) {
-            setMatchScore(Number(matchData.score));
-            setMatchBreakdown(matchData.breakdown || null);
-          }
-        } catch (matchError) {
-          console.warn('Unable to load unified match score:', matchError);
         }
       } catch (error) {
         console.error('Error preparing application:', error);
         if (isMounted) {
-          const fallbackJob = getFallbackJob(id);
-          setJob(fallbackJob);
-          setErrorMessage(fallbackJob ? 'Some job details could not be refreshed. You can still review and submit.' : 'Unable to load application details. Please try again.');
+          setJob(null);
+          if (error.response?.status === 404) {
+            const returnPath = getPendingApplication()?.returnPath || '/ai-career-matches';
+            clearPendingApplication();
+            navigate(returnPath, {
+              replace: true,
+              state: { availabilityNotice: 'That job is no longer available. Choose another current match.' },
+            });
+          } else {
+            setErrorMessage('Unable to load application details. Please try again.');
+          }
         }
       } finally {
         if (isMounted) setLoading(false);
@@ -110,12 +102,6 @@ export default function ApplyJob() {
     };
   }, [id, isAuthenticated, location.pathname, navigate]);
 
-  useEffect(() => {
-    if (!toast) return undefined;
-    const timer = window.setTimeout(() => setToast(''), 2200);
-    return () => window.clearTimeout(timer);
-  }, [toast]);
-
   const handleGenerateDraft = () => {
     const profile = JSON.parse(localStorage.getItem('userProfile') || '{}');
     const fullName = JSON.parse(localStorage.getItem('user') || '{}')?.full_name || 'Candidate';
@@ -123,77 +109,12 @@ export default function ApplyJob() {
     setCoverLetter(profile?.coverLetter || draft);
   };
 
-  const handleSubmit = async (event) => {
+  const handleContinue = (event) => {
     event.preventDefault();
     if (!job) return;
-    setSubmitting(true);
-    try {
-      const existing = getApplicationForJob(job.id);
-      if (existing) {
-        setExistingApplication(existing);
-        return;
-      }
-      const { data } = await api.post('/applications', { jobId: job.id, coverLetter: coverLetter.trim() });
-      const seekerProfile = (() => {
-        try {
-          const profile = JSON.parse(localStorage.getItem('userProfile') || '{}');
-          const activeProfile = JSON.parse(localStorage.getItem('activeSeekerProfile') || '{}');
-          return { ...activeProfile, ...profile };
-        } catch {
-          return {};
-        }
-      })();
-      const storedUser = (() => {
-        try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch { return {}; }
-      })();
-      const candidateId = seekerProfile.id || storedUser.id || storedUser.userId || 'seeker-1';
-      const candidateName = seekerProfile.name || seekerProfile.full_name || seekerProfile.fullName || storedUser.full_name || storedUser.name || 'Candidate Name';
-      const submittedScore = Number(data.application?.matchScore ?? matchScore ?? 85);
-      const applicationPayload = {
-        id: `app_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-        jobId: String(job.id),
-        jobTitle: job.title,
-        employerId: String(job.employerId || job.userId || job.employer_id || 'employer-1'),
-        candidate: {
-          id: String(candidateId),
-          name: candidateName,
-          email: seekerProfile.email || storedUser.email || '',
-          location: seekerProfile.location || seekerProfile.city || storedUser.location || 'Addis Ababa',
-          skills: seekerProfile.skills || [],
-          cvUrl: seekerProfile.cvUrl || storedUser.cv_url || null,
-          hasCv: seekerProfile.cvStatus === 'uploaded' || seekerProfile.cv_status === 'uploaded' || storedUser.cv_status === 'uploaded',
-        },
-        aiMatchScore: submittedScore,
-        matchScore: submittedScore,
-        matchBreakdown: data.application?.matchBreakdown || matchBreakdown,
-        coverLetter: coverLetter.trim(),
-        appliedDate: data.application?.appliedAt || new Date().toISOString(),
-        appliedDateFormatted: 'Just now',
-        hiringStatus: 'Reviewing',
-        status: data.application?.status || 'pending_review',
-        createdAt: data.application?.appliedAt || new Date().toISOString(),
-        seekerId: String(candidateId),
-        name: candidateName,
-        email: seekerProfile.email || storedUser.email || '',
-        location: seekerProfile.location || seekerProfile.city || storedUser.location || 'Addis Ababa',
-        seeker: { id: String(candidateId), name: candidateName, email: seekerProfile.email || storedUser.email || '' },
-        job,
-      };
-      const application = recordApplication(applicationPayload);
-      clearPendingApplication();
-      const successMessage = `Application submitted successfully for ${job?.title || 'Position'} at ${job?.company || job?.companyName || 'Company'}!`;
-      setToast(successMessage);
-      showSuccess(successMessage);
-      scrollToFeedback('top');
-      window.setTimeout(() => navigate('/seeker-dashboard', { state: { application, success: true } }), 700);
-    } catch (error) {
-      console.error('Application submission failed', error);
-      setToast('Unable to submit application. Please try again.');
-      showError('Unable to submit application. Please try again.');
-      scrollToFeedback('error');
-    } finally {
-      setSubmitting(false);
-    }
+    navigate(`/applications/${encodeURIComponent(id)}/review`, {
+      state: { job, coverLetter: coverLetter.trim() },
+    });
   };
 
   if (existingApplication) return <main className="min-h-[70vh] bg-slate-50 px-4 py-10"><div className="mx-auto max-w-lg rounded-2xl border border-slate-200 bg-white p-7 text-center shadow-sm"><h1 className="text-2xl font-black text-slate-900">Application Submitted</h1><p className="mt-3 text-sm leading-6 text-slate-600">You have already applied for this job.</p><button type="button" onClick={() => navigate(`/applications/${existingApplication.id}`, { state: { application: existingApplication } })} className="brand-button mt-5 px-5 py-3 text-sm">View Application</button></div></main>;
@@ -215,7 +136,13 @@ export default function ApplyJob() {
         <div className="w-full max-w-lg rounded-2xl border border-rose-200 bg-white p-7 text-center shadow-sm">
           <h1 className="text-xl font-black text-slate-900">Application details unavailable</h1>
           <p className="mt-3 text-sm leading-6 text-slate-600">{errorMessage || 'We could not prepare this application.'}</p>
-          <button type="button" onClick={() => navigate(`/jobs/${id}`)} className="brand-button mt-5 px-5 py-3 text-sm">Back to Job</button>
+          <button
+            type="button"
+            onClick={() => navigate(getPendingApplication()?.returnPath || '/ai-career-matches')}
+            className="brand-button mt-5 px-5 py-3 text-sm"
+          >
+            Back to Matches
+          </button>
         </div>
       </main>
     );
@@ -242,7 +169,7 @@ export default function ApplyJob() {
             </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="mt-8 space-y-6">
+          <form onSubmit={handleContinue} className="mt-8 space-y-6">
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-3">
                 <label htmlFor="cover-letter" className="block text-sm font-semibold text-slate-700">Cover letter (Optional)</label>
@@ -260,40 +187,18 @@ export default function ApplyJob() {
               />
             </div>
 
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-              <div className="flex items-center gap-2 text-sm font-bold text-emerald-700">
-                <Sparkles className="h-4 w-4" />
-                Match confirmation
-              </div>
-              <p className="mt-2 text-2xl font-black text-slate-900">{matchScore ?? '--'}% match</p>
-              <p className="text-sm text-slate-600">This role appears to be a strong fit based on your {matchBreakdown?.skills >= matchBreakdown?.experience ? 'Skills' : 'Experience'} stored in your profile.</p>
-            </div>
-
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               <button type="button" onClick={() => navigate(`/jobs/${id}`)} className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100">
                 Cancel
               </button>
-              <button type="submit" disabled={submitting} className="brand-button min-w-52.5 px-5 py-3 text-sm disabled:opacity-70">
-                {submitting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Submitting…
-                  </>
-                ) : (
-                  'Submit Application'
-                )}
+              <button type="submit" className="brand-button min-w-52.5 px-5 py-3 text-sm">
+                Continue
               </button>
             </div>
           </form>
         </div>
       </div>
 
-      {toast && (
-        <div className="fixed bottom-5 right-5 z-50 flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-xl">
-          <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-          {toast}
-        </div>
-      )}
     </div>
   );
 }

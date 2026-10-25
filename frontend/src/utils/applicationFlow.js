@@ -1,5 +1,4 @@
 const PENDING_KEY = 'pendingApplication';
-const APPLICATIONS_KEY = 'mockApplications';
 
 const readStoredObject = (key, fallback = null) => {
   try {
@@ -9,6 +8,23 @@ const readStoredObject = (key, fallback = null) => {
   }
 };
 
+export function buildApplicationSubmissionPayload(job = {}, details = {}) {
+  const profile = readStoredObject('activeSeekerProfile', {});
+  const user = readStoredObject('user', {});
+  const score = Number(job.matchScore ?? job.match_score ?? details.matchScore);
+
+  return {
+    jobId: job.id ?? job.jobId,
+    jobTitle: job.title || job.jobTitle || '',
+    company: job.company || job.company_name || job.companyName || '',
+    candidateName: profile.name || profile.fullName || user.full_name || user.name || '',
+    candidateTitle: profile.title || profile.headline || profile.professional_title || profile.professionalTitle || user.title || user.headline || '',
+    ...(Number.isFinite(score) ? { matchScore: score } : {}),
+    ...(details.coverLetter !== undefined ? { coverLetter: details.coverLetter } : {}),
+    ...(details.consentToAiProcessing !== undefined ? { consentToAiProcessing: details.consentToAiProcessing } : {}),
+  };
+}
+
 export function getPendingApplication() {
   try {
     return JSON.parse(localStorage.getItem(PENDING_KEY) || 'null');
@@ -17,29 +33,25 @@ export function getPendingApplication() {
   }
 }
 
-export function setPendingApplication(jobId, job = null, details = {}) {
+export function setPendingApplication(jobId, details = {}) {
   const sourcePage = details.sourcePage || `/job-details/${jobId}`;
   const pending = {
     jobId: String(jobId),
     selectedJobId: String(jobId),
-    selectedJob: job || null,
-    jobTitle: job?.title || '',
-    companyName: job?.companyName || job?.company || '',
     action: 'apply',
     intendedAction: 'apply',
     sourcePage,
     returnPath: details.returnPath || sourcePage,
+    selectedJob: details.selectedJob || null,
     currentStep: details.currentStep || 'START',
     createdAt: new Date().toISOString(),
   };
   localStorage.setItem(PENDING_KEY, JSON.stringify(pending));
-  if (job) localStorage.setItem('pendingApplicationJob', JSON.stringify(job));
   return pending;
 }
 
 export function clearPendingApplication() {
   localStorage.removeItem(PENDING_KEY);
-  localStorage.removeItem('pendingApplicationJob');
 }
 
 export function getApplicationJobId() {
@@ -78,7 +90,7 @@ export function getCvStatus() {
 }
 
 export function hasSatisfiedCvPreference() {
-  return getCvStatus() !== 'none';
+  return hasCompletedCv();
 }
 
 export function getApplicationRequirements(overrides = {}) {
@@ -125,7 +137,6 @@ export function getApplicationState() {
     role: requirements.role || null,
     cvUploaded: requirements.hasResume,
     profileComplete: requirements.profileCompleted,
-    appliedJobs: getMockApplications(),
   };
 }
 
@@ -146,6 +157,7 @@ export function getNextOnboardingStep() {
   if (!user.otpVerified && !user.is_verified && !user.isVerified) return '/verify-otp';
   if (!role || role === 'pending') return '/select-role';
   if (!seekerRoles.includes(role)) return '/';
+  if (user.seeker_onboarded === true || user.has_cv === true || user.onboardingCvUploaded === true) return '/dashboard';
   if (user.onboardingRoleSelected === false && (!user.role || user.role === 'pending')) return '/select-role';
   if (user.cv_status === 'skipped') return user.onboarding_step_completed === 'completed' ? '/dashboard' : '/seeker/personal-info';
   if (user.has_cv === false || user.cv_status === 'none' || user.onboarding_step === 'cv_upload' || user.onboardingCvUploaded === false || (!user.onboardingCvUploaded && !hasSatisfiedCvPreference())) return '/seeker/upload-cv';
@@ -184,57 +196,13 @@ export function continueApplicationFlow(navigate, details = {}) {
     return 'PROFILE_REQUIRED';
   }
 
-  const existing = getApplicationForJob(pendingJobId);
-  if (existing) {
-    navigate(`/applications/${encodeURIComponent(String(existing.id))}`, { state: { application: existing } });
-    return 'ALREADY_APPLIED';
-  }
-  navigate(getApplicationSubmitPath(pendingJobId));
+  navigate(getApplicationSubmitPath(pendingJobId), {
+    state: { job: requirements.pending?.selectedJob || details.selectedJob || undefined },
+  });
   return 'READY_TO_APPLY';
 }
 
-export function getMockApplications() {
-  try {
-    const applications = JSON.parse(localStorage.getItem(APPLICATIONS_KEY) || '[]');
-    return Array.isArray(applications) ? applications : [];
-  } catch {
-    return [];
-  }
-}
-
-export function getApplicationForJob(jobId) {
-  return getMockApplications().find((application) => String(application.jobId) === String(jobId)) || null;
-}
-
-export function beginApplication(jobId, job, navigate, details = {}) {
-  const existing = getApplicationForJob(jobId);
-  if (existing) {
-    navigate(`/applications/${encodeURIComponent(String(existing.id))}`, { state: { application: existing } });
-    return 'ALREADY_APPLIED';
-  }
-  setPendingApplication(jobId, job, details);
+export function beginApplication(jobId, navigate, details = {}) {
+  setPendingApplication(jobId, details);
   return continueApplicationFlow(navigate, { ...details, jobId });
-}
-
-export function saveMockApplication(application) {
-  const applications = [application, ...getMockApplications().filter((item) => String(item.jobId) !== String(application.jobId))];
-  localStorage.setItem(APPLICATIONS_KEY, JSON.stringify(applications));
-  try {
-    const employerApplications = JSON.parse(localStorage.getItem('employerApplications') || '[]');
-    const nextEmployerApplications = [
-      application,
-      ...(Array.isArray(employerApplications) ? employerApplications : []).filter((item) => String(item.jobId || item.job_id) !== String(application.jobId)),
-    ];
-    localStorage.setItem('employerApplications', JSON.stringify(nextEmployerApplications));
-    window.dispatchEvent(new CustomEvent('job-matching:updated', { detail: { key: 'employerApplications' } }));
-  } catch {
-    // Keep the seeker application available even if the optional local employer cache is malformed.
-  }
-  clearPendingApplication();
-  return applications;
-}
-
-export function recordApplication(application) {
-  const applications = saveMockApplication(application);
-  return applications.find((item) => String(item.id) === String(application.id)) || application;
 }

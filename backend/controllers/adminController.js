@@ -1,17 +1,15 @@
 const db = require('../connection');
 const fs = require('node:fs/promises');
-const { normalizeJobStatus } = require('../models/jobModel');
 const { createNotification } = require('../services/databaseNotificationService');
 const { sendJobRejectionEmail } = require('../services/notificationService');
+const { dispatchPublishedJobNotifications, isPubliclyEligibleJob } = require('../services/telegramService');
+const { notifyCandidatesMatchingJob } = require('./seekerMatchingController');
+const {
+  notifyAdminEvent,
+  notifyEmployerJobStatusChange,
+} = require('../services/telegramNotifier');
 
-const safeExecute = async (query, params = [], fallback = []) => {
-  try {
-    return await db.execute(query, params);
-  } catch (error) {
-    console.warn('Admin optional query skipped:', error.message);
-    return [fallback, []];
-  }
-};
+const safeExecute = (query, params = []) => db.execute(query, params);
 
 const jobEmployerLegalFields = `
   COALESCE(
@@ -31,12 +29,6 @@ const jobEmployerLegalFields = `
     (SELECT COALESCE(e.verification_status, e.verificationStatus) FROM employers e WHERE e.user_id = j.employer_id OR e.userId = j.employer_id LIMIT 1)
   ) AS employer_verification_status
 `;
-
-const hasEmployerLegalDocuments = (job) =>
-  Boolean(String(job?.employer_tin_number || '').trim() && (
-    String(job?.employer_trade_license_number || '').trim() ||
-    String(job?.employer_trade_license_url || '').trim()
-  ));
 
 const normalizeBoolean = (value) => {
   if (typeof value === 'boolean') return value;
@@ -95,13 +87,17 @@ const sendJobRejectionEmailSafely = async (job, reason) => {
 };
 
 exports.getAdminDashboardStats = async (req, res) => {
-  const emptyStats = { totalUsers: 0, jobSeekersCount: 0, employersCount: 0, activeJobs: 0, avgMatchScore: 0, candidateGrowthPercent: 0, newJobsThisWeek: 0, moderationQueueCount: 0, pipeline: { pending: 0, shortlisted: 0, interviewing: 0, hired: 0, rejected: 0 } };
   try {
     const [[users], [seekers], [employers], [jobs], [verification], [reports], [average], [pipeline], [candidateGrowth], [newJobs]] = await Promise.all([
       db.execute('SELECT COUNT(*) AS count FROM users'),
       db.execute("SELECT COUNT(*) AS count FROM users WHERE role IN ('job_seeker', 'employee', 'seeker')"),
       db.execute("SELECT COUNT(*) AS count FROM users WHERE role IN ('employer', 'company', 'recruiter')"),
-      db.execute("SELECT COUNT(*) AS count FROM jobs WHERE LOWER(status) IN ('active', 'published')"),
+      db.execute(`SELECT
+        COUNT(*) AS total_jobs,
+        SUM(CASE WHEN LOWER(approval_status) = 'pending' THEN 1 ELSE 0 END) AS pending_jobs,
+        SUM(CASE WHEN LOWER(approval_status) = 'approved' AND LOWER(status) IN ('active', 'published') AND is_active = TRUE THEN 1 ELSE 0 END) AS active_jobs,
+        SUM(CASE WHEN LOWER(approval_status) = 'rejected' OR LOWER(status) IN ('closed', 'expired') THEN 1 ELSE 0 END) AS rejected_closed_jobs
+        FROM jobs`),
       db.execute("SELECT COUNT(*) AS count FROM company_profiles WHERE verification_status = 'pending'"),
       db.execute("SELECT COUNT(*) AS count FROM reports WHERE status = 'pending'"),
       db.execute('SELECT AVG(ai_match_score) AS score FROM applications WHERE ai_match_score IS NOT NULL'),
@@ -115,16 +111,15 @@ exports.getAdminDashboardStats = async (req, res) => {
     ]);
     const pipelineStats = { pending: 0, shortlisted: 0, interviewing: 0, hired: 0, rejected: 0 };
     pipeline.forEach((row) => { const key = row.status === 'interview-scheduled' ? 'interviewing' : row.status; if (key in pipelineStats) pipelineStats[key] = Number(row.count || 0); });
-    const [pendingJobs] = await db.execute("SELECT COUNT(*) AS count FROM jobs WHERE LOWER(status) IN ('pending', 'pending_approval', 'draft')");
     const currentMonthCandidates = Number(candidateGrowth[0]?.current_month || 0);
     const previousMonthCandidates = Number(candidateGrowth[0]?.previous_month || 0);
     const candidateGrowthPercent = previousMonthCandidates
       ? Math.round(((currentMonthCandidates - previousMonthCandidates) / previousMonthCandidates) * 100)
       : currentMonthCandidates ? 100 : 0;
-    return res.status(200).json({ success: true, stats: { totalUsers: Number(users[0]?.count || 0), jobSeekersCount: Number(seekers[0]?.count || 0), employersCount: Number(employers[0]?.count || 0), activeJobs: Number(jobs[0]?.count || 0), avgMatchScore: average[0]?.score == null ? 0 : Number(Number(average[0].score).toFixed(1)), candidateGrowthPercent, newJobsThisWeek: Number(newJobs[0]?.count || 0), moderationQueueCount: Number(verification[0]?.count || 0) + Number(pendingJobs[0]?.count || 0) + Number(reports[0]?.count || 0), pipeline: pipelineStats } });
+    return res.status(200).json({ success: true, stats: { totalUsers: Number(users[0]?.count || 0), jobSeekersCount: Number(seekers[0]?.count || 0), employersCount: Number(employers[0]?.count || 0), totalJobs: Number(jobs[0]?.total_jobs || 0), activeJobs: Number(jobs[0]?.active_jobs || 0), pendingApprovalJobs: Number(jobs[0]?.pending_jobs || 0), rejectedClosedJobs: Number(jobs[0]?.rejected_closed_jobs || 0), avgMatchScore: average[0]?.score == null ? 0 : Number(Number(average[0].score).toFixed(1)), candidateGrowthPercent, newJobsThisWeek: Number(newJobs[0]?.count || 0), moderationQueueCount: Number(verification[0]?.count || 0) + Number(jobs[0]?.pending_jobs || 0) + Number(reports[0]?.count || 0), pipeline: pipelineStats } });
   } catch (error) {
     console.error('Dashboard stats error:', error.message);
-    return res.status(200).json({ success: true, stats: emptyStats, databaseError: true });
+    return res.status(500).json({ success: false, message: 'Unable to load dashboard statistics.' });
   }
 };
 
@@ -132,7 +127,7 @@ exports.getPlatformAnalytics = async (req, res) => {
   try {
     const [seekerCount] = await db.execute("SELECT COUNT(*) AS count FROM users WHERE role = 'job_seeker'");
     const [employerCount] = await db.execute("SELECT COUNT(*) AS total, SUM(CASE WHEN is_verified = TRUE THEN 1 ELSE 0 END) AS verified FROM company_profiles");
-    const [activeJobsCount] = await db.execute("SELECT COUNT(*) AS count FROM jobs WHERE LOWER(status) IN ('active', 'published')");
+    const [activeJobsCount] = await db.execute("SELECT COUNT(*) AS count FROM jobs WHERE status IN ('active', 'published') AND approval_status = 'approved' AND is_active = TRUE AND (deadline IS NULL OR deadline >= CURDATE()) AND (scheduled_date IS NULL OR scheduled_date <= NOW())");
     const [totalAppsCount] = await db.execute("SELECT COUNT(*) AS count, AVG(ai_match_score) AS avg_score FROM applications");
 
     return res.status(200).json({
@@ -227,6 +222,11 @@ exports.updateVerificationStatus = async (req, res) => {
       await db.execute('UPDATE employers SET verification_status = ?, verificationStatus = ? WHERE id = ? OR user_id = ? OR userId = ?', [status, status, id, id, id]);
     }
     const [[employer]] = await db.execute('SELECT employer_id FROM company_profiles WHERE id = ? OR employer_id = ? LIMIT 1', [id, id]);
+    const employerUserId = employer?.employer_id || id;
+    await db.execute(
+      'UPDATE employers SET is_verified = ?, verification_status = ?, verificationStatus = ? WHERE id = ? OR user_id = ? OR userId = ?',
+      [status === 'verified' ? 1 : 0, status, status, id, employerUserId, employerUserId]
+    );
     if (employer?.employer_id) {
       await createNotification({
         userId: employer.employer_id,
@@ -248,7 +248,7 @@ exports.updateVerificationStatus = async (req, res) => {
 exports.getAllJobsForModeration = async (req, res) => {
   try {
     const [jobs] = await db.execute(`
-      SELECT j.*, cp.company_name, cp.logo_url, cp.location AS company_location,
+      SELECT j.*, cp.company_name AS profile_company_name, cp.logo_url, cp.location AS company_location,
               ${jobEmployerLegalFields},
              COUNT(a.id) AS total_applicants
       FROM jobs j
@@ -266,12 +266,8 @@ exports.getAllJobsForModeration = async (req, res) => {
 
 exports.getAdminDashboardData = async (req, res) => {
   try {
-    const emptyAnalytics = { seekersCount: 0, employersTotal: 0, employersVerified: 0, activeJobsCount: 0, totalApplications: 0, avgMatchScore: 0 };
     const [analytics, companies, jobs, users, logs, applications, reports, notifications, performance, categories, candidateCategories] = await Promise.all([
-      exports.getPlatformAnalyticsData().catch((error) => {
-        console.warn('Admin analytics query skipped:', error.message);
-        return emptyAnalytics;
-      }),
+      exports.getPlatformAnalyticsData(),
       safeExecute(`
         SELECT
           COALESCE(cp.id, e.id, he.id) AS id,
@@ -302,7 +298,7 @@ exports.getAdminDashboardData = async (req, res) => {
         ORDER BY created_at DESC
       `),
       safeExecute(`
-         SELECT j.*, cp.company_name, cp.logo_url, cp.location AS company_location,
+         SELECT j.*, cp.company_name AS profile_company_name, cp.logo_url, cp.location AS company_location,
            ${jobEmployerLegalFields},
                COUNT(a.id) AS total_applicants
         FROM jobs j
@@ -322,7 +318,7 @@ exports.getAdminDashboardData = async (req, res) => {
         SUM(CASE WHEN ai_match_score IS NOT NULL THEN 1 ELSE 0 END) AS matches,
         ROUND(AVG(ai_match_score), 1) AS average_score
         FROM applications WHERE applied_at IS NOT NULL GROUP BY DATE(applied_at) ORDER BY day`),
-      safeExecute(`SELECT COALESCE(NULLIF(category, ''), 'Other') AS category, COUNT(*) AS total FROM jobs GROUP BY COALESCE(NULLIF(category, ''), 'Other') ORDER BY total DESC LIMIT 6`),
+      safeExecute(`SELECT COALESCE(NULLIF(sector, ''), 'Other') AS category, COUNT(*) AS total FROM jobs GROUP BY COALESCE(NULLIF(sector, ''), 'Other') ORDER BY total DESC LIMIT 6`),
       safeExecute(`SELECT TRIM(job_category) AS category, COUNT(*) AS total
         FROM job_seeker_profiles
         WHERE job_category IS NOT NULL AND TRIM(job_category) <> ''
@@ -464,7 +460,7 @@ exports.getAdminActivityLogs = async (req, res) => {
 exports.getPlatformAnalyticsData = async () => {
   const [seekers] = await db.execute("SELECT COUNT(*) AS count FROM users WHERE role = 'job_seeker'");
   const [employers] = await db.execute("SELECT COUNT(*) AS total, SUM(CASE WHEN is_verified = TRUE THEN 1 ELSE 0 END) AS verified FROM company_profiles");
-  const [jobs] = await db.execute("SELECT COUNT(*) AS active FROM jobs WHERE status = 'active' AND is_approved = TRUE");
+  const [jobs] = await db.execute("SELECT COUNT(*) AS active FROM jobs WHERE status IN ('active', 'published') AND approval_status = 'approved' AND is_active = TRUE AND (deadline IS NULL OR deadline >= CURDATE()) AND (scheduled_date IS NULL OR scheduled_date <= NOW())");
   const [allJobs] = await db.execute('SELECT COUNT(*) AS total FROM jobs');
   const [allUsers] = await db.execute('SELECT COUNT(*) AS total FROM users');
   const [apps] = await db.execute('SELECT COUNT(*) AS total, AVG(ai_match_score) AS avg_score FROM applications');
@@ -501,7 +497,17 @@ exports.deleteJob = async (req, res) => {
 
 exports.getJobPreview = async (req, res) => {
   try {
-    const [rows] = await db.execute(`SELECT j.id, j.title, j.description, j.required_education, j.years_of_experience_min, j.years_of_experience_max, j.category, j.job_type, j.work_mode, j.salary_min, j.salary_max, j.currency, j.benefits, j.location, j.application_deadline, j.status, j.rejection_reason, u.email AS employer_email, cp.company_name, cp.is_verified AS company_verified, cp.verification_status, GROUP_CONCAT(DISTINCT s.skill_name ORDER BY s.skill_name SEPARATOR ',') AS required_skills FROM jobs j LEFT JOIN company_profiles cp ON cp.employer_id = j.employer_id LEFT JOIN users u ON u.id = j.employer_id LEFT JOIN job_required_skills s ON s.job_id = j.id WHERE j.id = ? GROUP BY j.id`, [req.params.id]);
+    const [rows] = await db.execute(`SELECT j.id, j.title, j.company_name, j.description,
+      j.education_qualification AS required_education, j.experience_level, j.sector AS category,
+      j.sub_sectors AS sub_category, j.job_type, j.work_mode, j.salary_min, j.salary_max, j.currency,
+      j.salary_period AS salary_type, j.benefits, j.location, j.deadline, j.status,
+      j.approval_status, j.is_approved, j.approved_by, j.approved_at,
+      j.rejection_reason, u.email AS employer_email, cp.company_name AS profile_company_name,
+      cp.is_verified AS company_verified, cp.verification_status,
+      GROUP_CONCAT(DISTINCT s.skill_name ORDER BY s.skill_name SEPARATOR ',') AS required_skills
+      FROM jobs j LEFT JOIN company_profiles cp ON cp.employer_id = j.employer_id
+      LEFT JOIN users u ON u.id = j.employer_id LEFT JOIN job_required_skills s ON s.job_id = j.id
+      WHERE j.id = ? GROUP BY j.id`, [req.params.id]);
     if (!rows.length) return res.status(404).json({ success: false, message: 'Job not found.' });
     return res.json({ success: true, job: rows[0] });
   } catch (error) {
@@ -514,19 +520,29 @@ exports.moderateJob = async (req, res) => {
   const jobId = req.params.id || req.params.jobId;
   const action = String(req.body?.action || '').trim().toLowerCase();
   const reason = String(req.body?.reason || '').trim();
-  const statusByAction = { publish: 'active', approve: 'active', reject: 'rejected' };
-  const nextStatus = normalizeJobStatus(statusByAction[action]);
+  const statusByAction = { publish: 'approved', approve: 'approved', reject: 'rejected' };
+  const nextApprovalStatus = statusByAction[action];
   if (!statusByAction[action]) return res.status(422).json({ success: false, message: 'Moderation action must be approve or reject.' });
-  if (['active', 'rejected'].includes(nextStatus) && reason.length < 20) {
-    return res.status(422).json({ success: false, message: 'Please provide an approval or rejection reason of at least 20 characters.' });
+  if (nextApprovalStatus === 'rejected' && reason.length < 20) {
+    return res.status(422).json({ success: false, message: 'Please provide a rejection reason of at least 20 characters.' });
   }
 
   const connection = await db.getConnection();
   try {
     await connection.beginTransaction();
     const [rows] = await connection.execute(`
-            SELECT j.id, j.title, j.employer_id, j.status, j.location,
-              COALESCE(cp.company_name, j.company_name, u.full_name, 'Company') AS company_name,
+            SELECT j.id, j.title, j.employer_id, j.status,
+              j.is_active, j.location, j.description, j.work_mode,
+              j.sector AS category, j.sub_sectors AS sub_category, j.required_skills,
+              j.approval_status, j.is_approved, j.approved_by, j.approved_at,
+              j.deadline, j.salary_min, j.salary_max,
+              j.currency, j.salary_period, j.is_salary_negotiable,
+              j.job_type,
+              COALESCE(
+                NULLIF(NULLIF(j.company_name, ''), CONCAT(u.full_name, CHAR(39), 's Company')),
+                NULLIF(NULLIF(cp.company_name, ''), CONCAT(u.full_name, CHAR(39), 's Company')),
+                'Company'
+              ) AS company_name,
               u.email AS employer_email,
              ${jobEmployerLegalFields}
             FROM jobs j JOIN users u ON u.id = j.employer_id
@@ -534,32 +550,44 @@ exports.moderateJob = async (req, res) => {
             WHERE j.id = ? FOR UPDATE`, [jobId]);
     if (!rows.length) { await connection.rollback(); return res.status(404).json({ success: false, message: 'Job not found.' }); }
     const job = rows[0];
-    if (nextStatus === 'active' && !hasEmployerLegalDocuments(job)) {
-      await connection.rollback();
-      return res.status(422).json({ success: false, message: 'Employer TIN and trade license details are required before approving this job.' });
-    }
+    const wasPubliclyAvailable = String(job.approval_status || '').toLowerCase() === 'approved'
+      && ['active', 'published'].includes(String(job.status || '').toLowerCase())
+      && [true, 1, '1'].includes(job.is_active);
+    const shouldPublish = nextApprovalStatus === 'approved' && !wasPubliclyAvailable;
+    const isPubliclyEligible = nextApprovalStatus === 'approved' && isPubliclyEligibleJob({
+      ...job,
+      status: 'active',
+      approval_status: 'approved',
+      is_approved: true,
+      is_active: true,
+    });
     await connection.execute(
       `UPDATE jobs
-       SET status = ?,
+       SET approval_status = ?,
            is_approved = ?,
-           approval_status = ?,
+           approved_by = CASE WHEN ? = 'approved' THEN ? ELSE NULL END,
+           approved_at = CASE WHEN ? = 'approved' THEN NOW() ELSE NULL END,
+           status = CASE WHEN ? = 'approved' THEN 'active' ELSE status END,
+           is_active = ?,
+           scheduled_date = CASE WHEN ? = 'approved' THEN NULL ELSE scheduled_date END,
            rejection_reason = ?,
-           approved_by = ?,
-           approved_at = CASE WHEN ? = 'active' THEN NOW() ELSE NULL END,
+           published_at = CASE WHEN ? = 'approved' THEN NOW() ELSE published_at END,
            reviewed_by = ?,
            reviewed_at = NOW(),
            updated_at = NOW()
        WHERE id = ?`,
-         [nextStatus, nextStatus === 'active', nextStatus === 'active' ? 'approved' : nextStatus === 'rejected' ? 'rejected' : 'pending', nextStatus === 'rejected' ? reason : null, nextStatus === 'active' ? req.user.id : null, nextStatus, req.user.id, jobId]
+         [nextApprovalStatus, nextApprovalStatus === 'approved', nextApprovalStatus, req.user.id,
+           nextApprovalStatus, nextApprovalStatus, nextApprovalStatus === 'approved', nextApprovalStatus, nextApprovalStatus === 'rejected' ? reason : null,
+           nextApprovalStatus, req.user.id, jobId]
     );
     await createJobModerationNotifications(connection, {
       employerId: job.employer_id,
       jobId,
       jobTitle: job.title,
-      status: nextStatus,
+      status: nextApprovalStatus,
       reason,
     });
-    if (nextStatus === 'active' && normalizeJobStatus(job.status) !== 'active') {
+    if (shouldPublish && isPubliclyEligible) {
       await createJobSeekerOpportunityNotifications(connection, {
         jobId,
         jobTitle: job.title,
@@ -568,13 +596,55 @@ exports.moderateJob = async (req, res) => {
       });
     }
     try {
-      await connection.execute('INSERT INTO admin_actions_log (admin_id, action_type, target_job_id, reason) VALUES (?, \'content-moderated\', ?, ?)', [req.user.id, jobId, reason || `Job status changed to ${nextStatus}`]);
+      await connection.execute('INSERT INTO admin_actions_log (admin_id, action_type, target_job_id, reason) VALUES (?, \'content-moderated\', ?, ?)', [req.user.id, jobId, reason || `Job approval changed to ${nextApprovalStatus}`]);
     } catch (auditError) {
       console.warn('Admin moderation audit skipped:', auditError.message);
     }
+    const [updatedJobs] = await connection.execute('SELECT * FROM jobs WHERE id = ? LIMIT 1', [jobId]);
     await connection.commit();
-    if (nextStatus === 'rejected') await sendJobRejectionEmailSafely(job, reason);
-    return res.json({ success: true, status: nextStatus, message: nextStatus === 'active' ? 'Job approved and published successfully!' : 'Job posting has been rejected.' });
+    let employerAlert = null;
+    if (job.employer_id) {
+      try {
+        const alertResult = await notifyEmployerJobStatusChange(job.employer_id, {
+          jobId: Number(jobId),
+          jobTitle: job.title,
+          status: nextApprovalStatus,
+        });
+        employerAlert = {
+          sent: alertResult?.delivered === true,
+          skipped: Boolean(alertResult?.skipped),
+        };
+      } catch (telegramError) {
+        console.error('Telegram employer job-status alert failed:', telegramError.message);
+        employerAlert = { sent: false, message: 'Employer Telegram alert could not be delivered.' };
+      }
+    }
+    if (nextApprovalStatus === 'rejected') await sendJobRejectionEmailSafely(job, reason);
+    let telegramBroadcast = null;
+    let privateTelegramAlert = null;
+    let candidateNotifications = null;
+    if (shouldPublish && nextApprovalStatus === 'approved') {
+      console.log(`Dispatching Telegram notifications for approved job ${jobId}.`);
+      const telegramDispatch = await dispatchPublishedJobNotifications({
+        ...updatedJobs[0],
+        company_name: job.company_name,
+        required_skills: job.required_skills,
+      });
+      telegramBroadcast = telegramDispatch.channel;
+      privateTelegramAlert = telegramDispatch.privateAlert;
+      if (isPubliclyEligible) {
+        try {
+          candidateNotifications = await notifyCandidatesMatchingJob({
+            ...updatedJobs[0],
+            company_name: job.company_name,
+          });
+        } catch (telegramError) {
+          console.error('Telegram candidate matching alerts failed:', telegramError.message);
+          candidateNotifications = { notified: 0, skipped: 0, failed: true };
+        }
+      }
+    }
+    return res.json({ success: true, status: updatedJobs[0]?.status, approval_status: nextApprovalStatus, job: updatedJobs[0], employerAlert, telegramBroadcast, privateTelegramAlert, candidateNotifications, message: nextApprovalStatus === 'approved' ? 'Job approved successfully!' : 'Job posting has been rejected.' });
   } catch (error) {
     await connection.rollback();
     console.error('Admin job moderation error:', error);
@@ -624,71 +694,47 @@ exports.toggleUserStatus = async (req, res) => {
 };
 
 exports.toggleJobStatus = async (req, res) => {
+  const jobId = req.params.jobId || req.params.id;
+  const status = String(req.body?.approval_status || req.body?.status || '').trim().toLowerCase();
+  const reason = String(req.body?.reason || '').trim();
+  if (status === 'approved' || status === 'rejected') {
+    req.body.action = status === 'approved' ? 'approve' : 'reject';
+    return exports.moderateJob(req, res);
+  }
+  if (['pending', 'pending_approval'].includes(status)) {
+    try {
+      const [result] = await db.execute(
+        `UPDATE jobs
+         SET approval_status = 'pending', is_approved = FALSE, approved_by = NULL,
+             approved_at = NULL,
+             is_active = CASE WHEN status IN ('active', 'published') AND (deadline IS NULL OR deadline >= CURDATE()) THEN TRUE ELSE FALSE END,
+             rejection_reason = NULL,
+             reviewed_by = ?, reviewed_at = NOW(), updated_at = NOW()
+         WHERE id = ?`,
+        [req.user.id, jobId],
+      );
+      if (!result.affectedRows) return res.status(404).json({ success: false, message: 'Job not found.' });
+      return res.status(200).json({ success: true, approval_status: 'pending' });
+    } catch (error) {
+      console.error('Admin reset job approval error:', error);
+      return res.status(500).json({ success: false, message: 'Failed to update job approval.' });
+    }
+  }
+  if (!['draft', 'published', 'active', 'paused', 'closed', 'expired'].includes(status)) {
+    return res.status(422).json({ success: false, message: 'Invalid job lifecycle or moderation status.' });
+  }
   try {
-    const jobId = req.params.jobId || req.params.id;
-    const { status } = req.body;
-    const reason = String(req.body?.reason || '').trim();
-    const nextStatus = normalizeJobStatus(status);
-    if (!['pending_approval', 'active', 'rejected'].includes(nextStatus)) {
-      return res.status(422).json({ success: false, message: 'Invalid job moderation status.' });
-    }
-    if (['active', 'rejected'].includes(nextStatus) && reason.length < 20) {
-      return res.status(422).json({ success: false, message: 'Please provide an approval or rejection reason of at least 20 characters.' });
-    }
-
-    const [rows] = await db.execute(`
-            SELECT j.id, j.title, j.employer_id, j.status, j.location,
-              COALESCE(cp.company_name, j.company_name, u.full_name, 'Company') AS company_name,
-              u.email AS employer_email,
-             ${jobEmployerLegalFields}
-            FROM jobs j JOIN users u ON u.id = j.employer_id
-            LEFT JOIN company_profiles cp ON cp.employer_id = j.employer_id
-            WHERE j.id = ?`, [jobId]);
-    if (!rows.length) return res.status(404).json({ success: false, message: 'Job not found.' });
-    if (nextStatus === 'active' && !hasEmployerLegalDocuments(rows[0])) {
-      return res.status(422).json({ success: false, message: 'Employer TIN and trade license details are required before approving this job.' });
-    }
-
-    await db.execute(
+    const [result] = await db.execute(
       `UPDATE jobs
        SET status = ?,
-           is_approved = ?,
-           approval_status = ?,
-           rejection_reason = CASE WHEN ? = 'rejected' THEN ? ELSE NULL END,
-           approved_by = CASE WHEN ? = 'active' THEN ? ELSE approved_by END,
-           approved_at = CASE WHEN ? = 'active' THEN NOW() ELSE approved_at END,
-           reviewed_by = ?,
-           reviewed_at = NOW(),
+           is_active = CASE WHEN ? IN ('active', 'published') AND approval_status = 'approved' THEN TRUE ELSE FALSE END,
+           closed_at = CASE WHEN ? = 'closed' THEN COALESCE(closed_at, NOW()) WHEN ? IN ('active', 'published') THEN NULL ELSE closed_at END,
            updated_at = NOW()
        WHERE id = ?`,
-      [nextStatus, nextStatus === 'active', nextStatus === 'active' ? 'approved' : nextStatus === 'rejected' ? 'rejected' : 'pending', nextStatus, reason, nextStatus, req.user.id, nextStatus, req.user.id, jobId]
+      [status, status, status, status, jobId],
     );
-
-    if (nextStatus === 'active' || nextStatus === 'rejected') {
-      await createJobModerationNotifications(db, {
-        employerId: rows[0].employer_id,
-        jobId,
-        jobTitle: rows[0].title,
-        status: nextStatus,
-        reason,
-      });
-      if (nextStatus === 'active' && normalizeJobStatus(rows[0].status) !== 'active') {
-        await createJobSeekerOpportunityNotifications(db, {
-          jobId,
-          jobTitle: rows[0].title,
-          companyName: rows[0].company_name,
-          location: rows[0].location,
-        });
-      }
-      if (nextStatus === 'rejected') await sendJobRejectionEmailSafely(rows[0], reason);
-      try {
-        await db.execute('INSERT INTO admin_actions_log (admin_id, action_type, target_job_id, reason) VALUES (?, \'content-moderated\', ?, ?)', [req.user.id, jobId, reason || `Job status changed to ${nextStatus}`]);
-      } catch (auditError) {
-        console.warn('Admin moderation audit skipped:', auditError.message);
-      }
-    }
-
-    return res.status(200).json({ success: true, status: nextStatus, message: 'Job moderation status updated.' });
+    if (!result.affectedRows) return res.status(404).json({ success: false, message: 'Job not found.' });
+    return res.status(200).json({ success: true, status, message: 'Job lifecycle status updated.' });
   } catch (error) {
     console.error('Admin toggle job status error:', error);
     return res.status(500).json({ success: false, message: 'Failed to update job status.' });
@@ -768,6 +814,14 @@ exports.createReport = async (req, res) => {
     `, [req.user.id, reporterRole, targetType, targetId, reportedUserId, reportedJobId, reportTypeByCategory[issueCategory], issueCategory, description, evidenceUrl]);
 
     await connection.commit();
+    try {
+      await notifyAdminEvent('ADMIN_REPORT_COMPLAINT', {
+        reportId: result.insertId,
+        reportType: reportTypeByCategory[issueCategory],
+      });
+    } catch (telegramError) {
+      console.error('Telegram report alert failed:', telegramError.message);
+    }
     return res.status(201).json({ success: true, reportId: result.insertId, message: 'Your report was sent to the platform moderation team.' });
   } catch (error) {
     if (connection) await connection.rollback();
@@ -881,7 +935,7 @@ exports.replyToReport = async (req, res) => {
       }
       await connection.execute(`
         UPDATE jobs
-        SET status = 'rejected', is_approved = FALSE,
+        SET approval_status = 'rejected', is_approved = FALSE, approved_by = NULL, approved_at = NULL, is_active = FALSE,
             rejection_reason = ?, reviewed_by = ?, reviewed_at = NOW(), updated_at = NOW()
         WHERE id = ?
       `, [`Taken down while investigating report #${reportId}.`, req.user.id, report.reported_job_id]);
@@ -975,7 +1029,8 @@ exports.resolveAdminReport = async (req, res) => {
       if (!jobId) { await connection.rollback(); return res.status(422).json({ success: false, message: 'This report does not reference a job.' }); }
       const [jobs] = await connection.execute('SELECT id FROM jobs WHERE id = ? FOR UPDATE', [jobId]);
       if (!jobs.length) { await connection.rollback(); return res.status(404).json({ success: false, message: 'Reported job no longer exists.' }); }
-      await connection.execute(`UPDATE jobs SET status = 'rejected', is_approved = FALSE,
+      await connection.execute(`UPDATE jobs SET approval_status = 'rejected', is_approved = FALSE,
+        approved_by = NULL, approved_at = NULL, is_active = FALSE,
         rejection_reason = ?, reviewed_by = ?, reviewed_at = NOW(), updated_at = NOW() WHERE id = ?`,
       [`Taken down while resolving report #${reportId}`, req.user.id, jobId]);
       try {

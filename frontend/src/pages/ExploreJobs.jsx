@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import React, { useCallback, useState, useMemo, useRef, useEffect } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Search,
@@ -27,9 +27,41 @@ import {
   KeyRound,
   ArrowRight,
   ArrowLeft,
+  ArrowDown,
+  ArrowUp,
 } from "lucide-react";
 import { setPendingApplication } from "../utils/applicationFlow";
+import { useAuth } from "../context/AuthContext";
 import api from "../services/api";
+
+const INITIAL_JOB_LIMIT = 2;
+const PAGE_STEP = 4;
+const parseNumericValue = (value) => {
+  const parsed = Number(String(value ?? "").replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+const getTimestamp = (value) => {
+  const timestamp = new Date(value).getTime();
+  return Number.isFinite(timestamp) ? timestamp : 0;
+};
+const getDeadlineTimestamp = (value) => {
+  if (value instanceof Date) {
+    return new Date(
+      value.getFullYear(),
+      value.getMonth(),
+      value.getDate(),
+      23,
+      59,
+      59,
+      999,
+    ).getTime();
+  }
+  const text = String(value ?? "");
+  const dateOnlyMatch = text.match(/^(\d{4}-\d{2}-\d{2})(?:T00:00:00(?:\.000)?Z?)?$/);
+  return dateOnlyMatch
+    ? new Date(`${dateOnlyMatch[1]}T23:59:59.999`).getTime()
+    : new Date(value).getTime();
+};
 
 // =========================================================================
 // 1. ALL AFRIWORK CONSTANTS & FULL DATASETS (53ቱ ሙሉ ዘርፎች)
@@ -155,6 +187,27 @@ export const DATE_POSTED_OPTIONS = [
   { label: "Past week", value: "7d" },
   { label: "Past month", value: "30d" },
 ];
+
+export const formatDeadlineDate = (dateValue) => {
+  if (!dateValue) return "No Deadline Set";
+  const value = dateValue instanceof Date ? dateValue.toISOString() : String(dateValue);
+  const dateOnlyMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const date = dateOnlyMatch
+    ? new Date(Number(dateOnlyMatch[1]), Number(dateOnlyMatch[2]) - 1, Number(dateOnlyMatch[3]))
+    : new Date(value);
+  if (Number.isNaN(date.getTime())) return "Invalid Date";
+  if (
+    dateOnlyMatch &&
+    (date.getFullYear() !== Number(dateOnlyMatch[1]) ||
+      date.getMonth() !== Number(dateOnlyMatch[2]) - 1 ||
+      date.getDate() !== Number(dateOnlyMatch[3]))
+  ) return "Invalid Date";
+  return date.toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+};
 
 // =========================================================================
 // 3. AUTH MODAL (LOGIN / SIGN UP POPUP)
@@ -318,6 +371,7 @@ function AuthModal({
 // =========================================================================
 function CleanJobCard({ job, saved, onToggleSave, onShare, onViewDetails }) {
   const [showFullShort, setShowFullShort] = useState(false);
+  const isExpired = job.isExpired === true;
 
   return (
     <div
@@ -329,6 +383,7 @@ function CleanJobCard({ job, saved, onToggleSave, onShare, onViewDetails }) {
           <h3 className="text-2xl sm:text-3xl font-extrabold text-slate-900 group-hover:text-[#56A2D8] transition-colors duration-300 leading-snug tracking-tight">
             {job.title}
           </h3>
+          {isExpired && <span className="mt-2 inline-flex rounded-full bg-rose-50 px-3 py-1 text-xs font-bold text-rose-700">Applications closed</span>}
 
           <div className="mt-2.5 flex items-center gap-3 flex-wrap text-base sm:text-lg font-bold text-slate-700">
             <span className="font-black text-slate-900">{job.company}</span>
@@ -408,10 +463,10 @@ function CleanJobCard({ job, saved, onToggleSave, onShare, onViewDetails }) {
           </div>
 
           <div>
-            <p className="font-bold text-slate-900 text-base sm:text-lg">
+            <p className="text-base font-semibold tracking-tight text-slate-900 sm:text-lg">
               {job.deadline}
             </p>
-            <p className="text-xs sm:text-sm text-slate-500 font-semibold mt-0.5">
+            <p className="mt-0.5 text-xs font-normal text-slate-400 sm:text-sm">
               Deadline
             </p>
           </div>
@@ -446,6 +501,7 @@ function JobDetailModal({
   isSaved,
 }) {
   if (!job) return null;
+  const isExpired = job.isExpired === true;
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-0 sm:p-4 md:p-6 text-left">
@@ -508,15 +564,20 @@ function JobDetailModal({
                   <span className="bg-[#F0F7FC] px-3.5 py-1.5 rounded-xl border border-[#D0E5F5]">
                     {job.sector}
                   </span>
-                  <span>•</span>
-                  <span className="text-[#2B73A4] font-bold bg-[#F0F7FC] px-3 py-1 rounded-xl border border-[#D0E5F5]">
-                    Deadline: {job.deadline}
-                  </span>
                 </div>
 
                 <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-900 tracking-tight leading-tight">
                   {job.title}
                 </h1>
+
+                <div className="flex flex-col">
+                  <span className="text-base font-semibold tracking-tight text-slate-900 sm:text-lg">
+                    {job.deadline}
+                  </span>
+                  <span className="text-xs font-normal text-slate-400 sm:text-sm">
+                    Deadline
+                  </span>
+                </div>
 
                 <div className="flex flex-wrap items-center gap-4 text-base sm:text-lg font-bold text-slate-700 pt-1">
                   <span className="flex items-center gap-2 text-slate-900 font-black">
@@ -697,11 +758,9 @@ function JobDetailModal({
                       </div>
                     )}
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-600 font-medium">
-                        Deadline:
-                      </span>
-                      <span className="font-black text-[#2B73A4] bg-[#F0F7FC] px-2.5 py-1 rounded-lg border border-[#D0E5F5]">
-                        {job.deadline}
+                      <span className="flex flex-col">
+                        <span className="text-base font-semibold tracking-tight text-slate-900">{job.deadline}</span>
+                        <span className="text-sm font-normal text-slate-500">Deadline</span>
                       </span>
                     </div>
                   </div>
@@ -724,7 +783,7 @@ function JobDetailModal({
 
         {/* BOTTOM ACTION BAR - TRIGGERS AUTH MODAL */}
         <div className="sticky bottom-0 z-30 flex items-center justify-end border-t border-slate-200 bg-white px-6 md:px-10 py-4.5 shadow-xl">
-          <button
+          {isExpired ? <p className="rounded-lg bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700">Applications are closed for this job.</p> : <button
             type="button"
             onClick={() => {
               onApply(job);
@@ -734,7 +793,7 @@ function JobDetailModal({
             <Lock className="h-5 w-5 text-white/90" />
             <span>Login to Apply</span>
             <Send className="h-5 w-5 text-white group-hover:translate-x-1 transition-transform" />
-          </button>
+          </button>}
         </div>
       </div>
     </div>
@@ -761,8 +820,9 @@ function JobPostModal({ isOpen, onClose, onJobCreated }) {
   const [education, setEducation] = useState("Bachelor’s Degree");
   const [gender, setGender] = useState("Any");
   const [vacancies, setVacancies] = useState(1);
-  const [deadline, setDeadline] = useState("September 30, 2026");
+  const [deadline, setDeadline] = useState("");
   const [currency, setCurrency] = useState("ETB");
+  const [salaryType, setSalaryType] = useState("");
   const [salaryMin, setSalaryMin] = useState("40,000");
   const [salaryMax, setSalaryMax] = useState("65,000");
   const [shortDescription, setShortDescription] = useState("");
@@ -791,7 +851,7 @@ function JobPostModal({ isOpen, onClose, onJobCreated }) {
 
     const salaryNumeric =
       parseInt(salaryMin.replace(/[^0-9]/g, ""), 10) || 45000;
-    const salaryFormatted = `${currency} ${salaryMin} - ${salaryMax} / mo`;
+    const salaryFormatted = `${currency} ${salaryMin} - ${salaryMax} (${salaryType})`;
     const cleanTags = tags
       .split(",")
       .map((t) => t.trim())
@@ -812,13 +872,19 @@ function JobPostModal({ isOpen, onClose, onJobCreated }) {
         jobType: typeMap[jobType] || "full-time",
         experienceLevel: experienceMap[experienceLevel] || "mid-level",
         location: locationValue,
+        work_address: locationValue,
         workMode: workplace.toLowerCase(),
         gender: genderMap[gender] || "any",
         education: educationMap[education] || "any",
+        education_qualification: educationMap[education] || "any",
+        applicants_needed: "Both",
         salaryMin: salaryNumeric,
         salaryMax: parseInt(salaryMax.replace(/[^0-9]/g, ""), 10) || salaryNumeric,
         currency,
-        applicationDeadline: "2026-09-30",
+        salary_type: salaryType,
+        salary: salaryFormatted,
+        is_negotiable: salaryType === "Negotiable",
+        deadline,
         requiredSkills: cleanTags.join(", "),
         responsibilities: responsibilities.filter((r) => r.trim().length > 0),
         requirements: requirements.filter((r) => r.trim().length > 0),
@@ -931,6 +997,47 @@ function JobPostModal({ isOpen, onClose, onJobCreated }) {
                       </option>
                     ),
                   )}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="job-deadline" className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  Application Deadline
+                </label>
+                <input
+                  id="job-deadline"
+                  name="deadline"
+                  type="date"
+                  required
+                  min={(() => {
+                    const today = new Date();
+                    const year = today.getFullYear();
+                    const month = String(today.getMonth() + 1).padStart(2, "0");
+                    const day = String(today.getDate()).padStart(2, "0");
+                    return `${year}-${month}-${day}`;
+                  })()}
+                  value={deadline}
+                  onChange={(e) => setDeadline(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-[#56A2D8]"
+                />
+              </div>
+              <div>
+                <label htmlFor="job-salary-type" className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                  Salary Type
+                </label>
+                <select
+                  id="job-salary-type"
+                  name="salary_type"
+                  required
+                  value={salaryType}
+                  onChange={(event) => setSalaryType(event.target.value)}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-[#56A2D8]"
+                >
+                  <option value="" disabled>Select salary type</option>
+                  <option value="Monthly">Monthly (Per Month)</option>
+                  <option value="Yearly">Yearly / Annual (Per Year)</option>
+                  <option value="Hourly">Hourly (Per Hour)</option>
+                  <option value="Fixed">Fixed / Project-based</option>
+                  <option value="Negotiable">Negotiable</option>
                 </select>
               </div>
             </div>
@@ -1191,9 +1298,10 @@ function GoogleAiAssistantModal({ isOpen, onClose, contextJobs }) {
 export default function ExploreJobsPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { logout } = useAuth();
   const [searchParams] = useSearchParams();
   const fromDashboard = location.state?.fromDashboard === true || searchParams.get('from') === 'dashboard';
-  const normalizeApiJob = (job) => {
+  const normalizeApiJob = useCallback((job) => {
     const skillSource = job.tags ?? job.requiredSkills ?? job.required_skills;
     let rawTags = Array.isArray(skillSource) ? skillSource : [];
     if (typeof skillSource === "string") {
@@ -1208,6 +1316,12 @@ export default function ExploreJobsPage() {
 
     const normalizedSalaryMin = Number(job.salary_min ?? job.salaryMin ?? 0);
     const normalizedSalaryMax = Number(job.salary_max ?? job.salaryMax ?? 0);
+    const salaryType = job.salary_type || ({
+      hourly: "Hourly",
+      monthly: "Monthly",
+      yearly: "Yearly",
+    }[String(job.salary_period || "").toLowerCase()] || "");
+    const salaryTypeLabel = salaryType === "Fixed" ? "Fixed / Project-based" : salaryType;
     const isNegotiable = [job.is_negotiable, job.is_salary_negotiable]
       .some((value) => value === true || value === 1 || value === "1" || value === "true");
     const minimumExperience = job.min_experience ?? job.years_of_experience_min;
@@ -1228,15 +1342,18 @@ export default function ExploreJobsPage() {
       phd: "PhD / Doctorate",
     };
     const priceText =
-      isNegotiable
+      isNegotiable || salaryType === "Negotiable"
         ? "Negotiable"
         : normalizedSalaryMin || normalizedSalaryMax
-        ? `${job.currency || "ETB"} ${normalizedSalaryMin.toLocaleString()} - ${normalizedSalaryMax.toLocaleString()} / mo`
-        : job.salary || "Compensation disclosed upon application";
+        ? `${job.currency || "ETB"} ${normalizedSalaryMin.toLocaleString()} - ${normalizedSalaryMax.toLocaleString()}${salaryTypeLabel ? ` (${salaryTypeLabel})` : ""}`
+        : job.salary
+          ? `${job.salary}${salaryTypeLabel && !String(job.salary).toLowerCase().includes(salaryType.toLowerCase()) ? ` (${salaryTypeLabel})` : ""}`
+          : "Compensation disclosed upon application";
 
     return {
       ...job,
       id: job.id || job.jobId,
+      isExpired: job.isExpired === true || Number(job.is_expired) === 1,
       company: job.company || job.company_name || "Employer company",
       location: job.location || job.locationValue || "Location not specified",
       locationValue: job.locationValue || job.location || "",
@@ -1254,25 +1371,29 @@ export default function ExploreJobsPage() {
           : job.gender_preference === "female"
             ? "Female"
             : "Any Gender"),
-      vacancies: Number(job.vacancies ?? job.vacancy_count ?? 1),
+      vacancies: Number(job.vacancies ?? 1),
+      salary_type: salaryType,
       is_negotiable: isNegotiable,
       benefits: job.benefits || "",
       min_experience: minimumExperience ?? null,
       minimumExperienceLabel: minimumExperience === null || minimumExperience === undefined
         ? "Not specified"
         : minimumExperienceLabels[minimumExperience] || `${minimumExperience}+ Years`,
-      deadline: job.deadline || job.application_deadline || "No deadline",
-      deadlineDate: job.deadlineDate || job.application_deadline || "",
+      deadline: formatDeadlineDate(job.deadline || job.application_deadline),
+      deadlineDate: job.deadlineDate || job.deadline || job.application_deadline || "",
       postedAt: job.postedAt || (job.created_at ? `Posted ${new Date(job.created_at).toLocaleDateString()}` : "Recently posted"),
       postedHoursAgo: Number(job.postedHoursAgo) || 0,
       priorityRank: Number(job.priorityRank) || 1,
       salaryValue: Number(job.salaryValue ?? normalizedSalaryMin ?? 0),
+      salaryMaxValue: parseNumericValue(
+        normalizedSalaryMax || job.numeric_salary || job.salaryValue || normalizedSalaryMin,
+      ),
       salary: priceText,
       aiMatchScore: job.matchScore ?? job.match_score ?? job.aiMatchScore ?? null,
       matchedSkills: job.matchedSkills || job.matched_skills || [],
       missingSkills: job.missingSkills || job.missing_skills || [],
       requiredSkills: rawTags,
-      matchReason: job.rationale || job.matchReason || "Sign in and upload a CV to compare its skills with this job.",
+      matchReason: job.rationale || job.matchReason || "",
       tags: rawTags,
       shortDescription: job.shortDescription || job.description || "",
       fullDescription: job.fullDescription || job.description || "",
@@ -1283,130 +1404,19 @@ export default function ExploreJobsPage() {
         ? job.requirements
         : [],
     };
-  };
+  }, []);
 
-  const readActiveSeekerProfile = () => {
-    try {
-      const stored = localStorage.getItem('activeSeekerProfile');
-      return stored ? JSON.parse(stored) : null;
-    } catch {
-      return null;
-    }
-  };
-
-  const getJobMatchSnapshot = (job, profile) => {
-    if (!profile) {
-      return {
-        score: Math.max(20, Number(job.aiMatchScore || 0) || 76),
-        reason: 'Complete your profile to unlock a more accurate match score.',
-        breakdown: { skills: 80, title: 80, education: 80, experience: 80, location: 80, workplace: 80 },
-      };
-    }
-
-    const normalizeSkillText = (value) => String(value || '').toLowerCase().trim().replace(/nodejs/g, 'node.js').replace(/[^a-z0-9+#.]+/g, ' ');
-    const skillNames = Array.isArray(profile.skills)
-      ? profile.skills.map((skill) => normalizeSkillText(typeof skill === 'string' ? skill : (skill?.skill_name || skill?.name))).filter(Boolean)
-      : [];
-    const profileSkillSet = new Set(skillNames);
-    const rawJobSkills = Array.isArray(job.required_skills)
-      ? job.required_skills
-      : Array.isArray(job.tags)
-        ? job.tags
-        : String(job.required_skills || '').split(',');
-    const jobSkills = [...new Set(rawJobSkills.map((skill) => String(skill).trim()).filter(Boolean))];
-    const matchedSkills = jobSkills.filter((skill) => profileSkillSet.has(normalizeSkillText(skill)));
-    const skillScore = jobSkills.length ? matchedSkills.length / jobSkills.length : 0.7;
-
-    const candidateTitle = normalizeSkillText(profile.headline || profile.preferredJob || profile.professional_title || '');
-    const jobTitle = normalizeSkillText(job.title || '');
-    const titleTokens = new Set(jobTitle.split(/\s+/).filter((token) => token.length > 2));
-    const candidateTokens = new Set(candidateTitle.split(/\s+/).filter((token) => token.length > 2));
-    const titleScore = titleTokens.size ? [...titleTokens].filter((token) => candidateTokens.has(token)).length / titleTokens.size : 0.7;
-
-    const requiredEducation = String(job.education || 'Any').toLowerCase();
-    const profileEducation = String(profile.educationLevel || profile.education || '').toLowerCase();
-    const educationScore = requiredEducation.includes('any') || !requiredEducation ? 1 : profileEducation.includes(requiredEducation) || (requiredEducation.includes('bachelor') && profileEducation.includes('degree')) ? 1 : 0.75;
-
-    const profileExperience = String(profile.experienceLevel || '').toLowerCase();
-    const jobExperience = String(job.experienceLevel || '').toLowerCase();
-    const experienceScore = !jobExperience || jobExperience.includes('all') ? 1 : profileExperience.includes(jobExperience.split('(')[0].trim()) || (profileExperience.includes('senior') && jobExperience.includes('junior')) ? 1 : 0.8;
-
-    const profileLocation = String(profile.location || profile.city || '').toLowerCase();
-    const jobLocation = String(job.locationValue || job.location || '').toLowerCase();
-    const locationScore = !jobLocation || jobLocation.includes('remote') ? 1 : profileLocation.includes(jobLocation) || jobLocation.includes(profileLocation) ? 1 : 0.7;
-
-    const profileSetup = String(profile.preferredWorkSetup || profile.workSetup || '').toLowerCase();
-    const workplaceScore = !job.workplace || job.workplace.toLowerCase() === 'all' ? 1 : profileSetup.includes(String(job.workplace).toLowerCase()) || profileSetup.includes('any') || profileSetup.includes('flexible') ? 1 : 0.8;
-
-    const weighted = skillScore * 0.46 + titleScore * 0.18 + educationScore * 0.14 + experienceScore * 0.12 + locationScore * 0.06 + workplaceScore * 0.04;
-    const score = Math.max(20, Math.min(98, Math.round(weighted * 100)));
-
-    return {
-      score,
-      reason: matchedSkills.length ? `${matchedSkills.slice(0, 3).join(', ')} align closely with this role.` : 'This role matches your background and experience well.',
-      breakdown: {
-        skills: Math.round(skillScore * 100),
-        title: Math.round(titleScore * 100),
-        education: Math.round(educationScore * 100),
-        experience: Math.round(experienceScore * 100),
-        location: Math.round(locationScore * 100),
-        workplace: Math.round(workplaceScore * 100),
-      },
-    };
-  };
   const [jobs, setJobs] = useState([]);
   const [jobsLoading, setJobsLoading] = useState(true);
   const [jobsLoadError, setJobsLoadError] = useState("");
-  const [activeSeekerProfile, setActiveSeekerProfile] = useState(readActiveSeekerProfile);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(INITIAL_JOB_LIMIT);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState("");
   const [search, setSearch] = useState("");
-  useEffect(() => {
-    let mounted = true;
 
-    const loadJobs = async () => {
-      try {
-        const token = localStorage.getItem("token") || sessionStorage.getItem("token");
-        const { data } = await api.get(token ? "/jobs/match?all=true" : "/jobs");
-        if (!mounted) return;
-
-        const rawJobs = Array.isArray(data) ? data : data.jobs || [];
-        setJobs(rawJobs
-          .filter((job) => String(job.approval_status || job.approvalStatus || '').toLowerCase() === 'approved')
-          .map(normalizeApiJob));
-        setJobsLoadError("");
-      } catch (error) {
-        console.error("Unable to load jobs from API:", error);
-        if (mounted) {
-          setJobs([]);
-          setJobsLoadError(
-            error.response?.data?.message || "Unable to load jobs. Please try again.",
-          );
-        }
-      } finally {
-        if (mounted) setJobsLoading(false);
-      }
-    };
-
-    loadJobs();
-    const syncProfile = () => setActiveSeekerProfile(readActiveSeekerProfile());
-    window.addEventListener('storage', syncProfile);
-    return () => {
-      mounted = false;
-      window.removeEventListener('storage', syncProfile);
-    };
-  }, []);
-
-  const jobsWithDynamicMatch = useMemo(() => jobs.map((job) => {
-    const match = getJobMatchSnapshot(job, activeSeekerProfile);
-    return {
-      ...job,
-      aiMatchScore: match.score,
-      matchReason: match.reason,
-      matchBreakdown: match.breakdown,
-    };
-  }), [jobs, activeSeekerProfile]);
-
-  const INITIAL_VISIBLE_COUNT = 6;
-  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_COUNT);
+  const jobsWithDynamicMatch = jobs;
 
   // Filter States
   const [selectedSector, setSelectedSector] = useState("Select sector");
@@ -1450,6 +1460,169 @@ export default function ExploreJobsPage() {
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
 
+  useEffect(() => {
+    setVisibleCount(INITIAL_JOB_LIMIT);
+  }, [
+    search,
+    selectedSector,
+    selectedLocation,
+    selectedJobTypes,
+    selectedWorkMode,
+    selectedExperience,
+    selectedEducation,
+    selectedGender,
+    minSalary,
+    currency,
+    datePosted,
+    sortBy,
+  ]);
+
+  const jobFilters = useMemo(() => ({
+    search: search.trim(),
+    sector: selectedSector === "Select sector" ? "" : selectedSector,
+    location: selectedLocation === "Select location" ? "" : selectedLocation,
+    jobTypes: selectedJobTypes.join("|"),
+    workMode: selectedWorkMode === "All" ? "" : selectedWorkMode,
+    experience: selectedExperience === "all" ? "" : selectedExperience,
+    education: selectedEducation === "Select education level" ? "" : selectedEducation,
+    gender: selectedGender === "Any" ? "" : selectedGender,
+    minSalary,
+    currency: minSalary > 0 ? currency : "",
+    datePosted: datePosted === "all" ? "" : datePosted,
+  }), [
+    search,
+    selectedSector,
+    selectedLocation,
+    selectedJobTypes,
+    selectedWorkMode,
+    selectedExperience,
+    selectedEducation,
+    selectedGender,
+    minSalary,
+    currency,
+    datePosted,
+  ]);
+  const jobFiltersKey = JSON.stringify(jobFilters);
+  const jobFiltersKeyRef = useRef(jobFiltersKey);
+  useEffect(() => {
+    jobFiltersKeyRef.current = jobFiltersKey;
+  }, [jobFiltersKey]);
+
+  const getJobsPage = useCallback(async (requestedPage, signal) => {
+    const params = {
+      ...jobFilters,
+      page: requestedPage,
+      limit: INITIAL_JOB_LIMIT,
+    };
+    const { data } = await api.get("/jobs", { params, signal });
+    const rawJobs = Array.isArray(data) ? data : Array.isArray(data?.jobs) ? data.jobs : [];
+    return {
+      jobs: rawJobs.map(normalizeApiJob),
+      pagination: data?.pagination,
+    };
+  }, [jobFilters, logout, normalizeApiJob]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let active = true;
+    setJobsLoading(true);
+    setJobsLoadError("");
+    setLoadMoreError("");
+    setJobs([]);
+    setPage(1);
+    setHasMore(false);
+
+    getJobsPage(1, controller.signal)
+      .then(({ jobs: firstPage, pagination }) => {
+        if (!active) return;
+        const firstPageHasNext = typeof pagination?.hasMore === "boolean"
+          ? pagination.hasMore
+          : firstPage.length === INITIAL_JOB_LIMIT;
+        setJobs(firstPage);
+        setPage(Number(pagination?.currentPage) || 1);
+        setHasMore(firstPageHasNext);
+      })
+      .catch((error) => {
+        if (!active || error.code === "ERR_CANCELED") return;
+        console.error("Unable to load jobs from API:", error);
+        setJobs([]);
+        setJobsLoadError(error.response?.data?.message || "Unable to load jobs. Please try again.");
+      })
+      .finally(() => {
+        if (active) setJobsLoading(false);
+      });
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [getJobsPage]);
+
+  const handleLoadMore = async (event) => {
+    event.preventDefault();
+    if (isLoadingMore) return;
+    if (visibleCount < filteredJobs.length) {
+      setVisibleCount((currentCount) => Math.min(currentCount + PAGE_STEP, filteredJobs.length));
+      return;
+    }
+    if (!hasMore) return;
+
+    const nextPage = page + 1;
+    const requestedFiltersKey = jobFiltersKey;
+    setIsLoadingMore(true);
+    setLoadMoreError("");
+    try {
+      const { jobs: nextJobs, pagination } = await getJobsPage(nextPage);
+      if (jobFiltersKeyRef.current !== requestedFiltersKey) return;
+      const loadedIds = new Set(jobs.map((job) => String(job.id)));
+      const newJobs = nextJobs.filter((job) => !loadedIds.has(String(job.id)));
+      setJobs((currentJobs) => {
+        const currentIds = new Set(currentJobs.map((job) => String(job.id)));
+        return [...currentJobs, ...newJobs.filter((job) => !currentIds.has(String(job.id)))];
+      });
+      setPage(Number(pagination?.currentPage) || nextPage);
+      setHasMore(typeof pagination?.hasMore === "boolean" ? pagination.hasMore : nextJobs.length === INITIAL_JOB_LIMIT);
+      if (newJobs.length) {
+        setVisibleCount((currentCount) => currentCount + newJobs.length);
+      }
+    } catch (error) {
+      if (jobFiltersKeyRef.current !== requestedFiltersKey) return;
+      console.error("Unable to load more jobs:", error);
+      setLoadMoreError(error.response?.data?.message || "Unable to load more jobs. Please try again.");
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
+
+  const handleShowLess = () => {
+    setVisibleCount(INITIAL_JOB_LIMIT);
+    setLoadMoreError("");
+    (document.getElementById("explore-jobs-container") || document.getElementById("jobs-section"))?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  };
+
+  useEffect(() => {
+    const token = localStorage.getItem("token") || sessionStorage.getItem("token");
+    if (!token) return undefined;
+    let active = true;
+    api.get("/seeker/saved-jobs")
+      .then(({ data }) => {
+        if (active) setSavedJobs((Array.isArray(data?.jobs) ? data.jobs : []).map((job) => String(job.id)));
+      })
+      .catch((error) => {
+        if (!active) return;
+        if (error.response?.status === 401) {
+          logout();
+          setSavedJobs([]);
+          return;
+        }
+        setJobsLoadError(error.response?.data?.message || "Unable to load saved jobs.");
+      });
+    return () => { active = false; };
+  }, [logout]);
+
   const selectJobType = (type) => {
     setSelectedJobTypes(type ? [type] : []);
   };
@@ -1468,17 +1641,27 @@ export default function ExploreJobsPage() {
     }
   };
 
-  const toggleSave = (jobId) => {
-    setSavedJobs((prev) =>
-      prev.includes(jobId)
-        ? prev.filter((id) => id !== jobId)
-        : [...prev, jobId],
-    );
-    showToast(
-      savedJobs.includes(jobId)
-        ? "Job removed from bookmarks."
-        : "Job saved to bookmarks!",
-    );
+  const toggleSave = async (jobId) => {
+    const token = localStorage.getItem("token") || sessionStorage.getItem("token");
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+    const normalizedId = String(jobId);
+    const isSaved = savedJobs.includes(normalizedId);
+    try {
+      if (isSaved) {
+        await api.delete(`/seeker/saved-jobs/${encodeURIComponent(normalizedId)}`);
+        setSavedJobs((current) => current.filter((id) => id !== normalizedId));
+        showToast("Job removed from bookmarks.");
+      } else {
+        await api.post("/seeker/saved-jobs", { jobId });
+        setSavedJobs((current) => [...new Set([...current, normalizedId])]);
+        showToast("Job saved to bookmarks!");
+      }
+    } catch (error) {
+      showToast(error.response?.data?.message || "Unable to update saved jobs.");
+    }
   };
 
   // When user clicks 'Login to Apply' inside View Details
@@ -1491,8 +1674,7 @@ export default function ExploreJobsPage() {
   };
 
   const handleViewDetails = (job) => {
-    localStorage.setItem("jobDetailsPreview", JSON.stringify(job));
-    navigate(`/job-details/${job.id}`);
+    navigate(`/job-details/${job.id}`, { state: { job } });
   };
 
   const handleAuthSuccess = (email, mode, targetJob) => {
@@ -1546,8 +1728,16 @@ export default function ExploreJobsPage() {
 
   const filteredJobs = useMemo(() => {
     const query = search.toLowerCase().trim();
+    const now = Date.now();
 
     const result = jobsWithDynamicMatch.filter((job) => {
+      if (sortBy === "deadline") {
+        const deadlineValue = job.deadlineDate || job.deadline || job.application_deadline;
+        if (!deadlineValue) return false;
+        const deadlineTime = getDeadlineTimestamp(deadlineValue);
+        if (!Number.isFinite(deadlineTime) || deadlineTime < now) return false;
+      }
+
       if (query) {
         const matchesTitle = job.title.toLowerCase().includes(query);
         const matchesCompany = job.company.toLowerCase().includes(query);
@@ -1565,16 +1755,25 @@ export default function ExploreJobsPage() {
         }
       }
 
-      if (selectedSector !== "Select sector" && job.sector !== selectedSector)
+      if (
+        selectedSector !== "Select sector" &&
+        job.sector.toLowerCase() !== selectedSector.toLowerCase()
+      )
         return false;
       if (
         selectedLocation !== "Select location" &&
-        job.locationValue !== selectedLocation
+        job.locationValue.toLowerCase() !== selectedLocation.toLowerCase()
       )
         return false;
-      if (selectedJobTypes.length > 0 && !selectedJobTypes.includes(job.type))
+      if (
+        selectedJobTypes.length > 0 &&
+        !selectedJobTypes.some((type) => type.toLowerCase() === job.type.toLowerCase())
+      )
         return false;
-      if (selectedWorkMode !== "All" && job.workplace !== selectedWorkMode)
+      if (
+        selectedWorkMode !== "All" &&
+        job.workplace.toLowerCase() !== selectedWorkMode.toLowerCase()
+      )
         return false;
       if (
         selectedExperience !== "all" &&
@@ -1585,7 +1784,7 @@ export default function ExploreJobsPage() {
         return false;
       if (
         selectedEducation !== "Select education level" &&
-        job.education.indexOf(selectedEducation) === -1
+        !job.education.toLowerCase().includes(selectedEducation.toLowerCase())
       )
         return false;
       if (
@@ -1596,7 +1795,7 @@ export default function ExploreJobsPage() {
         return false;
       if (
         minSalary > 0 &&
-        job.currency === currency &&
+        job.currency.toLowerCase() === currency.toLowerCase() &&
         job.salaryValue < minSalary
       )
         return false;
@@ -1609,19 +1808,36 @@ export default function ExploreJobsPage() {
 
     const sorted = [...result];
     if (sortBy === "newest") {
-      sorted.sort((a, b) => a.postedHoursAgo - b.postedHoursAgo);
+      sorted.sort((a, b) => getTimestamp(b.created_at) - getTimestamp(a.created_at));
     } else if (sortBy === "priority") {
-      sorted.sort((a, b) => a.priorityRank - b.priorityRank);
-    } else if (sortBy === "match") {
-      sorted.sort((a, b) => (b.aiMatchScore ?? -1) - (a.aiMatchScore ?? -1));
-    } else if (sortBy === "salary") {
-      sorted.sort((a, b) => b.salaryValue - a.salaryValue);
-    } else if (sortBy === "deadline") {
-      sorted.sort(
-        (a, b) =>
-          new Date(a.deadlineDate).getTime() -
-          new Date(b.deadlineDate).getTime(),
+      const isEnabled = (value) => value === true || value === 1 || value === "1" || value === "true";
+      const isUrgent = (job) => isEnabled(job.is_urgent) || isEnabled(job.isUrgent) || isEnabled(job.urgent);
+      const isHighPriority = (job) => (
+        isEnabled(job.is_high_priority) ||
+        isEnabled(job.isHighPriority) ||
+        isEnabled(job.high_priority) ||
+        ["high", "urgent", "top"].includes(String(job.priority || job.priority_level || "").toLowerCase())
       );
+      sorted.sort((a, b) => {
+        const featuredDifference = Number(isUrgent(b)) + Number(isHighPriority(b))
+          - Number(isUrgent(a)) - Number(isHighPriority(a));
+        if (featuredDifference) return featuredDifference;
+        const priorityDifference = a.priorityRank - b.priorityRank;
+        if (priorityDifference) return priorityDifference;
+        return getTimestamp(b.created_at) - getTimestamp(a.created_at);
+      });
+    } else if (sortBy === "match") {
+      sorted.sort((a, b) => (
+        parseNumericValue(b.matchScore ?? b.match_score ?? b.aiMatchScore) -
+        parseNumericValue(a.matchScore ?? a.match_score ?? a.aiMatchScore)
+      ));
+    } else if (sortBy === "salary") {
+      sorted.sort((a, b) => b.salaryMaxValue - a.salaryMaxValue);
+    } else if (sortBy === "deadline") {
+      sorted.sort((a, b) => (
+        getDeadlineTimestamp(a.deadlineDate || a.deadline || a.application_deadline) -
+        getDeadlineTimestamp(b.deadlineDate || b.deadline || b.application_deadline)
+      ));
     }
 
     return sorted;
@@ -1641,22 +1857,45 @@ export default function ExploreJobsPage() {
     sortBy,
   ]);
 
-  useEffect(() => {
-    setVisibleCount(INITIAL_VISIBLE_COUNT);
-  }, [filteredJobs]);
-
   const visibleJobs = filteredJobs.slice(0, visibleCount);
-  const handleLoadMore = () => {
-    setVisibleCount((current) =>
-      Math.min(current + INITIAL_VISIBLE_COUNT, filteredJobs.length),
-    );
-  };
-  const handleLoadLess = () => {
-    setVisibleCount(INITIAL_VISIBLE_COUNT);
-    document
-      .getElementById("explore-job-list")
-      ?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
+  const canLoadMore = visibleCount < filteredJobs.length || hasMore;
+  const isExpanded = visibleCount > INITIAL_JOB_LIMIT;
+  const paginationControl = canLoadMore || isExpanded || loadMoreError ? (
+    <div className="flex items-center justify-center gap-4 py-8">
+      {canLoadMore && (
+        <button
+          type="button"
+          onClick={handleLoadMore}
+          disabled={isLoadingMore}
+          className="inline-flex items-center space-x-2 rounded-xl border border-blue-200 bg-blue-50 px-6 py-2.5 text-sm font-medium text-blue-600 shadow-2xs transition-all duration-200 hover:border-blue-300 hover:bg-blue-100/80 hover:text-blue-700 active:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400/20 disabled:cursor-wait disabled:opacity-50"
+        >
+          {isLoadingMore ? (
+            <>
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#56A2D8] border-t-transparent" />
+              <span>Loading more jobs...</span>
+            </>
+          ) : (
+            <>
+              <ArrowDown className="h-4 w-4" />
+              <span>Load More</span>
+            </>
+          )}
+        </button>
+      )}
+      {isExpanded && (
+        <button
+          type="button"
+          onClick={handleShowLess}
+          disabled={isLoadingMore}
+          className="inline-flex items-center space-x-2 rounded-xl border border-blue-200 bg-blue-50 px-6 py-2.5 text-sm font-medium text-blue-600 shadow-2xs transition-all duration-200 hover:border-blue-300 hover:bg-blue-100/80 hover:text-blue-700 active:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-400/20 disabled:cursor-wait disabled:opacity-50"
+        >
+          <ArrowUp className="h-4 w-4" />
+          <span>Show Less</span>
+        </button>
+      )}
+      {loadMoreError && <p role="alert" className="text-sm text-rose-600">{loadMoreError}</p>}
+    </div>
+  ) : null;
 
   return (
     <div className="jobs-page min-h-screen bg-white text-slate-900 font-sans flex flex-col">
@@ -1771,7 +2010,7 @@ export default function ExploreJobsPage() {
         <div className="flex flex-col lg:flex-row items-start gap-4">
           {/* LEFT: FILTER SIDEBAR */}
           <aside
-            className={`brand-sidebar explore-sidebar fixed inset-y-0 right-0 w-72 shrink-0 overflow-y-auto overscroll-contain p-6 shadow-2xl transition-transform lg:sticky lg:top-28 lg:left-0 lg:right-auto lg:block lg:h-[calc(100vh-8rem)] lg:translate-x-0 lg:rounded-2xl lg:p-6 lg:shadow-2xs ${
+            className={`brand-sidebar explore-sidebar fixed inset-y-0 right-0 w-72 shrink-0 overflow-y-auto p-6 shadow-2xl transition-transform lg:sticky lg:top-28 lg:left-0 lg:right-auto lg:block lg:h-[calc(100vh-8rem)] lg:translate-x-0 lg:rounded-2xl lg:p-6 lg:shadow-2xs ${
               mobileFiltersOpen
                 ? "translate-x-0"
                 : "translate-x-full lg:translate-x-0"
@@ -2190,8 +2429,8 @@ export default function ExploreJobsPage() {
           </aside>
 
           {/* RIGHT: JOB CARDS */}
-          <main className="flex-1 min-w-0 w-full space-y-6">
-            <div className="jobs-results-header sticky top-20 sm:top-24 z-20 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 pb-3.5 text-left">
+          <main id="explore-jobs-container" className="scroll-mt-28 flex-1 min-w-0 w-full space-y-6">
+            <div id="jobs-section" className="jobs-results-header sticky top-20 sm:top-24 z-20 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 pb-3.5 text-left">
               <span className="text-lg sm:text-xl font-black text-[#2B73A4] border-b-2 border-[#56A2D8] pb-3.5 px-1 self-start">
                 All Jobs
               </span>
@@ -2228,7 +2467,7 @@ export default function ExploreJobsPage() {
             ) : jobs.length === 0 ? (
               <div className="rounded-2xl border border-slate-200 bg-white p-14 text-center">
                 <Search className="mx-auto h-10 w-10 text-slate-300" />
-                <h3 className="mt-4 text-lg font-bold text-slate-900">No published jobs yet</h3>
+                <h3 className="mt-4 text-lg font-bold text-slate-900">ምንም ክፍት ስራዎች አልተገኙም (No active jobs posted yet)</h3>
                 <p className="mt-2 text-sm font-medium text-slate-500">Employer-posted jobs will appear here when they are published.</p>
               </div>
             ) : filteredJobs.length === 0 ? (
@@ -2248,6 +2487,7 @@ export default function ExploreJobsPage() {
                 >
                   Reset All Filters
                 </button>
+                {paginationControl}
               </div>
             ) : (
               <>
@@ -2256,37 +2496,14 @@ export default function ExploreJobsPage() {
                     <CleanJobCard
                       key={job.id}
                       job={job}
-                      saved={savedJobs.includes(job.id)}
+                      saved={savedJobs.includes(String(job.id))}
                       onToggleSave={toggleSave}
                       onShare={handleShare}
                       onViewDetails={handleViewDetails}
                     />
                   ))}
                 </div>
-                {filteredJobs.length > INITIAL_VISIBLE_COUNT && (
-                  <div className="py-8 text-center">
-                    <p className="mb-3 text-xs font-medium text-slate-500">
-                      Showing {visibleJobs.length} of {filteredJobs.length} jobs
-                    </p>
-                    {visibleCount < filteredJobs.length ? (
-                      <button
-                        type="button"
-                        onClick={handleLoadMore}
-                        className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-6 py-2.5 text-sm font-semibold text-slate-700 shadow-xs transition-all hover:bg-slate-50"
-                      >
-                        Load More Jobs ↓
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={handleLoadLess}
-                        className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-6 py-2.5 text-sm font-semibold text-slate-700 shadow-xs transition-all hover:bg-slate-50"
-                      >
-                        Show Less ↑
-                      </button>
-                    )}
-                  </div>
-                )}
+                {paginationControl}
               </>
             )}
           </main>
@@ -2300,7 +2517,7 @@ export default function ExploreJobsPage() {
         onApply={handleApplyClick}
         onShare={handleShare}
         onToggleSave={toggleSave}
-        isSaved={selectedJob ? savedJobs.includes(selectedJob.id) : false}
+        isSaved={selectedJob ? savedJobs.includes(String(selectedJob.id)) : false}
       />
 
       {/* AUTH MODAL (LOGIN / SIGN UP) */}

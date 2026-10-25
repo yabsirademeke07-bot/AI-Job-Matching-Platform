@@ -1,10 +1,12 @@
 require('dotenv').config();
+const { randomInt } = require('node:crypto');
 const pool = require('../connection');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
+const { getJwtSecret } = require('../../config/jwt');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your_secret_key';
+const JWT_SECRET = getJwtSecret();
 const JWT_EXPIRY = '7d';
 
 // create transporter (preferred: port 465 secure)
@@ -32,7 +34,7 @@ transporter.verify()
   });
 
 // Helper: Generate 6-digit OTP Code
-const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
+const generateOTP = () => String(randomInt(100000, 1000000));
 
 // Helper: Send Mail Function (With detailed debugging logs)
 const sendEmail = async ({ to, subject, html }) => {
@@ -394,7 +396,7 @@ const setRole = async (req, res) => {
 
     const token = jwt.sign(
       { userId: updatedUser.id, role: updatedUser.role, email: updatedUser.email },
-      JWT_SECRET,
+      getJwtSecret(),
       { expiresIn: JWT_EXPIRY }
     );
 

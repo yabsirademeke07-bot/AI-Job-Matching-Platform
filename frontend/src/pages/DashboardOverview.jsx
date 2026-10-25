@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BriefcaseBusiness, CalendarDays, CheckCircle2, ClipboardList, Edit3, Plus, Target, UserCheck, Users } from 'lucide-react';
 import api from '../services/api';
+import { getMetricCardClassName, metricCardIconClassName } from '../components/dashboard/metricCardStyles';
 
 const initialOverview = {
   activeJobsCount: 0,
@@ -27,17 +28,27 @@ export default function DashboardOverview() {
 
   useEffect(() => {
     let active = true;
-    api.get('/employer/dashboard/overview')
+    api.get('/employer/dashboard-stats')
       .then(({ data }) => {
-        if (active) setOverview({ ...initialOverview, ...data });
+        if (active) {
+          const stats = data?.stats || {};
+          setOverview({
+            activeJobsCount: Number(stats.active_jobs || 0),
+            applicantsCount: Number(stats.total_applicants || 0),
+            shortlistedCount: Number(stats.shortlisted || 0),
+            interviewsCount: Number(stats.interviews_scheduled || 0),
+            hiredCount: Number(stats.hired || 0),
+          });
+        }
       })
-      .catch(() => { if (active) setError('Unable to load dashboard metrics. Please try again.'); })
+      .catch((requestError) => { if (active) setError(requestError.response?.data?.message || 'Unable to load dashboard metrics. Please try again.'); })
       .finally(() => active && setLoading(false));
     return () => { active = false; };
   }, []);
 
   return (
-    <section className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-10">
+    <section className="min-h-screen bg-[#f8fafc] px-4 py-8 sm:px-6 lg:px-10">
+      <div className="mx-auto w-full max-w-7xl">
       <div className="mb-8 flex flex-col justify-between gap-4 rounded-3xl border border-blue-100 bg-blue-50/70 p-6 sm:flex-row sm:items-center">
         <div>
           <p className="text-sm font-bold uppercase tracking-[0.18em] text-blue-600">Employer dashboard</p>
@@ -48,16 +59,17 @@ export default function DashboardOverview() {
           <Plus className="h-4 w-4" /> Post Job
         </button>
       </div>
-      {error && <p className="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">{error}</p>}
+      {error && <p role="alert" className="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">{error}</p>}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         {metrics.map(([label, key, Icon, color, background]) => (
-          <article key={key} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between"><p className="text-sm font-bold text-slate-500">{label}</p><span className={`rounded-xl p-2 ${background}`}><Icon className={`h-5 w-5 ${color}`} /></span></div>
-            <p className="mt-5 text-4xl font-black text-slate-900">{loading ? '—' : overview[key]}</p>
-            <p className="mt-2 flex items-center gap-1 text-xs font-semibold text-emerald-600"><CheckCircle2 className="h-3.5 w-3.5" /> Live pipeline metric</p>
+          <article key={key} className={getMetricCardClassName(false, false)}>
+            <div className="flex w-full items-start justify-between gap-3"><p className="text-sm font-bold text-slate-500">{label}</p><span className={`rounded-xl p-2 ${metricCardIconClassName} ${background}`}><Icon className={`h-5 w-5 ${color}`} /></span></div>
+            <p className="text-4xl font-black text-slate-900">{loading ? '—' : overview[key]}</p>
+            <p className="flex items-center gap-1 text-xs font-semibold text-slate-500"><CheckCircle2 className="h-3.5 w-3.5" /> {loading ? 'Loading live metric…' : 'Live pipeline metric'}</p>
           </article>
         ))}
       </div>
+      {!loading && !error && overview.activeJobsCount === 0 && overview.applicantsCount === 0 && <p className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">No jobs or applicants yet. Post a job to start building your hiring pipeline.</p>}
       <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-lg font-black text-slate-900">Quick Actions</h2>
         <div className="mt-4 flex flex-wrap gap-3">
@@ -65,6 +77,7 @@ export default function DashboardOverview() {
           <button type="button" onClick={() => navigate('/employer-dashboard?view=jobs')} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"><Edit3 className="h-4 w-4" /> Edit Jobs</button>
           <button type="button" onClick={() => navigate('/employer-dashboard?view=applications')} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"><ClipboardList className="h-4 w-4" /> View Resumes</button>
         </div>
+      </div>
       </div>
     </section>
   );

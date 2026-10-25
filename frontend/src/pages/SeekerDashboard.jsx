@@ -17,6 +17,7 @@ export default function SeekerDashboard() {
   const {
     profile,
     stats,
+    applications: dashboardApplications = [],
     recommendations = [],
     skillGaps = { userSkills: [], missingSkills: [] },
     isLoading,
@@ -48,7 +49,7 @@ export default function SeekerDashboard() {
     }
   ]);
 
-  const applications = stats?.applicationsList || [];
+  const applications = Array.isArray(dashboardApplications) ? dashboardApplications : [];
 
   const handleSendMessage = (e) => {
     e.preventDefault();
@@ -64,8 +65,8 @@ export default function SeekerDashboard() {
         {
           sender: 'ai',
           text: language === 'EN'
-            ? "I found 3 high-matching React jobs in Addis Ababa within your 25,000+ ETB salary range!"
-            : "በአዲስ አበባ ውስጥ ከ 25,000 ETB በላይ ደመወዝ ያላቸው 3 ለስራዎ ተስማሚ የሆኑ የ React ስራዎችን አግኝቻለሁ!"
+            ? `${recommendations.length} job matches are currently available based on your profile.`
+            : `በፕሮፋይልዎ መሠረት ${recommendations.length} የሥራ ተዛማጆች አሉ።`
         }
       ]);
     }, 1000);

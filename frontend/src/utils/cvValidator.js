@@ -1,27 +1,16 @@
-/**
- * Client-side CV Inspector / Validator
- */
-export const validateCvContent = async (file, firstName = '', lastName = '') => {
-  await new Promise((resolve) => setTimeout(resolve, 1500));
+const supportedCvExtensions = new Set(['.pdf', '.doc', '.docx']);
 
-  const fileName = file.name;
-  const fileSize = (file.size / 1024).toFixed(1) + ' KB';
-  
-  const techKeywords = ['JavaScript', 'React', 'Node.js', 'HTML', 'CSS', 'PHP', 'Python', 'SQL', 'Git', 'Tailwind CSS'];
-  const detectedSkills = techKeywords.filter(() => Math.random() > 0.3);
+export const validateCvContent = async (file) => {
+  if (!file || typeof file.name !== 'string' || !Number.isFinite(file.size)) {
+    throw new TypeError('A valid CV file is required.');
+  }
 
-  const mockEmail = `${firstName.toLowerCase() || 'candidate'}@example.com`;
-  const mockPhone = '+251 91 123 4567';
-
+  const extension = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+  const fileSize = `${(file.size / 1024).toFixed(1)} KB`;
   return {
-    fileName,
+    fileName: file.name,
     fileSize,
-    isValidCV: true,
-    details: {
-      name: { value: `${firstName} ${lastName}`.trim() || 'Candidate Name', status: 'valid' },
-      email: { value: mockEmail, status: 'valid' },
-      contact: { value: mockPhone, status: 'valid' },
-      skills: { value: detectedSkills, status: 'valid' }
-    }
+    isValidCV: file.size > 0 && supportedCvExtensions.has(extension),
+    details: {},
   };
 };

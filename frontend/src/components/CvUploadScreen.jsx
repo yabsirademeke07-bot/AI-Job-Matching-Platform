@@ -14,7 +14,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import cvImage from '../pages/image (4).png';
 import { useToast } from '../hooks/useToast.js';
-import { scrollToFeedback } from '../utils/scrollHelper.js';
+import { getPendingApplication } from '../utils/applicationFlow.js';
 
 const ALLOWED_EXTENSIONS = ['.pdf', '.docx', '.doc', '.txt', '.rtf', '.odt', '.png', '.jpg', '.jpeg', '.webp'];
 const ALLOWED_MIME_TYPES = [
@@ -69,9 +69,14 @@ const validateFile = (file) => {
   };
 };
 
+const API_BASE_URL = (import.meta.env.VITE_API_URL || import.meta.env.VITE_BACKEND_URL || '/api').replace(/\/$/, '');
+
 const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
   const navigate = useNavigate();
   const { showSuccess } = useToast();
+  const pendingApplication = getPendingApplication();
+  const hasPendingApplication = Boolean(pendingApplication?.jobId);
+  const targetJobId = new URLSearchParams(window.location.search).get('jobId') || pendingApplication?.jobId || '';
   const scrollCvFeedback = (type) => {
     window.setTimeout(() => {
       if (type === 'success') {
@@ -86,22 +91,19 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [toastError, setToastError] = useState('');
   const [validationNotice, setValidationNotice] = useState('');
   const [isInvalidFile, setIsInvalidFile] = useState(false);
 
   useEffect(() => {
-    if (!toastError && !validationNotice) return undefined;
+    if (!validationNotice) return undefined;
     const timer = window.setTimeout(() => {
-      setToastError('');
       setValidationNotice('');
     }, 10000);
     return () => window.clearTimeout(timer);
-  }, [toastError, validationNotice]);
+  }, [validationNotice]);
 
   const resetUploadState = () => {
     setFile(null);
-    setToastError('');
     setValidationNotice('');
     setIsInvalidFile(false);
     setUploadProgress(0);
@@ -110,17 +112,23 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
   };
 
   const runCVAnalysis = async (selectedFile) => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      scrollToFeedback('error');
-      return;
+    let token = null;
+    try {
+      token = localStorage.getItem('token');
+    } catch (storageError) {
+      console.warn('Unable to read the authentication token; continuing with local profile data:', storageError);
     }
-
     setIsUploading(true);
     setUploadProgress(0);
-    setToastError('');
     setValidationNotice('');
     setIsInvalidFile(false);
+
+    if (!token) {
+      setValidationNotice('Please sign in again before uploading your CV.');
+      setIsUploading(false);
+      scrollCvFeedback('error');
+      return;
+    }
 
     try {
       const formData = new FormData();
@@ -131,16 +139,19 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
         : `${selectedFile.name}${fallbackExtension}`;
       formData.append('cv', selectedFile, uploadName);
       if (user?.id) formData.append('userId', String(user.id));
+      if (targetJobId) formData.append('jobId', targetJobId);
 
       const xhr = new XMLHttpRequest();
       const uploadResult = await new Promise((resolve, reject) => {
-        xhr.open('POST', '/api/cv/upload-and-analyze');
+        xhr.open('POST', `${API_BASE_URL}/cv/upload`);
         xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+        xhr.timeout = 120000;
         xhr.upload.onprogress = (event) => {
           if (event.lengthComputable) setUploadProgress(Math.round((event.loaded / event.total) * 100));
         };
         xhr.onload = () => resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, body: xhr.responseText });
         xhr.onerror = () => reject(new Error('CV upload failed.'));
+        xhr.ontimeout = () => reject(new Error('CV analysis request timed out.'));
         xhr.send(formData);
       });
       let data = {};
@@ -155,31 +166,51 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
         throw uploadError;
       }
 
-      if (data.is_cv === false || data.data?.is_cv === false) {
-        showInvalidFileToast(data.message);
-        return;
+      const responseProfile = data.data || data.profile;
+      if (data.is_cv === false || responseProfile?.is_cv === false) {
+        throw new Error(data.message || INVALID_CV_MESSAGE);
+      }
+      const hasExtractedDetails = responseProfile && (
+        responseProfile.fullName || responseProfile.full_name || responseProfile.name ||
+        responseProfile.email || responseProfile.phone || responseProfile.headline ||
+        responseProfile.professional_title || responseProfile.skills?.length ||
+        responseProfile.education?.length || responseProfile.experience?.length
+      );
+      if (!data.success || !hasExtractedDetails) {
+        throw new Error(data.message || 'CV analysis response was incomplete.');
       }
 
-      if (data.success && data.data?.id) localStorage.setItem('lastAnalyzedCvId', String(data.data.id));
-      if (onUploadSuccess) onUploadSuccess(data.data || data);
-      else navigate('/cv-analysis', { state: { analysis: data.data } });
+      const analysisData = {
+        ...responseProfile,
+        atsScore: responseProfile.atsScore ?? data.atsScore,
+      };
+      if (analysisData.id) localStorage.setItem('lastAnalyzedCvId', String(analysisData.id));
+      const matchScore = analysisData.matchScore ?? analysisData.jobMatches?.[0]?.match_score;
+      try {
+        sessionStorage.setItem('extracted_cv_data', JSON.stringify(analysisData));
+        sessionStorage.setItem('candidate_profile', JSON.stringify(analysisData));
+        if (Number.isFinite(Number(matchScore))) {
+          sessionStorage.setItem('ats_score', String(matchScore));
+        } else {
+          sessionStorage.removeItem('ats_score');
+        }
+      } catch (storageError) {
+        console.warn('Unable to persist CV analysis for extraction review:', storageError);
+      }
+      if (onUploadSuccess) onUploadSuccess(analysisData);
+      const jobQuery = targetJobId ? `?jobId=${encodeURIComponent(targetJobId)}` : '';
+      navigate(`/cv-extraction${jobQuery}`, { state: { analysis: analysisData }, replace: true });
       showSuccess('✓ CV uploaded and analyzed successfully! Review your details below.');
       scrollCvFeedback('success');
     } catch (uploadError) {
-      if (uploadError.status === 422 || /invalid|does not contain|not a cv|resume\/cv/i.test(uploadError.message || '')) {
-        showInvalidFileToast(uploadError.message);
-      } else {
-        const message = uploadError.message || 'Unable to analyze your CV. Please try again.';
-        setToastError(message);
-        scrollCvFeedback('error');
-      }
+      setValidationNotice(uploadError?.message || 'Unable to analyze your CV. Please try uploading it again.');
+      scrollCvFeedback('error');
     } finally {
       setIsUploading(false);
     }
   };
 
   const handleFileSelect = (selectedFile) => {
-    setToastError('');
     setValidationNotice('');
     setIsInvalidFile(false);
     if (!selectedFile) return;
@@ -192,12 +223,6 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
     }
 
     setFile(selectedFile);
-  };
-
-  const showInvalidFileToast = (message) => {
-    setIsInvalidFile(true);
-    setToastError(message || INVALID_CV_MESSAGE);
-    scrollCvFeedback('error');
   };
 
   const handleDragOver = (event) => {
@@ -220,7 +245,11 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
   const handleContinue = async () => {
     if (!file || isInvalidFile) {
       setValidationNotice(
-        isInvalidFile ? 'Please replace this invalid document before continuing.' : 'Please upload your CV first, or skip this step for now using the button below.'
+        isInvalidFile
+          ? 'Please replace this invalid document before continuing.'
+          : hasPendingApplication
+            ? 'Upload your CV to continue with this application.'
+            : 'Please upload your CV first, or skip this step for now using the button below.'
       );
       scrollCvFeedback('error');
       return;
@@ -242,7 +271,7 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
 
     try {
       const token = localStorage.getItem('token');
-      await fetch('/api/seeker/onboarding-step', {
+      await fetch(`${API_BASE_URL}/seeker/onboarding-step`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -250,7 +279,7 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
         },
         body: JSON.stringify({ cv_skipped: true, cv_status: 'skipped', onboarding_step: 'personal_info', onboarding_step_completed: 'manual_profile' }),
       });
-      const status = await fetch('/api/seeker/profile-status', { headers: { Authorization: `Bearer ${token}` } });
+      const status = await fetch(`${API_BASE_URL}/seeker/profile-status`, { headers: { Authorization: `Bearer ${token}` } });
       const persisted = await status.json().catch(() => ({}));
       localStorage.setItem('user', JSON.stringify({ ...updatedUser, ...persisted }));
     } catch (err) {
@@ -289,7 +318,9 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
         </h2>
 
         <p className="mx-auto mt-4 max-w-xl text-sm leading-7 text-slate-600 sm:text-base">
-          Our AI analyzes your CV in seconds and helps match you with the most relevant job opportunities. If you do not have a CV ready yet, you can skip this step for now and continue to the next stage.
+          {hasPendingApplication
+            ? 'Upload your CV to continue. Our AI will analyze it and show how your experience matches this role.'
+            : 'Our AI analyzes your CV in seconds and helps match you with the most relevant job opportunities. If you do not have a CV ready yet, you can skip this step for now and continue to the next stage.'}
         </p>
 
         <input
@@ -399,33 +430,22 @@ const CvUploadScreen = ({ user, onUploadSuccess, onSkip }) => {
             )}
           </button>
 
-          <div>
-            <button
-              type="button"
-              disabled={isUploading}
-              onClick={handleSkipAction}
-              className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-slate-50 px-6 py-2.5 text-xs font-bold text-slate-600 transition-all hover:bg-slate-100 hover:text-slate-800 disabled:opacity-50 sm:text-sm"
-            >
-              Skip for now
-            </button>
-          </div>
+          {!hasPendingApplication && (
+            <div>
+              <button
+                type="button"
+                disabled={isUploading}
+                onClick={handleSkipAction}
+                className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-slate-50 px-6 py-2.5 text-xs font-bold text-slate-600 transition-all hover:bg-slate-100 hover:text-slate-800 disabled:opacity-50 sm:text-sm"
+              >
+                Skip for now
+              </button>
+            </div>
+          )}
         </div>
         </section>
       </div>
 
-      {toastError && (
-        <div className="fixed right-5 top-5 z-50 w-[calc(100%-2.5rem)] max-w-md animate-[slideIn_.25s_ease-out]" role="alert">
-          <div className="flex items-start gap-3 rounded-xl border border-red-300 border-l-4 border-l-red-500 bg-white p-4 shadow-xl">
-            <AlertCircle className="mt-0.5 h-6 w-6 shrink-0 text-red-500" />
-            <div className="flex-1">
-              <h4 className="text-sm font-bold text-slate-900">{isInvalidFile ? 'Invalid Document' : 'Upload Failed'}</h4>
-              <p className="mt-1 text-xs leading-5 text-slate-600">{toastError}</p>
-            </div>
-            <button type="button" onClick={() => setToastError('')} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Dismiss invalid document notification"><X className="h-4 w-4" /></button>
-          </div>
-          <div className="h-1 origin-left animate-[toastProgress_10s_linear] rounded-b-xl bg-red-500" />
-        </div>
-      )}
     </main>
   );
 };

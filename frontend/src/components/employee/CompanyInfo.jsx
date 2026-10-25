@@ -1,10 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import { useAuth } from '../../context/AuthContext.jsx';
 import { useToast } from '../../hooks/useToast.js';
 import { scrollToFeedback } from '../../utils/scrollHelper.js';
 import SearchableSelect from '../ui/SearchableSelect.jsx';
+import PhoneInputWithCountry from '../common/PhoneInputWithCountry.jsx';
+import { getPhoneParts, phoneCountries } from '../common/phoneCountries.js';
 
 const hiringVolumeOptions = ['1-5 Hires', '6-20 Hires', '20+ Scaled Hiring', 'Continuous Talent Pool'];
 const tradeLicenseKeywords = [
@@ -87,42 +90,8 @@ const isValidTin = (value) => {
   return /^\d{10}$/.test(tin) && !/^(\d)\1{9}$/.test(tin) && tin !== '1234567890';
 };
 
-const phoneCountries = [
-  { id: 'ET', flag: '🇪🇹', name: 'Ethiopia', dialCode: '+251', placeholder: '91 234 5678' },
-  { id: 'KE', flag: '🇰🇪', name: 'Kenya', dialCode: '+254', placeholder: '712 345 678' },
-  { id: 'RW', flag: '🇷🇼', name: 'Rwanda', dialCode: '+250', placeholder: '78 123 4567' },
-  { id: 'UG', flag: '🇺🇬', name: 'Uganda', dialCode: '+256', placeholder: '712 345678' },
-  { id: 'TZ', flag: '🇹🇿', name: 'Tanzania', dialCode: '+255', placeholder: '712 345 678' },
-  { id: 'DJ', flag: '🇩🇯', name: 'Djibouti', dialCode: '+253', placeholder: '77 12 34 56' },
-  { id: 'SO', flag: '🇸🇴', name: 'Somalia', dialCode: '+252', placeholder: '61 234 5678' },
-  { id: 'SD', flag: '🇸🇩', name: 'Sudan', dialCode: '+249', placeholder: '91 234 5678' },
-  { id: 'AE', flag: '🇦🇪', name: 'UAE', dialCode: '+971', placeholder: '50 123 4567' },
-  { id: 'SA', flag: '🇸🇦', name: 'Saudi Arabia', dialCode: '+966', placeholder: '50 123 4567' },
-  { id: 'US', flag: '🇺🇸', name: 'United States', dialCode: '+1', placeholder: '201 555 0123' },
-  { id: 'GB', flag: '🇬🇧', name: 'United Kingdom', dialCode: '+44', placeholder: '7400 123456' },
-  { id: 'CA', flag: '🇨🇦', name: 'Canada', dialCode: '+1', placeholder: '204 234 5678' },
-  { id: 'DE', flag: '🇩🇪', name: 'Germany', dialCode: '+49', placeholder: '1512 3456789' },
-  { id: 'ZA', flag: '🇿🇦', name: 'South Africa', dialCode: '+27', placeholder: '82 123 4567' },
-];
-const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition-all outline-none shadow-2xs';
-const labelClass = 'mb-1.5 block text-xs font-semibold text-slate-600 tracking-wide uppercase';
-
-const getPhoneParts = (number = '') => {
-  const digits = String(number || '').replace(/\D/g, '');
-  const country = [...phoneCountries]
-    .sort((left, right) => right.dialCode.length - left.dialCode.length)
-    .find((item) => digits.startsWith(item.dialCode.slice(1))) || phoneCountries[0];
-  let nationalNumber = country === phoneCountries[0] && !digits.startsWith(country.dialCode.slice(1))
-    ? digits.replace(/^0/, '')
-    : digits.slice(country.dialCode.length - 1);
-  return { country, nationalNumber: nationalNumber.slice(0, 12) };
-};
-
-const formatPhoneNumber = (countryId, nationalNumber) => {
-  const country = phoneCountries.find((item) => item.id === countryId) || phoneCountries[0];
-  const digits = String(nationalNumber || '').replace(/\D/g, '').slice(0, 12);
-  return digits ? `${country.dialCode}${digits}` : '';
-};
+const inputClass = 'h-14 w-full rounded-2xl border border-slate-300 bg-white px-5 py-3.5 pr-12 text-base font-normal text-slate-900 placeholder:text-sm placeholder:font-normal placeholder:text-slate-400 shadow-xs outline-none transition-all hover:border-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20';
+const labelClass = 'mb-3.5 block font-sans text-[18px] font-semibold tracking-tight text-slate-900';
 
 const formatFileSize = (bytes) => {
   const size = Number(bytes || 0);
@@ -131,10 +100,22 @@ const formatFileSize = (bytes) => {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 };
 
+const configuredApiBase = (
+  import.meta.env.VITE_BACKEND_URL
+  || import.meta.env.VITE_API_URL
+  || '/api'
+).replace(/\/+$/, '');
+const apiBaseUrl = configuredApiBase.endsWith('/api')
+  ? configuredApiBase
+  : `${configuredApiBase}/api`;
+const employerApiUrl = (path) => `${apiBaseUrl}/employer/${path}`;
+
 export default function CompanyInfo({ user, onComplete }) {
   const navigate = useNavigate();
+  const { token: sessionToken } = useAuth();
   const { showSuccess, showError } = useToast();
   const currentUser = user || JSON.parse(localStorage.getItem('user') || '{}');
+  const defaultCompanyName = 'Company';
   const [phoneCountryId, setPhoneCountryId] = useState(phoneCountries[0].id);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [tinTouched, setTinTouched] = useState(false);
@@ -145,7 +126,7 @@ export default function CompanyInfo({ user, onComplete }) {
     representative_title: '',
     work_email: '',
     phone: '',
-    company_name: '',
+    company_name: defaultCompanyName,
     industry: '',
     company_size: '',
     location: '',
@@ -176,6 +157,20 @@ export default function CompanyInfo({ user, onComplete }) {
   const [previewDocumentError, setPreviewDocumentError] = useState('');
   const [success, setSuccess] = useState('');
 
+  const getAuthorizationHeader = useCallback(() => {
+    const storedToken = sessionToken
+      || localStorage.getItem('token')
+      || sessionStorage.getItem('token')
+      || localStorage.getItem('authToken');
+    const normalizedToken = String(storedToken || '').replace(/^Bearer\s+/i, '').trim();
+    return normalizedToken ? `Bearer ${normalizedToken}` : '';
+  }, [sessionToken]);
+  const fetchWithAuthorization = useCallback((url, options = {}) => {
+    const headers = new Headers(options.headers || {});
+    headers.set('Authorization', getAuthorizationHeader());
+    return fetch(url, { ...options, headers });
+  }, [getAuthorizationHeader]);
+
   useEffect(() => {
     if (!previewDocumentUrl) return undefined;
     return () => URL.revokeObjectURL(previewDocumentUrl);
@@ -192,28 +187,45 @@ export default function CompanyInfo({ user, onComplete }) {
   }, []);
 
   useEffect(() => {
+    const activeToken = sessionToken
+      || localStorage.getItem('token')
+      || sessionStorage.getItem('token')
+      || localStorage.getItem('authToken');
+    if (activeToken && localStorage.getItem('token') !== activeToken) {
+      localStorage.setItem('token', activeToken.replace(/^Bearer\s+/i, '').trim());
+    }
+  }, [sessionToken]);
+
+  useEffect(() => {
     let cancelled = false;
     const loadProfile = async () => {
       try {
-        const response = await fetch('/api/employer/profile', {
-          headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
+        const response = await fetch(employerApiUrl('profile'), {
+          headers: { Authorization: getAuthorizationHeader() },
         });
         const data = await response.json().catch(() => ({}));
+        if (response.status === 401) {
+          setError('Your sign-in session has expired. Please sign in again before continuing with employer setup.');
+          return;
+        }
         if (!response.ok || !data.profile || cancelled) return;
         const profile = data.profile;
         const savedPhone = profile.phone || profile.phone_number || profile.phoneNumber;
         const savedPhoneParts = savedPhone ? getPhoneParts(savedPhone) : null;
         const savedIndustry = String(profile.industry || '').trim();
+        const savedCompanyName = String(profile.company_name || '').trim();
+        const generatedCompanyName = `${String(profile.representative_name || currentUser.full_name || currentUser.name || '').trim()}'s Company`;
         setForm((current) => ({
           ...current,
           representative_name: profile.representative_name || current.representative_name,
           representative_title: profile.representative_title || current.representative_title,
           work_email: profile.work_email || current.work_email,
-          company_name: profile.company_name || current.company_name,
+          company_name: savedCompanyName.toLowerCase() === generatedCompanyName.toLowerCase()
+            ? 'Company'
+            : savedCompanyName || current.company_name,
           industry: /^agriculture$/i.test(savedIndustry) ? '' : savedIndustry || current.industry,
           company_size: '',
           location: profile.location || current.location,
-          tin_number: profile.tin_number || profile.tinNumber || current.tin_number,
           tin_certificate_url: profile.tin_certificate_url || current.tin_certificate_url,
           tin_certificate_file_name: profile.tin_certificate_name || profile.tin_certificate_url?.split('/').pop() || current.tin_certificate_file_name,
           trade_license_number: profile.trade_license_number || profile.tradeLicenseNumber || profile.company_registration_number || current.trade_license_number,
@@ -237,6 +249,7 @@ export default function CompanyInfo({ user, onComplete }) {
         if (profile.employer_type === 'individual') setEmployerType('individual');
         if (savedPhoneParts) {
           setPhoneCountryId(savedPhoneParts.country.id);
+          setPhoneNumber(savedPhoneParts.nationalNumber);
         }
       } catch (loadError) {
         console.warn('Unable to hydrate company profile:', loadError);
@@ -244,11 +257,11 @@ export default function CompanyInfo({ user, onComplete }) {
     };
     loadProfile();
     return () => { cancelled = true; };
-  }, []);
+  }, [currentUser.full_name, currentUser.name, getAuthorizationHeader]);
 
   const update = (key, value) => {
     setForm((current) => ({ ...current, [key]: value }));
-    const errorKey = { representative_name: 'fullName', company_name: 'companyName', location: 'headquarters', tin_number: 'tinNumber', phone: 'phone' }[key] || key;
+    const errorKey = { representative_name: 'fullName', location: 'headquarters', tin_number: 'tinNumber', phone: 'phone' }[key] || key;
     setErrors((current) => {
       if (!current[errorKey]) return current;
       const next = { ...current };
@@ -298,7 +311,17 @@ export default function CompanyInfo({ user, onComplete }) {
       '.png': 'image/png',
     };
     const extension = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
-    if (file.size < 20 * 1024 || file.size > 10 * 1024 * 1024 || allowedTypes[extension] !== file.type) {
+    const mimeType = String(file.type || '').toLowerCase();
+    const isGenericMimeType = !mimeType || ['application/octet-stream', 'binary/octet-stream'].includes(mimeType);
+    const hasExpectedMimeType = allowedTypes[extension] === mimeType
+      || (['.jpg', '.jpeg'].includes(extension) && mimeType === 'image/jpg')
+      || (extension === '.pdf' && mimeType === 'application/x-pdf');
+    if (
+      file.size < 20 * 1024
+      || file.size > 10 * 1024 * 1024
+      || !allowedTypes[extension]
+      || (!isGenericMimeType && !hasExpectedMimeType)
+    ) {
       setErrors((current) => ({ ...current, tradeLicense: 'Please upload a valid document (PDF, PNG, or JPG between 20KB and 10MB).' }));
       return;
     }
@@ -355,7 +378,7 @@ export default function CompanyInfo({ user, onComplete }) {
     }
     if (!form.trade_license_url) return;
     try {
-      const response = await fetch(form.trade_license_url, {
+      const response = await fetchWithAuthorization(form.trade_license_url, {
         headers: { Authorization: `******'token') || ''}` },
       });
       if (!response.ok) throw new Error('Unable to load the uploaded document preview.');
@@ -369,14 +392,16 @@ export default function CompanyInfo({ user, onComplete }) {
     event.preventDefault();
     const newErrors = {};
     const tinNumber = String(form.tin_number || '').trim();
+    const phoneCountryCode = phoneCountries.find((country) => country.id === phoneCountryId)?.dialCode || phoneCountries[0].dialCode;
+    const nationalPhoneNumber = String(phoneNumber || '').replace(/\D/g, '');
+    const internationalPhoneNumber = nationalPhoneNumber ? `${phoneCountryCode}${nationalPhoneNumber}` : '';
     setTinTouched(true);
-    if (!String(form.phone || '').trim()) newErrors.phone = 'Phone number is required.';
-    if (!String(form.company_name || '').trim()) newErrors.companyName = employerType === 'individual' ? 'Household / Family Name is required.' : 'Company Name is required.';
+    if (!nationalPhoneNumber) newErrors.phone = 'Phone number is required.';
     if (!String(form.company_size || '').trim()) newErrors.company_size = employerType === 'individual' ? 'Household size is required.' : 'Company size is required.';
     if (employerType === 'company') {
       if (!isValidTin(tinNumber)) newErrors.tinNumber = TIN_ERROR_MESSAGE;
     }
-    if (!String(form.industry || '').trim()) newErrors.industry = 'Industry is required.';
+    if (!String(form.industry || '').trim()) newErrors.industry = 'Sector is required.';
     if (!String(form.location || '').trim()) newErrors.headquarters = 'Headquarters Location is required.';
     if (Object.keys(newErrors).length) {
       triggerValidationAlert('Please complete all highlighted required fields.', newErrors);
@@ -387,24 +412,29 @@ export default function CompanyInfo({ user, onComplete }) {
     setError('');
     setSuccess('');
     try {
-      const response = await fetch('/api/employer/profile', {
+      const organizationName = String(
+        form.company_name || (employerType === 'individual' ? 'Residence' : 'Company'),
+      ).trim();
+      const response = await fetch(employerApiUrl('profile'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+          Authorization: getAuthorizationHeader(),
         },
         body: JSON.stringify({
           ...form,
+          phone: internationalPhoneNumber,
+          company_name: organizationName,
           employer_type: employerType,
           employerType,
           fullName: form.representative_name,
           roleRelationship: form.representative_title,
-          householdName: form.company_name,
+          householdName: organizationName,
           householdMembers: form.company_size,
           residenceLocation: form.location,
           aboutHousehold: form.description,
-          phoneNumber,
-          phoneCountryCode: phoneCountries.find((country) => country.id === phoneCountryId)?.dialCode || phoneCountries[0].dialCode,
+          phoneNumber: nationalPhoneNumber,
+          phoneCountryCode,
           tinNumber: employerType === 'individual' ? null : tinNumber,
           tradeLicenseNumber: employerType === 'individual' ? null : form.trade_license_number,
           trade_license_number: employerType === 'individual' ? null : form.trade_license_number,
@@ -414,6 +444,9 @@ export default function CompanyInfo({ user, onComplete }) {
         }),
       });
       const data = await response.json().catch(() => ({}));
+      if (response.status === 401) {
+        throw new Error('Your sign-in session has expired. Please sign in again, then return to finish employer setup.');
+      }
       if (!response.ok || data.success !== true) throw new Error(data.message || data.error || 'Unable to save company profile.');
       let tinCertificateUrl = form.tin_certificate_url;
       let tradeLicenseUrl = form.trade_license_url;
@@ -424,12 +457,20 @@ export default function CompanyInfo({ user, onComplete }) {
       if (employerType === 'company' && form.tradeLicenseFile) {
         const documentBody = new FormData();
         documentBody.append('document', form.tradeLicenseFile);
-        const documentResponse = await fetch('/api/employer/profile/trade-license', {
+        const documentResponse = await fetchWithAuthorization(employerApiUrl('profile/trade-license'), {
           method: 'POST',
           headers: { Authorization: `******'token') || ''}` },
           body: documentBody,
         });
-        const documentData = await documentResponse.json().catch(() => ({}));
+        const documentContentType = documentResponse.headers.get('content-type') || '';
+        let documentData = {};
+        if (documentContentType.includes('application/json')) {
+          documentData = await documentResponse.json();
+        } else {
+          const responseText = (await documentResponse.text()).trim();
+          const responseDetail = responseText ? ` ${responseText.slice(0, 200)}` : '';
+          throw new Error(`Business document upload failed (HTTP ${documentResponse.status}).${responseDetail}`);
+        }
         if (!documentResponse.ok || documentData.success !== true) {
           throw new Error(documentData.message || 'Unable to upload the business document.');
         }
@@ -456,6 +497,7 @@ export default function CompanyInfo({ user, onComplete }) {
       }
       const savedForm = {
         ...form,
+        phone: internationalPhoneNumber,
         tin_certificate_url: employerType === 'individual' ? null : tinCertificateUrl,
         trade_license_url: employerType === 'individual' ? null : tradeLicenseUrl,
         trade_license_name: employerType === 'individual' ? null : tradeLicenseName,
@@ -501,16 +543,16 @@ export default function CompanyInfo({ user, onComplete }) {
   return (
     <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-slate-50/70 py-4 sm:py-8">
       <div className="mx-auto w-full max-w-5xl px-3 sm:px-4 lg:px-6">
-        <main className="mx-auto my-4 w-full max-w-5xl rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm sm:my-8 sm:p-6 lg:p-10">
+        <main className="mx-auto my-4 w-full max-w-5xl rounded-2xl border border-slate-200 bg-white p-4 text-left font-sans shadow-sm sm:my-8 sm:p-6 lg:p-10">
           <div className="w-full">
             <header className="mb-8">
-              <h2 className="mb-1.5 text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl lg:text-3xl">Employer Profile Setup</h2>
-              <p className="mb-8 text-sm text-slate-500">Add the essential information candidates need to understand your organization or household.</p>
+              <h2 className="mb-1.5 text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">Employer Profile Setup</h2>
+              <p className="mb-8 mt-2 max-w-2xl text-sm font-normal leading-relaxed text-slate-600 sm:text-base">Add the essential information candidates need to understand your organization or household.</p>
             </header>
 
             <div className="mb-8">
-              <label className="mb-2 block text-xs font-bold text-slate-700 sm:text-sm">
-                <span className={labelClass}>I am hiring as <span className="normal-case text-slate-400">*</span></span>
+              <label className={labelClass}>
+                I am hiring as <span className="ml-0.5 text-rose-500">*</span>
               </label>
               <div className="grid w-full max-w-md grid-cols-1 gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 sm:grid-cols-2">
                 <button type="button" onClick={() => changeEmployerType('company')} className={`min-h-11 rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors sm:px-4 ${employerType === 'company' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>
@@ -520,7 +562,7 @@ export default function CompanyInfo({ user, onComplete }) {
                   Individual / Household
                 </button>
               </div>
-              <p className="mt-1.5 text-[11px] font-normal text-slate-500">
+              <p className="mt-2.5 max-w-2xl text-sm font-medium leading-relaxed text-slate-600">
                 {employerType === 'company'
                   ? 'For corporate organizations, enterprises, and registered businesses.'
                   : 'For private employers hiring housekeepers, drivers, nannies, or home security.'}
@@ -541,70 +583,55 @@ export default function CompanyInfo({ user, onComplete }) {
 
             <form noValidate onSubmit={handleSave} className="space-y-7">
               <section>
-                <h3 className="mb-3.5 inline-block rounded-md border border-blue-100/60 bg-blue-50/70 px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-blue-700">Organization Details</h3>
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5">
-                  <Field id="companyName" label={employerType === 'individual' ? 'Household / Family Name *' : 'Company Name'} value={form.company_name} onChange={(value) => update('company_name', value)} required error={errors.companyName} placeholder={employerType === 'individual' ? "e.g. Yabsira's Residence" : ''} />
-                  <Field id="industry" label="Industry" select options={employerType === 'individual' ? householdIndustryOptions : industryOptions} value={form.industry} onChange={(value) => update('industry', value)} required error={errors.industry} placeholder="Select Industry..." />
-                  <Field id="companySize" label={employerType === 'individual' ? 'Household Members' : 'Company Size'} select options={employerType === 'individual' ? householdSizeOptions : companySizeOptions} value={form.company_size} onChange={(value) => update('company_size', value)} required error={errors.company_size} placeholder={employerType === 'individual' ? 'Select household size...' : 'Select Company Size...'} searchable={false} />
-                  <Field id="headquarters" label={employerType === 'individual' ? 'Residence Location / Neighborhood *' : 'Headquarters Location'} value={form.location} onChange={(value) => update('location', value)} required error={errors.headquarters} placeholder={employerType === 'individual' ? 'e.g. Addis Ababa, Bole' : 'e.g. Addis Ababa, Bole (Behind Edna Mall)'} />
+                <div className="my-6 flex justify-center">
+                  <h3 className="inline-flex items-center justify-center rounded-full border border-blue-200/80 bg-blue-50 px-4 py-1.5 text-xs font-bold tracking-wide text-blue-900 shadow-xs sm:text-sm">Organization Details</h3>
+                </div>
+                <div className="grid grid-cols-1 gap-x-4 gap-y-7 md:grid-cols-2 md:gap-x-5">
+                  <Field id="industry" label="Sector" select options={employerType === 'individual' ? householdIndustryOptions : industryOptions} value={form.industry} onChange={(value) => update('industry', value)} required error={errors.industry} placeholder="Select Sector..." />
+                  <Field id="companySize" label={employerType === 'individual' ? 'Household members' : 'Company size'} select options={employerType === 'individual' ? householdSizeOptions : companySizeOptions} value={form.company_size} onChange={(value) => update('company_size', value)} required error={errors.company_size} placeholder={employerType === 'individual' ? 'Select household size...' : 'Select Company Size...'} searchable={false} />
+                  <Field id="headquarters" label={employerType === 'individual' ? 'Residence location / Neighborhood' : 'Headquarters location'} value={form.location} onChange={(value) => update('location', value)} required error={errors.headquarters} placeholder={employerType === 'individual' ? 'e.g. Addis Ababa, Bole' : 'e.g. Addis Ababa, Bole (Behind Edna Mall)'} />
                   {employerType === 'company' && <>
-                    <Field label={<><span>Website</span> <span className="font-normal normal-case text-slate-400">(Optional)</span></>} type="url" value={form.website} onChange={(value) => update('website', value)} placeholder="https://example.com" />
-                    <Field label={<><span>Social Media</span> <span className="font-normal normal-case text-slate-400">(Optional)</span></>} type="url" value={form.linkedin} onChange={(value) => update('linkedin', value)} placeholder="https://linkedin.com/company/..." />
+                    <Field label={<><span>Website</span> <span className="ml-1.5 text-xs font-medium text-slate-500">(Optional)</span></>} type="url" value={form.website} onChange={(value) => update('website', value)} placeholder="https://example.com" />
+                    <Field label={<><span>Social Media</span> <span className="ml-1.5 text-xs font-medium text-slate-500">(Optional)</span></>} type="url" value={form.linkedin} onChange={(value) => update('linkedin', value)} placeholder="https://linkedin.com/company/..." />
                   </>}
                 </div>
               </section>
 
               <section>
-                <h3 className="mb-3.5 inline-block rounded-md border border-blue-100/60 bg-blue-50/70 px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-blue-700">Representative &amp; Contact</h3>
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5">
-                  <Field label={employerType === 'individual' ? <><span>Role / Relationship</span> <span className="ml-1 text-xs font-normal italic text-slate-400">(Optional)</span></> : 'Job Title / Position'} value={form.representative_title} onChange={(value) => update('representative_title', value)} placeholder={employerType === 'individual' ? 'e.g. Homeowner, Parent, Consultant' : 'Enter your role at the company (e.g. HR Manager, CEO)'} />
+                <div className="my-6 flex justify-center">
+                  <h3 className="inline-flex items-center justify-center rounded-full border border-blue-200/80 bg-blue-50 px-4 py-1.5 text-xs font-bold tracking-wide text-blue-900 shadow-xs sm:text-sm">Representative &amp; Contact</h3>
+                </div>
+                <div className="grid grid-cols-1 gap-x-4 gap-y-7 md:grid-cols-2 md:gap-x-5">
+                  <Field label={employerType === 'individual' ? <><span>Role / Relationship</span> <span className="ml-1.5 text-xs font-medium text-slate-500">(Optional)</span></> : 'Job Title / Position'} value={form.representative_title} onChange={(value) => update('representative_title', value)} placeholder={employerType === 'individual' ? 'e.g. Homeowner, Parent, Consultant' : 'Enter your role at the company (e.g. HR Manager, CEO)'} />
                   <Field label="Work Email" type="email" value={form.work_email} onChange={(value) => update('work_email', value)} placeholder="e.g. hr@company.com or careers@company.com" />
                   <div className="md:col-span-2">
                     <label className={labelClass}>Phone Number</label>
-                    <div className="mt-2 flex w-full flex-col items-stretch gap-2.5 sm:flex-row sm:items-center">
-                      <SearchableSelect
-                        aria-label="Country dialing code"
-                        value={phoneCountryId}
-                        options={phoneCountries.map((country) => ({
-                          value: country.id,
-                          label: `${country.flag} ${country.name} (${country.dialCode})`,
-                        }))}
-                        placeholder="Select country..."
-                        showIcons={false}
-                        onChange={(countryId) => {
-                          setPhoneCountryId(countryId);
-                          update('phone', formatPhoneNumber(countryId, phoneNumber));
-                        }}
-                        className="w-full shrink-0 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition-all focus:border-blue-600 focus:ring-2 focus:ring-blue-100 shadow-2xs sm:w-36 lg:w-40"
-                      />
-                      <input
-                          id="phone"
-                          required
-                          type="tel"
-                          inputMode="numeric"
-                          value={phoneNumber}
-                          onChange={(event) => {
-                            const digits = event.target.value.replace(/\D/g, '').slice(0, 12);
-                            setPhoneNumber(digits);
-                            update('phone', formatPhoneNumber(phoneCountryId, digits));
-                          }}
-                          maxLength={12}
-                          placeholder="Enter phone number"
-                          className={`w-full min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-100 transition-all outline-none shadow-2xs ${errors.phone ? 'border-rose-400 bg-rose-50/15 ring-1 ring-rose-400/20' : ''}`}
-                        />
-                    </div>
+                    <PhoneInputWithCountry
+                      id="phone"
+                      className="mt-3.5"
+                      countryCode={phoneCountries.find((country) => country.id === phoneCountryId)?.dialCode || phoneCountries[0].dialCode}
+                      phoneNumber={phoneNumber}
+                      error={Boolean(errors.phone)}
+                      onChange={({ countryCode, phoneNumber: nationalNumber, phone }) => {
+                        setPhoneCountryId(phoneCountries.find((country) => country.dialCode === countryCode)?.id || phoneCountries[0].id);
+                        setPhoneNumber(nationalNumber);
+                        update('phone', phone);
+                      }}
+                    />
                     {errors.phone && <InlineError message={errors.phone} />}
                   </div>
                 </div>
               </section>
 
               <section>
-                <h3 className="mb-3.5 inline-block rounded-md border border-blue-100/60 bg-blue-50/70 px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-blue-700">Legal &amp; Verification</h3>
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5">
+                <div className="my-6 flex justify-center">
+                  <h3 className="inline-flex items-center justify-center rounded-full border border-blue-200/80 bg-blue-50 px-4 py-1.5 text-xs font-bold tracking-wide text-blue-900 shadow-xs sm:text-sm">Legal &amp; Verification</h3>
+                </div>
+                <div className="grid grid-cols-1 gap-x-4 gap-y-7 md:grid-cols-2 md:gap-x-5">
                   {employerType === 'company' && <div>
                     <Field
                       id="tinNumber"
-                      label="Tax Identification Number (TIN) *"
+                      label={<>Tax Identification Number (TIN) <span className="text-rose-500">*</span></>}
                       value={form.tin_number}
                       onChange={(value) => {
                         setTinTouched(true);
@@ -612,20 +639,17 @@ export default function CompanyInfo({ user, onComplete }) {
                       }}
                       onBlur={() => setTinTouched(true)}
                       inputMode="numeric"
-                      placeholder="e.g. 0045812390"
+                      placeholder="Enter a valid TIN number"
                       maxLength={10}
                       error={tinTouched && !isValidTin(form.tin_number) ? TIN_ERROR_MESSAGE : ''}
                     />
-                    {isValidTin(form.tin_number) && (
-                      <p className="mt-1 text-xs font-semibold text-emerald-700" role="status">Valid 10-digit TIN</p>
-                    )}
                   </div>}
                   {employerType === 'company' && <div className="md:col-span-2">
-                    <Field id="tradeLicenseNumber" label="Trade License Number (Optional)" value={form.trade_license_number} onChange={(value) => update('trade_license_number', value)} placeholder="Enter the registered trade license number" />
+                    <Field id="tradeLicenseNumber" label={<>Trade License Number <span className="ml-1.5 text-xs font-medium text-slate-500">(Optional)</span></>} value={form.trade_license_number} onChange={(value) => update('trade_license_number', value)} placeholder="Enter the registered trade license number" />
                   </div>}
                   {employerType === 'company' && <div className="md:col-span-2">
                     <label className={labelClass}>
-                      Trade License / Registration Document (Optional)
+                      Trade License / Registration Document <span className="ml-1.5 text-xs font-medium text-slate-500">(Optional)</span>
                     </label>
                     <input
                       ref={tradeLicenseInputRef}
@@ -652,7 +676,7 @@ export default function CompanyInfo({ user, onComplete }) {
                               <p className="truncate text-sm font-bold text-slate-800">
                                 {form.tradeLicenseFile?.name || form.trade_license_name || form.tradeLicenseName || 'Business document'}
                               </p>
-                              <p className="mt-1 text-xs text-slate-500">
+                              <p className="mt-1 font-sans text-sm font-medium leading-relaxed text-slate-600">
                                 {formatFileSize(form.tradeLicenseFile?.size ?? form.trade_license_size_bytes)}
                                 {' · '}
                                 {form.trade_license_uploaded_at
@@ -676,7 +700,7 @@ export default function CompanyInfo({ user, onComplete }) {
                           )}
                         </div>
                         {tradeLicenseScanStatus === 'verified' && (
-                          <p className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800" role="status">
+                          <p className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 font-sans text-sm font-medium leading-relaxed text-emerald-800" role="status">
                             Official government business registration keywords detected.
                           </p>
                         )}
@@ -716,8 +740,8 @@ export default function CompanyInfo({ user, onComplete }) {
                       </div>
                     ) : (
                       <label htmlFor="trade-license-file" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); attachTradeLicense(event.dataTransfer.files?.[0]); }} className={`flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed bg-slate-50/70 p-6 transition-all hover:border-blue-400 hover:bg-slate-50 ${errors.tradeLicense ? 'border-rose-400 bg-rose-50/15' : 'border-slate-300'}`}>
-                        <p className="text-xs font-semibold text-slate-700 sm:text-sm">Click to upload or drag &amp; drop your document</p>
-                        <p className="mt-2 text-[11px] text-slate-400">PDF, JPG, or PNG · 20 KB–10 MB · Optional</p>
+                        <p className="font-sans text-sm font-medium leading-relaxed text-slate-600">Click to upload or drag &amp; drop your document</p>
+                        <p className="mt-2 font-sans text-sm font-medium leading-relaxed text-slate-600">PDF, JPG, or PNG · 20 KB–10 MB · Optional</p>
                       </label>
                     )}
                     {errors.tradeLicense && <InlineError message={errors.tradeLicense} />}
@@ -758,6 +782,7 @@ function Field({ id, label, value, onChange, type = 'text', select = false, opti
   return (
     <label className={`${labelClass} ${className}`}>
       {label}
+      {required && <span className="ml-0.5 font-normal text-rose-500">*</span>}
       {select ? (
         <SearchableSelect
           id={id}
@@ -767,9 +792,8 @@ function Field({ id, label, value, onChange, type = 'text', select = false, opti
           options={options}
           placeholder={placeholder || `Select ${String(label).toLowerCase()}...`}
           searchable={searchable}
-          showIcons={false}
           aria-invalid={Boolean(error)}
-          className={`mt-2 ${inputClass} ${errorClass}`}
+          className={`mt-3.5 ${inputClass} ${errorClass}`}
         />
       ) : (
         <input
@@ -783,7 +807,7 @@ function Field({ id, label, value, onChange, type = 'text', select = false, opti
           onChange={(event) => onChange?.(event.target.value)}
           onBlur={onBlur}
           placeholder={placeholder}
-          className={`mt-2 ${inputClass} ${errorClass}`}
+          className={`mt-3.5 ${inputClass} ${errorClass}`}
         />
       )}
       {error && <InlineError message={error} />}

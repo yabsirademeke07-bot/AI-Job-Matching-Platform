@@ -6,6 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
+    "migrate:messaging-receiver": "node database/migrateMessagingReceiver.js",
+    "migrate:sms-communications": "node database/migrateSmsCommunications.js",
     "migrate:cv-mime-type": "node database/migrateCvMimeType.js",
     "seed:employer-dashboard": "node database/seedEmployerDashboard.js"
   },

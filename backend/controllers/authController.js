@@ -1,9 +1,11 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const userModel = require('../models/userModel');
+const db = require('../config/db');
+const { getJwtSecret } = require('../config/jwt');
 
 function tokenFor(user) {
-  return jwt.sign({ id: user.id, email: user.email, role: user.role }, process.env.JWT_SECRET || 'your_secret_key', { expiresIn: '7d' });
+  return jwt.sign({ id: user.id, email: user.email, role: user.role }, getJwtSecret(), { expiresIn: '7d' });
 }
 
 async function register(req, res) {
@@ -26,6 +28,10 @@ async function login(req, res) {
   try {
     const user = await userModel.findByEmail(email.trim().toLowerCase());
     if (!user || !user.password || !(await bcrypt.compare(password, user.password))) return res.status(401).json({ success: false, message: 'Invalid email or password.' });
+    if (['admin', 'super_admin'].includes(user.role)) {
+      await db.execute("UPDATE users SET last_active_role = 'admin' WHERE id = ?", [user.id]);
+      user.last_active_role = 'admin';
+    }
     const { password: ignoredPassword, ...safeUser } = user;
     return res.json({ success: true, user: safeUser, token: tokenFor(user) });
   } catch (error) {

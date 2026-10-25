@@ -22,7 +22,13 @@ export default function SearchableSelect({
   const normalizedOptions = useMemo(() => options.map((option) => (
     typeof option === 'string'
       ? { value: option, label: option }
-      : { value: String(option.value), label: option.label }
+      : {
+        value: String(option.value),
+        label: option.label,
+        triggerLabel: option.triggerLabel,
+        iconSrc: option.iconSrc,
+        iconAlt: option.iconAlt,
+      }
   )), [options]);
   const selectedOption = normalizedOptions.find((option) => option.value === String(value ?? ''));
   const filteredOptions = normalizedOptions.filter((option) =>
@@ -79,8 +85,19 @@ export default function SearchableSelect({
         style={{ color: selectedOption ? '#0f172a' : '#94a3b8', fontWeight: selectedOption ? 500 : 400 }}
         className={`${className} flex items-center justify-between gap-2 text-left ${selectedOption ? 'font-medium text-slate-900' : 'font-normal text-slate-400'}`}
       >
-        <span className="truncate">{selectedOption?.label || placeholder}</span>
-        {showIcons && <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} aria-hidden="true" />}
+        <span className="flex min-w-0 items-center gap-2">
+          {selectedOption?.iconSrc && (
+            <img
+              src={selectedOption.iconSrc}
+              alt={selectedOption.iconAlt || ''}
+              aria-hidden={!selectedOption.iconAlt}
+              loading="lazy"
+              className="h-4 w-6 shrink-0 rounded-sm object-cover"
+            />
+          )}
+          <span className="truncate">{selectedOption?.triggerLabel || selectedOption?.label || placeholder}</span>
+        </span>
+        {showIcons && <ChevronDown className={`h-4 w-4 shrink-0 text-slate-600 transition-transform ${isOpen ? 'rotate-180' : ''}`} aria-hidden="true" />}
       </button>
       {isOpen && (
         <div className="absolute z-50 mt-2 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
@@ -96,7 +113,7 @@ export default function SearchableSelect({
                   placeholder={searchPlaceholder}
                   aria-label={searchPlaceholder}
                   style={{ border: 'none', outline: 'none', boxShadow: 'none' }}
-                  className="w-full bg-transparent border-0 outline-none ring-0 focus:outline-none focus:ring-0 focus:border-0 shadow-none text-sm text-slate-800 placeholder:text-slate-400"
+                  className="w-full bg-transparent border-0 outline-none ring-0 focus:outline-none focus:ring-0 focus:border-0 shadow-none text-sm font-normal text-slate-900 placeholder:text-slate-400"
                 />
               </div>
             </div>
@@ -109,7 +126,18 @@ export default function SearchableSelect({
                   onClick={() => selectOption(option)}
                   className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-left text-sm transition-colors hover:bg-blue-50 ${option.value === String(value ?? '') ? 'bg-blue-50 font-semibold text-blue-700' : 'text-slate-700'}`}
                 >
-                  <span>{option.label}</span>
+                  <span className="flex min-w-0 items-center gap-2">
+                    {option.iconSrc && (
+                      <img
+                        src={option.iconSrc}
+                        alt={option.iconAlt || ''}
+                        aria-hidden={!option.iconAlt}
+                        loading="lazy"
+                        className="h-4 w-6 shrink-0 rounded-sm object-cover"
+                      />
+                    )}
+                    <span className="truncate">{option.label}</span>
+                  </span>
                   {showIcons && option.value === String(value ?? '') && <Check className="h-4 w-4 shrink-0" aria-hidden="true" />}
                 </button>
               </li>

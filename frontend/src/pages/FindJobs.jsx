@@ -24,12 +24,21 @@ export default function FindJobs() {
   const [jobs, setJobs] = useState([]);
   const [savedJobs, setSavedJobs] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [toast, setToast] = useState('');
 
   useEffect(() => {
-    setSavedJobs(getSavedJobsState());
-  }, []);
+    let active = true;
+    if (!isAuthenticated) {
+      setSavedJobs([]);
+      return () => { active = false; };
+    }
+    getSavedJobsState()
+      .then((saved) => active && setSavedJobs(saved))
+      .catch((error) => active && setLoadError(error.response?.data?.message || 'Unable to load saved jobs.'));
+    return () => { active = false; };
+  }, [isAuthenticated]);
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -49,6 +58,7 @@ export default function FindJobs() {
 
   const runSearch = async (nextQuery = query, nextFilters = filters) => {
     setIsLoading(true);
+    setLoadError('');
     try {
       const result = await searchJobs({
         q: nextQuery,
@@ -61,6 +71,7 @@ export default function FindJobs() {
     } catch (error) {
       console.error('Failed to load jobs', error);
       setJobs([]);
+      setLoadError(error.response?.data?.message || 'Unable to load jobs. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -110,6 +121,7 @@ export default function FindJobs() {
   return (
     <div className="jobs-page min-h-screen bg-slate-50 px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl space-y-6">
+        {loadError && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{loadError}</p>}
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.14em] text-blue-600">Find jobs</p>

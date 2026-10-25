@@ -1,25 +1,23 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../hooks/useToast.js';
 import { scrollToFeedback } from '../utils/scrollHelper.js';
 import { clearUserWorkspace } from '../utils/authSession';
 import GoogleAuthButton from '../components/GoogleAuthButton';
-import { ShieldCheck, Lock, ArrowRight, Eye, EyeOff, User, Briefcase, RefreshCw, ArrowLeft } from 'lucide-react';
+import { ShieldCheck, Lock, ArrowRight, Eye, EyeOff, User, Briefcase } from 'lucide-react';
 import EmailInputWithDomains from '../components/EmailInputWithDomains';
 import logoImage from './images/logo1.png';
 import registrationImage from './images/images (3).jpg';
 
-const OTP_EXPIRY_SECONDS = 60;
-
 const Register = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { setSession } = useAuth();
+  const { setSession, logout } = useAuth();
   const { showSuccess, showError } = useToast();
 
-  // Multi-step Registration State: 1 = Form, 2 = OTP, 3 = Role
-  const [step, setStep] = useState(1);
+  // Role selection is handled by its own route after email verification.
+  const step = 1;
 
   // Form State (Phone Number Removed)
   const [formData, setFormData] = useState({
@@ -30,39 +28,15 @@ const Register = () => {
     role: '' // 'jobseeker' or 'employer'
   });
 
-  // OTP State
-  const [otp, setOtp] = useState(['', '', '', '', '', '']);
-  const [otpTimer, setOtpTimer] = useState(OTP_EXPIRY_SECONDS);
-  const canResendOtp = otpTimer === 0;
-
   // UI States
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState('');
-  const [apiSuccess, setApiSuccess] = useState(location.state?.message || '');
   const [emailSuggestion, setEmailSuggestion] = useState('');
-  const [emailDeliveryFailed, setEmailDeliveryFailed] = useState(false);
 
   const API_URL = import.meta.env.VITE_BACKEND_URL || '/api';
-
-  const formatOtpTime = (seconds) => {
-    const minutes = Math.floor(seconds / 60).toString().padStart(2, '0');
-    const remainingSeconds = (seconds % 60).toString().padStart(2, '0');
-    return `${minutes}:${remainingSeconds}`;
-  };
-
-  // OTP Countdown Timer Effect
-  useEffect(() => {
-    let timer;
-    if (step === 2 && otpTimer > 0) {
-      timer = setInterval(() => {
-        setOtpTimer((prev) => Math.max(0, prev - 1));
-      }, 1000);
-    }
-    return () => clearInterval(timer);
-  }, [step, otpTimer]);
 
   // Input Handlers
   const handleChange = (e) => {
@@ -75,26 +49,6 @@ const Register = () => {
     }
     if (errors[name]) setErrors((prev) => ({ ...prev, [name]: null }));
     if (apiError) setApiError('');
-  };
-
-  const handleOtpChange = (element, index) => {
-    if (isNaN(element.value)) return false;
-
-    const newOtp = [...otp];
-    newOtp[index] = element.value;
-    setOtp(newOtp);
-
-    // Auto-focus next input field
-    if (element.value !== '' && element.nextSibling) {
-      element.nextSibling.focus();
-    }
-  };
-
-  const handleOtpKeyDown = (e, index) => {
-    if (e.key === 'Backspace' && !otp[index] && index > 0) {
-      const prevInput = e.target.previousSibling;
-      if (prevInput) prevInput.focus();
-    }
   };
 
   // Form Validation
@@ -135,13 +89,12 @@ const Register = () => {
     return Object.keys(newErrors).length === 0;
   };
 
-  // STEP 1: Registration Submit & Send OTP
+  // Create the account and verify its email before role selection.
   const handleSubmitStep1 = async (e) => {
     e.preventDefault();
     if (!validateForm()) return;
 
     setApiError('');
-    setEmailDeliveryFailed(false);
     setIsLoading(true);
 
     try {
@@ -190,22 +143,23 @@ const Register = () => {
         throw new Error(Object.values(fieldErrors)[0] || data.message || data.error || `Unable to create your account (HTTP ${response.status}).`);
       }
 
-      const emailDeliveryFailed = data.emailDelivered === false;
+      if (!data.success) throw new Error(data.message || data.error || 'Unable to create your account.');
+      const email = formData.email.trim().toLowerCase();
+      logout();
+      clearUserWorkspace();
+      localStorage.setItem('pending_email', email);
       navigate('/verify-otp', {
+        replace: true,
         state: {
-          email: formData.email.trim().toLowerCase(),
-          role: data.role || formData.role || 'job_seeker',
+          email,
           purpose: 'registration',
-          ...(emailDeliveryFailed ? {
-            emailDeliveryError: data.emailError || data.message || 'Account created, but email delivery failed. Please check the email configuration and resend your verification code.',
-            devOtp: data.devOtp,
-          } : {}),
+          devOtp: data.devOtp || '',
+          emailDeliveryError: data.emailDelivered === false ? data.emailError : '',
         },
       });
-      if (!emailDeliveryFailed) {
-        showSuccess('Verification code sent successfully.');
+      if (data.emailDelivered !== false) {
+        showSuccess('Account created. Enter the verification code sent to your email.');
       }
-      return;
     } catch (error) {
       console.error('Registration Error:', error);
       const isNetworkError = error instanceof TypeError && /fetch|network|failed/i.test(error.message || '');
@@ -220,102 +174,7 @@ const Register = () => {
     }
   };
 
-  // Helper: Send OTP
-  const sendOtpRequest = async (email) => {
-    const response = await fetch(`${API_URL.replace(/\/$/, '')}/auth/resend-otp`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, purpose: 'registration' }),
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok || !data.success) {
-      throw new Error(data.message || data.error || 'Failed to send OTP.');
-    }
-    return data;
-  };
-
-  // STEP 2: Verify OTP
-  const handleVerifyOtp = async (e) => {
-    e.preventDefault();
-    const otpCode = otp.join('');
-    if (otpCode.length < 6) {
-      setApiError('Please enter the full 6-digit OTP code.');
-      return;
-    }
-
-    setIsLoading(true);
-    setApiError('');
-    setApiSuccess('');
-
-    try {
-      const response = await fetch(`${API_URL.replace(/\/$/, '')}/auth/verify-otp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: formData.email.trim(),
-          otp: otpCode,
-          role: formData.role,
-        }),
-      });
-
-      const data = await response.json().catch(() => ({}));
-
-      if (response.ok) {
-        if (!data.token || !data.user) throw new Error('Authentication response was incomplete.');
-        clearUserWorkspace();
-        const verifiedUser = {
-          ...data.user,
-          onboardingRoleSelected: false,
-          onboardingCvUploaded: false,
-          onboardingProfileCompleted: false,
-          is_verified: true,
-          otpVerified: true,
-        };
-        localStorage.setItem('token', data.token);
-        localStorage.setItem('user', JSON.stringify(verifiedUser));
-        localStorage.setItem('currentUser', JSON.stringify(verifiedUser));
-        setSession({ token: data.token, user: verifiedUser });
-        navigate('/select-role');
-      } else {
-        setApiError(data.message || data.error || 'Invalid or expired OTP code.');
-      }
-    } catch (err) {
-      console.error('OTP Verification Error:', err);
-      setApiError('Unable to verify the OTP. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Resend OTP
-  const handleResendOtp = async () => {
-    if (!canResendOtp) return;
-    setIsLoading(true);
-    setApiError('');
-    setApiSuccess('');
-    try {
-      const data = await sendOtpRequest(formData.email.trim());
-      setEmailDeliveryFailed(data.emailDelivered === false);
-      setOtpTimer(data.emailDelivered === false ? 0 : OTP_EXPIRY_SECONDS);
-      setOtp(['', '', '', '', '', '']);
-      if (data.emailDelivered === false) {
-        const fallbackCode = data.devOtp ? ` Development code: ${data.devOtp}` : '';
-        const deliveryMessage = `${data.emailError || data.message || 'Email delivery failed. Please check your email settings and try again.'}${fallbackCode}`;
-        setApiError(deliveryMessage);
-        showError(deliveryMessage);
-      } else {
-        showSuccess('A new verification code was sent to your email.');
-      }
-    } catch (error) {
-      setEmailDeliveryFailed(true);
-      setApiError(error.message || 'Email delivery failed. Please check your email settings and try again.');
-      showError(error.message || 'Email delivery failed. Please check your email settings and try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // STEP 3: Complete Registration with Selected Role
+  // Save the role and continue to the next onboarding screen.
   const handleSelectRole = async (selectedRole) => {
     setFormData((prev) => ({ ...prev, role: selectedRole }));
     setIsLoading(true);
@@ -323,22 +182,31 @@ const Register = () => {
 
     try {
       const normalizedRole = selectedRole === 'jobseeker' ? 'job_seeker' : selectedRole;
+      const currentUser = JSON.parse(localStorage.getItem('user') || 'null');
+      if (!currentUser?.id) throw new Error('Your new account session is missing. Please sign up again.');
       const roleResponse = await fetch(`${API_URL.replace(/\/$/, '')}/auth/select-role`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          fullName: formData.fullName.trim(),
-          email: formData.email.trim(),
-          password: formData.password,
+          userId: currentUser.id,
           role: normalizedRole,
         }),
       });
       const roleData = await roleResponse.json().catch(() => ({}));
       if (!roleResponse.ok || !roleData.user || !roleData.token) throw new Error(roleData.message || 'Unable to save role');
 
+      const roleUser = {
+        ...roleData.user,
+        userType: normalizedRole,
+        is_verified: true,
+        isEmailVerified: true,
+        onboardingRoleSelected: true,
+        onboardingCvUploaded: false,
+        onboardingProfileCompleted: false,
+      };
+      setSession({ token: roleData.token, user: roleUser });
       setFormData((prev) => ({ ...prev, role: normalizedRole }));
-      setStep(2);
-      setOtpTimer(600);
+      navigate(roleData.redirect_to || (normalizedRole === 'employer' ? '/employer/onboarding' : '/seeker/cv-upload'), { replace: true });
     } catch (err) {
       console.error('Registration error:', err);
       setApiError(err.message || 'Unable to create your account. Please try again.');
@@ -366,15 +234,14 @@ const Register = () => {
 
             <div className="flex items-center gap-1 px-2 py-1 md:px-2.5 md:py-1.5 rounded-full bg-white/15 border border-white/25 text-[11px] sm:text-xs text-white shadow-sm backdrop-blur-md">
               <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              <span>Step {step} of 3</span>
+              <span>Step {step} of 4</span>
             </div>
           </div>
 
           <div className="mt-10 mb-6 sm:mt-12 sm:mb-8 z-10">
             <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold text-white tracking-tight leading-snug mb-3">
               {step === 1 && <>Welcome to <br /><span className="text-white/80">AI Job Matching Platform</span></>}
-              {step === 2 && <>Verify Email <br /><span className="text-white/80">Security Check</span></>}
-              {step === 3 && <>Choose Role <br /><span className="text-white/80">Tailored Experience</span></>}
+              {step === 2 && <>Choose Role <br /><span className="text-white/80">Tailored Experience</span></>}
             </h1>
             <p className="text-slate-300 text-xs sm:text-sm leading-relaxed">
               {step === 1
@@ -385,9 +252,8 @@ const Register = () => {
           <img src={registrationImage} alt="Colleagues collaborating in a workplace" className="z-10 mt-6 min-h-[420px] w-full flex-1 rounded-xl object-cover object-center" />
         </div>
 
-        {/* RIGHT SIDE: Dynamic Form (Step 1, 2, 3) */}
+        {/* RIGHT SIDE: Dynamic Form */}
         <div className="md:col-span-7 bg-white p-6 sm:p-8 md:p-10 lg:p-12 flex flex-col justify-center relative min-h-full">
-
           {/* STEP 1: Registration Credentials Form */}
           {step === 1 && (
             <>
@@ -443,7 +309,7 @@ const Register = () => {
                       value={formData.password}
                       onChange={handleChange}
                       placeholder="At least 6 characters"
-                      className={`w-full text-base sm:text-lg pl-12 pr-12 py-5 rounded-xl border bg-slate-100 text-slate-900 font-semibold placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-500/10 transition-all ${errors.password ? 'border-red-500 bg-red-50/20' : 'border-slate-300 hover:border-slate-400'
+                      className={`signup-password-input w-full text-base sm:text-lg pl-12 pr-12 py-5 rounded-xl border bg-slate-100 text-slate-900 font-semibold placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-500/10 transition-all ${errors.password ? 'border-red-500 bg-red-50/20' : 'border-slate-300 hover:border-slate-400'
                         }`}
                     />
                     <button
@@ -470,7 +336,7 @@ const Register = () => {
                       value={formData.confirmPassword}
                       onChange={handleChange}
                       placeholder="Repeat password"
-                      className={`w-full text-base sm:text-lg pl-12 pr-12 py-5 rounded-xl border bg-slate-100 text-slate-900 font-semibold placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-500/10 transition-all ${errors.confirmPassword ? 'border-red-500 bg-red-50/20' : 'border-slate-300 hover:border-slate-400'
+                      className={`signup-password-input w-full text-base sm:text-lg pl-12 pr-12 py-5 rounded-xl border bg-slate-100 text-slate-900 font-semibold placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-500/10 transition-all ${errors.confirmPassword ? 'border-red-500 bg-red-50/20' : 'border-slate-300 hover:border-slate-400'
                         }`}
                     />
                     <button
@@ -494,7 +360,7 @@ const Register = () => {
                     <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   ) : (
                     <>
-                      <span>Continue to Verification</span>
+                      <span>Continue to Role Selection</span>
                       <ArrowRight className="w-5 h-5" />
                     </>
                   )}
@@ -516,76 +382,8 @@ const Register = () => {
             </>
           )}
 
-          {/* STEP 2: OTP Verification Form */}
+          {/* STEP 2: Role Selection */}
           {step === 2 && (
-            <div className="py-2">
-              <button
-                type="button"
-                onClick={() => setStep(1)}
-                className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-slate-800 mb-6 transition"
-              >
-                <ArrowLeft className="w-4 h-4" /> Back to details
-              </button>
-
-              <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">Enter Verification Code</h2>
-              <p className="text-xs sm:text-sm font-semibold text-slate-500 mt-1 mb-6">
-                {emailDeliveryFailed ? 'We could not send the code to ' : 'We sent a 6-digit code to '}
-                <span className="text-blue-600 font-bold">{formData.email}</span>
-                {emailDeliveryFailed ? '. Check the email service configuration, then resend your code.' : ''}
-              </p>
-
-              <form onSubmit={handleVerifyOtp} className="space-y-6">
-                <div className="flex items-center justify-between gap-2 max-w-sm mx-auto">
-                  {otp.map((data, index) => (
-                    <input
-                      key={index}
-                      type="text"
-                      maxLength="1"
-                      value={data}
-                      onChange={(e) => handleOtpChange(e.target, index)}
-                      onKeyDown={(e) => handleOtpKeyDown(e, index)}
-                      className="w-10 sm:w-12 h-12 sm:h-14 text-center font-bold text-lg sm:text-xl rounded-xl border border-slate-300 bg-slate-100 focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-500/10 transition outline-none"
-                    />
-                  ))}
-                </div>
-
-                <div className="text-center text-xs text-slate-500 font-semibold">
-                  {otpTimer > 0 ? (
-                    <p>Resend code in <span className="text-blue-600 font-bold">{formatOtpTime(otpTimer)}</span></p>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 text-red-600 font-bold italic">
-                      {emailDeliveryFailed ? 'No code received —' : 'OTP expired —'}
-                      <button
-                        type="button"
-                        onClick={handleResendOtp}
-                        disabled={isLoading}
-                        className="inline-flex items-center gap-1.5 text-red-600 hover:text-red-800 font-bold italic hover:underline cursor-pointer"
-                      >
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Resend OTP
-                      </button>
-                    </span>
-                  )}
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={isLoading || otpTimer === 0}
-                  className="w-full py-3.5 sm:py-4 px-6 brand-bg hover:opacity-90 text-white rounded-xl font-extrabold text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-3 transition shadow-lg shadow-[#56a2d8]/25 active:scale-[0.98] cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
-                >
-                  {isLoading ? (
-                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  ) : otpTimer === 0 ? (
-                    <span>OTP Expired</span>
-                  ) : (
-                    <span>Verify Code</span>
-                  )}
-                </button>
-              </form>
-            </div>
-          )}
-
-          {/* STEP 3: Role Selection */}
-          {step === 3 && (
             <div className="py-2">
               <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">Select Account Type</h2>
               <p className="text-xs sm:text-sm font-semibold text-slate-500 mt-1 mb-6">

@@ -1,7 +1,23 @@
 import axios from 'axios';
 
+const configuredBaseURL = import.meta.env.VITE_API_URL || import.meta.env.VITE_BACKEND_URL;
+const getApiBaseURL = (value) => {
+  if (!value) return '/api';
+  const baseURL = String(value).trim();
+  if (baseURL.startsWith('/')) return baseURL.replace(/\/+$/, '') || '/api';
+
+  try {
+    const parsedURL = new URL(baseURL);
+    if (!['http:', 'https:'].includes(parsedURL.protocol) || !parsedURL.host) throw new Error();
+    return baseURL.replace(/\/+$/, '');
+  } catch {
+    console.error('Invalid VITE_API_URL or VITE_BACKEND_URL. Using the same-origin /api endpoint instead.');
+    return '/api';
+  }
+};
+
 const API = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || import.meta.env.VITE_BACKEND_URL || '/api',
+  baseURL: getApiBaseURL(configuredBaseURL),
   timeout: 15000,
   headers: {
     'Content-Type': 'application/json',

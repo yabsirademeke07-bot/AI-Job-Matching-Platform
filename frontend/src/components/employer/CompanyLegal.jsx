@@ -1,6 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Building2, CheckCircle2, FileText, Globe2, MapPin, ShieldCheck, Sparkles, UploadCloud, UserRound } from 'lucide-react';
-import officeImage from '../../pages/images/images (4).jpg';
+import { useEffect, useRef, useState } from 'react';
+import {
+  Building2,
+  FileText,
+  Globe2,
+  Link2,
+  Mail,
+  MapPin,
+  Phone,
+  ShieldCheck,
+  UserRound,
+} from 'lucide-react';
 import api from '../../services/api';
 import { useToast } from '../../hooks/useToast.js';
 import SearchableSelect from '../ui/SearchableSelect.jsx';
@@ -92,21 +101,6 @@ export default function CompanyLegal({ company, onSaveSuccess }) {
   useEffect(() => {
     setFormData((current) => ({ ...current, phone: normalizePhoneNumber(phoneNumber) }));
   }, [phoneNumber]);
-
-  const completion = useMemo(() => {
-    const fields = [
-      formData.companyName,
-      formData.repFullName,
-      formData.workEmail,
-      formData.industry,
-      formData.hqLocation,
-      formData.website,
-      formData.companySummary,
-      formData.logoUrl,
-    ];
-    const filled = fields.filter((value) => String(value || '').trim()).length;
-    return Math.round((filled / fields.length) * 100);
-  }, [formData]);
 
   const update = (key, value) => {
     setFormData((current) => ({ ...current, [key]: value }));
@@ -241,7 +235,7 @@ export default function CompanyLegal({ company, onSaveSuccess }) {
     }, 700);
 
     return () => clearTimeout(timeoutId);
-  }, [formData.companyName, formData.repFullName, formData.workEmail, formData.industry, formData.hqLocation, formData.website, formData.companySummary, formData.phone, formData.companySize, formData.linkedin, formData.tinNumber, formData.companyRegistrationNumber, formData.logoUrl, formData.hiringVolume]);
+  }, [formData.companyName, formData.repFullName, formData.workEmail, formData.industry, formData.hqLocation, formData.website, formData.companySummary, formData.phone, formData.companySize, formData.linkedin, formData.tinNumber, formData.companyRegistrationNumber, formData.licenseDocumentUrl, formData.logoUrl, formData.hiringVolume]);
 
   const save = async (event) => {
     event.preventDefault();
@@ -250,161 +244,125 @@ export default function CompanyLegal({ company, onSaveSuccess }) {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-3 rounded-2xl border border-blue-100 bg-gradient-to-r from-blue-50 via-white to-indigo-50 p-5 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <p className="text-xs font-black uppercase tracking-[0.22em] text-blue-600">Company & Legal</p>
-          <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-900">Business profile</h2>
-        </div>
-        <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-100 px-3 py-1.5 text-xs font-bold text-emerald-700">
-          <ShieldCheck className="h-4 w-4" />
-          {formData.isVerified ? 'Verified business profile' : 'Verification in progress'}
-        </div>
-      </div>
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wider text-sky-600">Company &amp; Legal</p>
+            <h2 className="mt-1 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">Business Profile</h2>
+            <p className="mt-1 text-xs text-slate-500 sm:text-sm">Keep your company and verification details up to date.</p>
+          </div>
+          <div className={`inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold ${formData.isVerified ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
+            <ShieldCheck className="h-4 w-4" />
+            {formData.isVerified ? 'Verified business profile' : 'Verification in progress'}
+          </div>
+      </header>
 
-      <div className="grid gap-5 lg:grid-cols-12">
-        <form noValidate onSubmit={save} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6 lg:col-span-7">
-          <div className="grid gap-4 md:grid-cols-2">
-            <Field label="Position / title" value={formData.repPosition} onChange={(value) => update('repPosition', value)} />
-            <Field label="Business email" type="email" value={formData.workEmail} onChange={(value) => update('workEmail', value)} error={errors.workEmail} inputRef={(element) => { fieldRefs.current.workEmail = element; }} />
-            <div className="space-y-2">
-              <label className="block text-[11px] font-black uppercase tracking-[0.18em] text-slate-600">Phone number</label>
-              <div className="flex gap-2">
-                <select value={phoneOperator} onChange={(event) => setPhoneOperator(event.target.value)} className="h-11 min-w-[150px] rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10">
-                  <option value="ethio-telecom">Ethio Telecom</option>
-                  <option value="safaricom">Safaricom</option>
-                </select>
-                <input
-                  ref={(element) => { fieldRefs.current.phone = element; }}
-                  type="tel"
-                  inputMode="numeric"
-                  value={phoneNumber}
-                  onChange={(event) => {
-                    const digits = getLocalPhoneDigits(event.target.value).slice(0, 9);
-                    setPhoneNumber(digits);
-                    update('phone', normalizePhoneNumber(digits));
-                  }}
-                  className={`h-11 w-full rounded-xl border bg-slate-50 px-3 text-sm font-semibold text-slate-800 outline-none transition focus:ring-4 ${errors.phone ? 'border-rose-400 ring-1 ring-rose-400/20 bg-rose-50/10' : 'border-slate-200 focus:border-blue-500 focus:ring-blue-500/10'}`}
-                  placeholder="912345678"
-                />
-              </div>
-              {errors.phone && <ErrorMessage message={errors.phone} />}
-            </div>
+      <form noValidate onSubmit={save} className="space-y-4">
+        <ProfileCard icon={Building2} title="Company & Industry Details" description="Share the essential details about your business.">
+          <Field icon={Building2} label="Company legal name" required value={formData.companyName} onChange={(value) => update('companyName', value)} error={errors.companyName} inputRef={(element) => { fieldRefs.current.companyName = element; }} />
+          <Field icon={UserRound} label="Position / title" value={formData.repPosition} onChange={(value) => update('repPosition', value)} />
+          <Field icon={Building2} label="Primary industry" required value={formData.industry} onChange={(value) => update('industry', value)} error={errors.industry} inputRef={(element) => { fieldRefs.current.industry = element; }} />
+          <Field icon={Building2} label="Company size" select value={formData.companySize} onChange={(value) => update('companySize', value)} options={companySizeOptions} />
+          <Field icon={Globe2} label="Website" type="url" value={formData.website} onChange={(value) => update('website', value)} />
+          <Field icon={Link2} label="LinkedIn" type="url" value={formData.linkedin} onChange={(value) => update('linkedin', value)} />
+        </ProfileCard>
 
-            <Field label="Company Legal Name" required value={formData.companyName} onChange={(value) => update('companyName', value)} error={errors.companyName} inputRef={(element) => { fieldRefs.current.companyName = element; }} />
-            <Field label="Legal Representative" required value={formData.repFullName} onChange={(value) => update('repFullName', value)} error={errors.fullName} inputRef={(element) => { fieldRefs.current.fullName = element; }} />
-            <Field label="Primary industry" required value={formData.industry} onChange={(value) => update('industry', value)} error={errors.industry} inputRef={(element) => { fieldRefs.current.industry = element; }} />
-            <Field label="Company size" select value={formData.companySize} onChange={(value) => update('companySize', value)} options={companySizeOptions} />
-            <Field label="Headquarters / City" required value={formData.hqLocation} onChange={(value) => update('hqLocation', value)} error={errors.headquarters} inputRef={(element) => { fieldRefs.current.headquarters = element; }} />
-
-            <Field label="Website" type="url" value={formData.website} onChange={(value) => update('website', value)} />
-            <Field label="LinkedIn" type="url" value={formData.linkedin} onChange={(value) => update('linkedin', value)} />
-            <Field label="TIN / tax ID" required value={formData.tinNumber} onChange={(value) => update('tinNumber', value)} error={errors.tinNumber} inputRef={(element) => { fieldRefs.current.tinNumber = element; }} />
-            <Field label="Trade license number" required value={formData.companyRegistrationNumber} onChange={(value) => update('companyRegistrationNumber', value)} error={errors.tradeLicense} inputRef={(element) => { fieldRefs.current.tradeLicense = element; }} />
-
-            <div className="md:col-span-2">
-              <label className="block text-[11px] font-black uppercase tracking-[0.18em] text-slate-600">About company</label>
-              <textarea
-                rows={4}
-                value={formData.companySummary}
-                onChange={(event) => update('companySummary', event.target.value)}
-                className="mt-2 w-full resize-y rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm font-medium text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
-                placeholder="Describe your mission, products, or hiring focus..."
+        <ProfileCard icon={UserRound} title="Representative & Direct Contact" description="Provide the primary contact for employer verification.">
+          <Field icon={UserRound} label="Legal representative name" required value={formData.repFullName} onChange={(value) => update('repFullName', value)} error={errors.fullName} inputRef={(element) => { fieldRefs.current.fullName = element; }} />
+          <Field icon={Mail} label="Official business email" type="email" required value={formData.workEmail} onChange={(value) => update('workEmail', value)} error={errors.workEmail} inputRef={(element) => { fieldRefs.current.workEmail = element; }} />
+          <div>
+            <FieldLabel icon={Phone} label="Phone number" required />
+            <div className="flex gap-2">
+              <select aria-label="Phone carrier" value={phoneOperator} onChange={(event) => setPhoneOperator(event.target.value)} className="h-11 min-w-[140px] rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-400">
+                <option value="ethio-telecom">Ethio Telecom</option>
+                <option value="safaricom">Safaricom</option>
+              </select>
+              <input
+                ref={(element) => { fieldRefs.current.phone = element; }}
+                type="tel"
+                inputMode="numeric"
+                value={phoneNumber}
+                onChange={(event) => {
+                  const digits = getLocalPhoneDigits(event.target.value).slice(0, 9);
+                  setPhoneNumber(digits);
+                  update('phone', normalizePhoneNumber(digits));
+                }}
+                aria-invalid={Boolean(errors.phone)}
+                className={`h-11 w-full rounded-xl border bg-white px-3 text-sm font-medium text-slate-800 outline-none transition focus:ring-2 focus:ring-sky-400 focus:border-sky-400 ${errors.phone ? 'border-rose-400' : 'border-slate-200'}`}
+                placeholder="912345678"
               />
             </div>
-
-            <div className="md:col-span-2 grid gap-4 sm:grid-cols-2">
-              <Field label="Hiring volume" select value={formData.hiringVolume} onChange={(value) => update('hiringVolume', value)} options={hiringVolumeOptions} />
-              <Field label="License document URL" type="url" value={formData.licenseDocumentUrl} onChange={(value) => update('licenseDocumentUrl', value)} />
-            </div>
+            {errors.phone && <ErrorMessage message={errors.phone} />}
           </div>
+          <Field icon={MapPin} label="City / headquarters" required value={formData.hqLocation} onChange={(value) => update('hqLocation', value)} error={errors.headquarters} inputRef={(element) => { fieldRefs.current.headquarters = element; }} />
+        </ProfileCard>
 
-          <div className="mt-6 flex flex-col justify-between gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center">
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-500">
-              <Sparkles className="h-4 w-4 text-violet-500" />
-              Profile completeness: {completion}%
-            </div>
-            <button
-              type="submit"
-              disabled={saving}
-              className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-5 py-3 text-sm font-extrabold text-white shadow-lg shadow-blue-500/20 transition hover:bg-blue-700 disabled:opacity-60"
-            >
-              {saving ? 'Saving...' : 'Save & Update Profile'}
-            </button>
+        <ProfileCard icon={ShieldCheck} title="Trade License & Tax Verification" description="Add your official tax and registration details.">
+          <div>
+            <Field icon={ShieldCheck} label="TIN number" required value={formData.tinNumber} onChange={(value) => update('tinNumber', value)} error={errors.tinNumber} inputRef={(element) => { fieldRefs.current.tinNumber = element; }} />
+            <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-700"><ShieldCheck className="h-3 w-3" />Tax ID</span>
           </div>
-        </form>
+          <Field icon={FileText} label="Trade license number" required value={formData.companyRegistrationNumber} onChange={(value) => update('companyRegistrationNumber', value)} error={errors.tradeLicense} inputRef={(element) => { fieldRefs.current.tradeLicense = element; }} />
+          <Field icon={FileText} label="Document attachment URL" type="url" value={formData.licenseDocumentUrl} onChange={(value) => update('licenseDocumentUrl', value)} />
+        </ProfileCard>
 
-        <aside className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 text-white shadow-xl shadow-slate-900/10 lg:col-span-5">
-          <div className="relative h-44 w-full overflow-hidden sm:h-48">
-            <img src={officeImage} alt="Professional corporate office setting" className="h-full w-full object-cover object-top" />
-            <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 via-transparent to-transparent" />
-            <div className="absolute right-3 top-3 inline-flex items-center gap-2 rounded-full border border-emerald-400/40 bg-emerald-500/15 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-100 shadow-lg backdrop-blur-sm">
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              Verified Workspace
-            </div>
+        <ProfileCard icon={FileText} title="About Company Bio" description="A short introduction helps candidates understand your organization." columns={1}>
+          <div>
+            <FieldLabel icon={FileText} label="Company bio" />
+            <textarea
+              rows={4}
+              value={formData.companySummary}
+              onChange={(event) => update('companySummary', event.target.value)}
+              className="w-full resize-y rounded-xl border border-slate-200 bg-white p-3 text-sm font-medium text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-400"
+              placeholder="Tell candidates about your mission, products, and what makes your company a great place to work..."
+            />
+            <div className="mt-1 text-right text-xs text-slate-400">{formData.companySummary.length} characters</div>
           </div>
+        </ProfileCard>
 
-          <div className="space-y-3 p-5">
-            <div className="flex items-center gap-3">
-              <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-white/5 text-lg font-black text-white">
-                {formData.logoUrl ? (
-                  <img src={formData.logoUrl} alt="Company logo" className="h-full w-full object-cover" />
-                ) : (
-                  <span>{String(formData.companyName || 'C').slice(0, 1).toUpperCase()}</span>
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-lg font-black text-white">{formData.companyName || 'Your Company'}</p>
-                <p className="text-sm text-slate-300">{formData.industry || 'Industry not set'}</p>
-              </div>
-            </div>
-
-            <InfoRow icon={MapPin} label="HQ Location" value={formData.hqLocation || 'Add location'} />
-            <InfoRow icon={Globe2} label="Website" value={formData.website || 'Add website'} />
-
-            <div className="flex items-center gap-3 rounded-2xl bg-white/5 px-3 py-2.5">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-200">
-                <FileText className="h-4 w-4" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Registration & Legal</p>
-                <p className="truncate text-sm font-semibold text-white">
-                  {formData.isVerified ? 'Verified' : 'Pending'}
-                  {formData.tinNumber ? ` • TIN ${formData.tinNumber}` : ' • TIN not added'}
-                </p>
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-              <div className="mb-3 flex items-center justify-between text-sm font-semibold text-slate-200">
-                <span>Profile strength</span>
-                <span>{completion}%</span>
-              </div>
-              <div className="h-2.5 overflow-hidden rounded-full bg-white/10">
-                <div className="h-full rounded-full bg-gradient-to-r from-blue-400 to-cyan-400" style={{ width: `${completion}%` }} />
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 rounded-2xl bg-emerald-500/10 px-3 py-2 text-sm font-semibold text-emerald-300">
-              <CheckCircle2 className="h-4 w-4" />
-              {formData.isVerified ? 'Verified and ready for hiring' : 'Awaiting verification approval'}
-            </div>
-          </div>
-        </aside>
-      </div>
+        <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <Field label="Hiring volume" select value={formData.hiringVolume} onChange={(value) => update('hiringVolume', value)} options={hiringVolumeOptions} />
+          <button
+            type="submit"
+            disabled={saving}
+            className="inline-flex items-center justify-center rounded-xl bg-sky-500 px-7 py-3 text-sm font-bold text-white shadow-md shadow-sky-500/25 transition hover:bg-sky-600 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {saving ? 'Saving...' : 'Save & Update Profile'}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
 
-function Field({ label, value, onChange, type = 'text', required = false, select = false, options = [], error, inputRef }) {
+function ProfileCard({ icon: Icon, title, description, children, columns = 2 }) {
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+      <div className="mb-5 flex items-start gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-600"><Icon className="h-5 w-5" /></span>
+        <div><h3 className="text-sm font-bold text-slate-900 sm:text-base">{title}</h3><p className="mt-1 text-xs text-slate-500">{description}</p></div>
+      </div>
+      <div className={`grid gap-x-5 gap-y-4 ${columns === 1 ? 'grid-cols-1' : 'sm:grid-cols-2'}`}>{children}</div>
+    </section>
+  );
+}
+
+function FieldLabel({ icon: Icon, label, required }) {
+  return (
+    <span className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+      {Icon && <Icon className="h-3.5 w-3.5 text-slate-400" />}
+      {label}
+      {required && <span className="text-rose-500">*</span>}
+    </span>
+  );
+}
+
+function Field({ icon: Icon, label, value, onChange, type = 'text', required = false, select = false, options = [], error, inputRef }) {
   const safeValue = value ?? '';
-  const classes = `mt-2 h-11 w-full rounded-xl bg-slate-50 px-3 text-sm font-semibold text-slate-800 outline-none transition focus:ring-4 ${error ? 'border border-rose-300 bg-rose-50/10 ring-1 ring-rose-300/20' : 'border border-slate-200 focus:border-blue-500 focus:ring-blue-500/10'}`;
+  const classes = `h-11 w-full rounded-xl border bg-white px-3 text-sm font-medium text-slate-800 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-400 ${error ? 'border-rose-300 bg-rose-50/30' : 'border-slate-200'}`;
 
   return (
-    <label className="block text-sm font-semibold text-slate-700">
-      <span className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-600">
-        {label}
-        {required && <span className="ml-1 text-blue-600">*</span>}
-      </span>
+    <label className="block min-w-0">
+      <FieldLabel icon={Icon} label={label} required={required} />
       {select ? (
         <SearchableSelect
           value={safeValue}
@@ -415,7 +373,7 @@ function Field({ label, value, onChange, type = 'text', required = false, select
           className={classes}
         />
       ) : (
-        <input ref={inputRef} type={type} value={safeValue} onChange={(event) => onChange(event.target.value)} className={classes} />
+        <input ref={inputRef} type={type} value={safeValue} onChange={(event) => onChange(event.target.value)} className={classes} aria-invalid={Boolean(error)} />
       )}
       {error && <ErrorMessage message={error} />}
     </label>
@@ -428,19 +386,5 @@ function ErrorMessage({ message }) {
       <span className="text-xs text-rose-400" aria-hidden="true">⚠️</span>
       <span>{message}</span>
     </p>
-  );
-}
-
-function InfoRow({ icon: Icon, label, value }) {
-  return (
-    <div className="flex items-center gap-3 rounded-2xl bg-white/5 px-3 py-2.5">
-      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-500/10 text-blue-200">
-        <Icon className="h-4 w-4" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">{label}</p>
-        <p className="truncate text-sm font-semibold text-white">{value}</p>
-      </div>
-    </div>
   );
 }

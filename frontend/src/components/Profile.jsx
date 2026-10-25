@@ -1,72 +1,22 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CheckCircle2, Loader2 } from 'lucide-react';
+import { CheckCircle2, ChevronDown, Loader2, Search, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../hooks/useToast.js';
 import { notifyProfileUpdated } from '../utils/profileUpdateEvent';
 import { scrollToFeedback } from '../utils/scrollHelper.js';
 import SearchableSelect from './ui/SearchableSelect.jsx';
+import PhoneInputWithCountry from './common/PhoneInputWithCountry.jsx';
+import { formatPhoneNumber, getPhoneParts, phoneCountries } from './common/phoneCountries.js';
+import { ETHIOPIAN_SECTORS, SECTOR_SKILLS_MAP } from '../data/sectorsData.js';
+import SECTOR_SUB_SECTORS_MAP from '../data/subSectorsData.ts';
 
-const fieldClass = 'h-14 w-full rounded-xl border-[1.5px] border-slate-300 bg-slate-50/60 px-4 py-3.5 text-base font-medium leading-relaxed text-slate-900 not-italic placeholder:italic placeholder:font-normal placeholder:text-slate-400 dark:placeholder:text-slate-500 outline-none transition-all focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:placeholder:opacity-50';
-const labelClass = 'mb-3 block text-sm font-bold leading-relaxed text-slate-800';
-const jobCategories = [
-  'Agriculture',
-  'Architecture & Urban Planning',
-  'Beauty & Grooming',
-  'Brokerage & Case Closing',
-  'Chemical & Biomedical Engineering',
-  'Construction & Civil Engineering',
-  'Creative Art & Design',
-  'Customer Service & Care',
-  'Documentation & Writing',
-  'Event Management & Organization',
-  'Food & Drink Preparation / Service',
-  'Healthcare',
-  'Hospitality & Tourism',
-  'Human Resource & Talent Management',
-  'Information Technology',
-  'Installation & Maintenance',
-  'Janitorial & Office Services',
-  'Labor & Masonry',
-  'Logistics & Supply Chain',
-  'Mechanical & Electrical Engineering',
-  'Multimedia Content Production',
-  'Pharmaceutical',
-  'Psychiatry, Psychology & Social Work',
-  'Sales & Promotion',
-  'Secretarial & Office Management',
-  'Security & Safety',
-  'Retail & Office Support',
-  'Software Design & Development',
-  'Transportation & Delivery',
-  'Veterinary',
-  'Woodwork & Carpentry',
-  'Fashion / Clothing & Textile',
-  'Media & Entertainment',
-  'Environmental, Mining & Energy Engineering',
-  'Law & Legal Advocacy',
-  'Marketing',
-  'Journalism & Communication',
-  'Business Administration & Operations',
-  'Research Services',
-  'Data Science & Analytics',
-  'Teaching & Education',
-  'Tutoring, Training & Mentorship',
-  'Gardening & Landscaping',
-  'Horticulture',
-  'Livestock & Animal Husbandry',
-  'Manufacturing & Production',
-  'Purchasing & Procurement',
-  'Translation & Transcription',
-  'Accounting & Finance',
-  'Advisory & Consultancy',
-  'Aeronautics & Aerospace',
-];
+const fieldClass = 'profile-field-control h-14 w-full rounded-2xl border border-slate-300 bg-white px-5 py-3.5 text-base font-normal leading-relaxed text-slate-900 placeholder:text-sm placeholder:font-normal placeholder:text-slate-400 shadow-xs outline-none transition-all hover:border-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20';
+const labelClass = 'mb-3.5 block font-sans text-[18px] font-semibold tracking-tight text-slate-900';
 const experienceLevels = ['Entry level', 'Junior', 'Intermediate', 'Senior', 'Expert'];
 const workSetups = ['On-site', 'Remote', 'Hybrid', 'Any / Flexible'];
 const jobTypes = ['Full-time', 'Part-time', 'Freelance', 'Contractual', 'Volunteer', 'Intern (Paid)', 'Intern (Unpaid)'];
 const educationLevels = ['Primary School', 'Middle School', 'High School', 'Certificate', 'Tvet', 'Diploma', 'Bachelor’s Degree', 'Postgraduate Diploma', 'Master’s Degree', 'Phd'];
-const excludedProfileSkills = new Set(['javascript', 'python', 'java', 'sql', 'networking', 'communication']);
 const invalidJobTitleMessage = 'Please enter a valid, recognizable job title (e.g., Software Developer, Agronomist, Accountant)';
 
 const salaryRangePattern = /^([\d,]+)\s*-\s*([\d,]+)$/;
@@ -88,10 +38,16 @@ const normalizeList = (value, objectKeys = []) => {
   }).filter(Boolean);
 };
 
-const isValidEthiopianPhone = (value) => {
-  const digits = String(value || '').replace(/\D/g, '');
-  return /^(?:09\d{8}|07\d{8}|2519\d{8}|2517\d{8})$/.test(digits);
+const getPhoneNationalNumber = (phone, countryCode) => {
+  const digits = String(phone || '').replace(/\D/g, '');
+  const dialDigits = String(countryCode || '').replace(/\D/g, '');
+  const nationalNumber = dialDigits && digits.startsWith(dialDigits)
+    ? digits.slice(dialDigits.length)
+    : digits.replace(/^0/, '');
+  return nationalNumber.slice(0, 12);
 };
+
+const isValidPhone = (value) => /^\+[1-9]\d{6,14}$/.test(String(value || '').replace(/[\s()-]/g, ''));
 
 const cleanCvLocation = (value) => {
   const location = String(value || '').trim();
@@ -143,14 +99,18 @@ const validateProfile = (data) => {
   const phone = String(data.phone || '').replace(/[\s()-]/g, '');
   if (!phone) {
     errors.phone = 'Phone number is required.';
-  } else if (!/^\+?[0-9\s()-]+$/.test(phone) || !isValidEthiopianPhone(phone)) {
-    errors.phone = 'Please enter a valid Ethiopian phone number (e.g. 0952748973 or +251 952748973).';
+  } else if (!isValidPhone(phone)) {
+    errors.phone = 'Please enter a valid phone number with its selected country dial code.';
   }
 
   if (!String(data.city || '').trim()) errors.city = 'City or location is required.';
   if (!isRecognizableJobTitle(data.preferredJob)) errors.desiredPosition = invalidJobTitleMessage;
-  if (!Array.isArray(data.skills) || !data.skills.some((skill) => String(skill || '').trim())) errors.skills = 'Add at least one skill.';
-  if (!jobCategories.includes(data.jobCategory)) errors.jobCategory = 'Select a primary job category.';
+  const uniqueSkills = new Set((Array.isArray(data.skills) ? data.skills : [])
+    .map((skill) => String(skill || '').trim().toLowerCase())
+    .filter(Boolean));
+  if (uniqueSkills.size < 2) errors.skills = '⚠️ Add at least 2 skills.';
+  if (!ETHIOPIAN_SECTORS.includes(data.jobCategory)) errors.jobCategory = 'Select an industry / sector.';
+  if (data.jobCategory && (!data.subSectors || data.subSectors.length === 0)) errors.subSectors = 'Select at least one sub-sector / specialization.';
   if (!experienceLevels.includes(data.experienceLevel)) errors.experienceLevel = 'Select your experience level.';
   if (!workSetups.includes(data.preferredWorkSetup)) errors.workSetup = 'Select a work setup preference.';
   if (!jobTypes.includes(data.jobType)) errors.jobType = 'Select your job type.';
@@ -185,10 +145,22 @@ const Profile = ({ userData = {}, onContinue }) => {
   };
 
   const { savedProfile, savedUser, pendingCv } = getInitialState();
+  const initialPhone = pendingCv?.phone || savedProfile?.phone || savedUser?.phone || '';
+  const initialPhoneParts = getPhoneParts(initialPhone);
+  const initialCountryCodeCandidate = savedProfile?.country_code
+    || savedProfile?.countryCode
+    || savedUser?.country_code
+    || initialPhoneParts.country.dialCode;
+  const initialCountryCode = phoneCountries.some((country) => country.dialCode === initialCountryCodeCandidate)
+    ? initialCountryCodeCandidate
+    : initialPhoneParts.country.dialCode;
+  const initialPhoneNumber = String(savedProfile?.phone_number
+    || savedProfile?.phoneNumber
+    || getPhoneNationalNumber(initialPhone, initialCountryCode)).replace(/\D/g, '').slice(0, 12);
   const cvName = pendingCv?.fullName || pendingCv?.full_name || pendingCv?.name || [pendingCv?.firstName, pendingCv?.lastName].filter(Boolean).join(' ') || '';
   const cvNameParts = cvName.trim().split(/\s+/).filter(Boolean);
   const cvLocation = cleanCvLocation(pendingCv?.location).split(',').map((part) => part.trim()).filter(Boolean);
-  const cvSkills = Array.isArray(pendingCv?.skills) ? pendingCv.skills.map((skill) => typeof skill === 'string' ? skill : skill?.skill_name || skill?.name).filter(Boolean).filter((skill) => !excludedProfileSkills.has(skill.trim().toLowerCase())) : [];
+  const cvSkills = Array.isArray(pendingCv?.skills) ? pendingCv.skills.map((skill) => typeof skill === 'string' ? skill : skill?.skill_name || skill?.name).filter(Boolean) : [];
   const cvEducation = Array.isArray(pendingCv?.education) ? pendingCv.education.map((item, index) => ({ id: item.id || `cv-education-${index}`, university: item.school_name || item.institution || '', degree: item.degree || '', department: item.field_of_study || '', graduationYear: item.graduationYear || (item.end_date ? String(item.end_date).slice(0, 4) : '') })) : [];
   const cvExperience = Array.isArray(pendingCv?.experience) ? pendingCv.experience.map((item, index) => ({ id: item.id || `cv-experience-${index}`, company: item.company_name || item.company || '', position: item.job_title || item.role || '', startDate: item.start_date ? String(item.start_date).slice(0, 7) : '', endDate: item.end_date ? String(item.end_date).slice(0, 7) : (item.duration || ''), responsibilities: Array.isArray(item.responsibilities) ? item.responsibilities.join('\n') : item.description || '' })) : [];
 
@@ -201,7 +173,7 @@ const Profile = ({ userData = {}, onContinue }) => {
     (pendingCv ? cvExperience : savedProfile?.experience) || []
   );
 
-  const [skills, setSkills] = useState(pendingCv ? cvSkills : normalizeList(savedProfile?.skills, ['skill_name', 'name']).filter((skill) => !excludedProfileSkills.has(skill.toLowerCase())));
+  const [skills, setSkills] = useState(pendingCv ? cvSkills : normalizeList(savedProfile?.skills, ['skill_name', 'name']));
   const [newSkill, setNewSkill] = useState('');
 
   const [languages, setLanguages] = useState(normalizeList(savedProfile?.languages, ['language_name', 'language', 'name']));
@@ -211,6 +183,9 @@ const Profile = ({ userData = {}, onContinue }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
   const [errors, setErrors] = useState({});
+  const [subSectorDropdownOpen, setSubSectorDropdownOpen] = useState(false);
+  const [subSectorSearch, setSubSectorSearch] = useState('');
+  const subSectorDropdownRef = useRef(null);
 
   useEffect(() => {
     if (!Object.keys(errors).length) return undefined;
@@ -220,13 +195,30 @@ const Profile = ({ userData = {}, onContinue }) => {
     return () => window.clearTimeout(timer);
   }, [errors]);
 
+  useEffect(() => {
+    if (!subSectorDropdownOpen) return undefined;
+    const closeDropdown = (event) => {
+      if (event.key === 'Escape' || !subSectorDropdownRef.current?.contains(event.target)) {
+        setSubSectorDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', closeDropdown);
+    document.addEventListener('keydown', closeDropdown);
+    return () => {
+      document.removeEventListener('mousedown', closeDropdown);
+      document.removeEventListener('keydown', closeDropdown);
+    };
+  }, [subSectorDropdownOpen]);
+
   // Personal Profile Data State
   const [profileData, setProfileData] = useState({
     fullName: pendingCv ? cvName : (savedProfile?.fullName || userData?.fullName || savedUser?.full_name || ''),
     firstName: pendingCv ? pendingCv.firstName || pendingCv.first_name || cvNameParts[0] || '' : (savedProfile?.firstName || userData?.firstName || savedUser?.full_name?.split(' ')[0] || ''),
     lastName: pendingCv ? pendingCv.lastName || pendingCv.last_name || cvNameParts.slice(1).join(' ') : (savedProfile?.lastName || userData?.lastName || savedUser?.full_name?.split(' ').slice(1).join(' ') || ''),
     email: pendingCv?.email || savedProfile?.email || userData?.email || savedUser?.email || '',
-    phone: pendingCv?.phone || savedProfile?.phone || savedUser?.phone || '',
+    phone: formatPhoneNumber(initialCountryCode, initialPhoneNumber),
+    country_code: initialCountryCode,
+    phone_number: initialPhoneNumber,
     dob: savedProfile?.dob || '',
     gender: savedProfile?.gender || '',
     country: pendingCv ? cvLocation[1] || '' : (savedProfile?.country || 'Ethiopia'),
@@ -235,6 +227,7 @@ const Profile = ({ userData = {}, onContinue }) => {
     linkedin: savedProfile?.linkedin || '',
     portfolio: savedProfile?.portfolio || '',
     jobCategory: savedProfile?.jobCategory || '',
+    subSectors: normalizeList(savedProfile?.subSectors, ['sub_sector', 'name']).slice(0, 4),
     preferredJob: cleanDesiredJobTitle(savedProfile?.preferredJob) || cleanDesiredJobTitle(userData?.preferredJob) || '',
     employmentType: savedProfile?.employmentType || '',
     jobType: savedProfile?.jobType || savedProfile?.preferred_job_type || savedProfile?.employmentType || '',
@@ -256,6 +249,13 @@ const Profile = ({ userData = {}, onContinue }) => {
       .then((result) => {
         if (!active || !result?.profile) return;
         const saved = result.profile;
+        const savedPhone = saved.phone || savedUser.phone || '';
+        const savedPhoneParts = getPhoneParts(savedPhone);
+        const countryCodeCandidate = saved.country_code || saved.countryCode || savedPhoneParts.country.dialCode;
+        const countryCode = phoneCountries.some((country) => country.dialCode === countryCodeCandidate)
+          ? countryCodeCandidate
+          : savedPhoneParts.country.dialCode;
+        const phoneNumber = String(saved.phone_number || saved.phoneNumber || getPhoneNationalNumber(savedPhone, countryCode)).replace(/\D/g, '').slice(0, 12);
         const parseJson = (value, fallback) => {
           if (Array.isArray(value)) return value;
           try { return value ? JSON.parse(value) : fallback; } catch { return fallback; }
@@ -264,7 +264,9 @@ const Profile = ({ userData = {}, onContinue }) => {
           ...current,
           fullName: saved.full_name || current.fullName,
           email: saved.email || current.email,
-          phone: saved.phone || current.phone,
+          phone: formatPhoneNumber(countryCode, phoneNumber) || current.phone,
+          country_code: countryCode,
+          phone_number: phoneNumber,
           preferredJob: cleanDesiredJobTitle(saved.headline) || cleanDesiredJobTitle(current.preferredJob),
           jobCategory: saved.job_category || current.jobCategory,
           experienceLevel: saved.experience_level || current.experienceLevel,
@@ -282,14 +284,14 @@ const Profile = ({ userData = {}, onContinue }) => {
         const savedLanguages = parseJson(saved.languages, result.languages);
         if (Array.isArray(savedEducation)) setEducationList(savedEducation);
         if (Array.isArray(savedExperience)) setExperienceList(savedExperience);
-        setSkills(normalizeList(savedSkills, ['skill_name', 'name']).filter((skill) => !excludedProfileSkills.has(skill.toLowerCase())));
+        setSkills(normalizeList(savedSkills, ['skill_name', 'name']));
         setLanguages(normalizeList(savedLanguages, ['language_name', 'language', 'name']));
         localStorage.setItem('userProfile', JSON.stringify({ ...JSON.parse(localStorage.getItem('userProfile') || '{}'), ...saved }));
       })
       .catch(() => {})
       .finally(() => {});
     return () => { active = false; };
-  }, []);
+  }, [savedUser.phone]);
 
   const updateProfileField = (field, value) => {
     const nextValue = field === 'preferredJob' ? cleanDesiredJobTitle(value) : value;
@@ -308,6 +310,15 @@ const Profile = ({ userData = {}, onContinue }) => {
       delete next[errorField];
       return next;
     });
+  };
+
+  const handleJobCategoryChange = (value) => {
+    if (value !== profileData.jobCategory) {
+      updateProfileField('subSectors', []);
+      setSubSectorSearch('');
+      setSubSectorDropdownOpen(false);
+    }
+    updateProfileField('jobCategory', value);
   };
 
   const validateField = (field) => {
@@ -347,6 +358,7 @@ const Profile = ({ userData = {}, onContinue }) => {
       profileData.city,
       profileData.preferredJob,
       profileData.jobCategory,
+      profileData.subSectors && profileData.subSectors.length > 0,
       profileData.experienceLevel,
       profileData.preferredWorkSetup,
       profileData.jobType,
@@ -362,6 +374,9 @@ const Profile = ({ userData = {}, onContinue }) => {
     const completed = fields.filter(Boolean).length;
     return Math.round((completed / fields.length) * 100);
   }, [profileData, educationList, experienceList, languages, skills.length]);
+  const suggestedSkills = SECTOR_SKILLS_MAP[profileData.jobCategory] || [];
+  const filteredSubSectors = (SECTOR_SUB_SECTORS_MAP[profileData.jobCategory] || [])
+    .filter((subSector) => subSector.toLowerCase().includes(subSectorSearch.trim().toLowerCase()));
 
   // Handlers for Experience
   const handleAddExperience = () => {
@@ -380,11 +395,18 @@ const Profile = ({ userData = {}, onContinue }) => {
   };
 
   // Handlers for Skills & Languages
-  const handleAddSkill = () => {
-    const skill = newSkill.trim();
-    if (!skill) return;
-    if (!skills.some((currentSkill) => currentSkill.toLowerCase() === skill.toLowerCase())) setSkills((current) => [...current, skill]);
-    setNewSkill('');
+  const addSkills = (skillsToAdd) => {
+    setSkills((current) => {
+      const nextSkills = [...current];
+      const seen = new Set(current.map((skill) => skill.toLowerCase()));
+      skillsToAdd.map((skill) => skill.trim()).filter(Boolean).forEach((skill) => {
+        if (!seen.has(skill.toLowerCase())) {
+          seen.add(skill.toLowerCase());
+          nextSkills.push(skill);
+        }
+      });
+      return nextSkills;
+    });
     setErrors((current) => {
       const next = { ...current };
       delete next.skills;
@@ -392,8 +414,23 @@ const Profile = ({ userData = {}, onContinue }) => {
     });
   };
 
+  const handleAddSkill = () => {
+    addSkills(newSkill.split(','));
+    setNewSkill('');
+  };
+
+  const handleSkillInputChange = (value) => {
+    const parts = value.split(',');
+    if (parts.length > 1) {
+      addSkills(parts.slice(0, -1));
+      setNewSkill(parts[parts.length - 1].trimStart());
+      return;
+    }
+    setNewSkill(value);
+  };
+
   const handleRemoveSkill = (skillToRemove) => {
-    setSkills(skills.filter((skill) => skill !== skillToRemove));
+    setSkills((current) => current.filter((skill) => skill !== skillToRemove));
   };
 
   const handleAddLanguage = () => {
@@ -423,6 +460,7 @@ const Profile = ({ userData = {}, onContinue }) => {
     setErrors({});
     const fullProfile = {
       ...profileData,
+      phone: formatPhoneNumber(profileData.country_code, profileData.phone_number),
       verified: true,
       userId: user?.id || user?.userId || user?.user_id || JSON.parse(localStorage.getItem('user') || '{}')?.id || JSON.parse(localStorage.getItem('user') || '{}')?.userId,
       fullName: String(profileData.fullName || '').trim(),
@@ -504,10 +542,10 @@ const Profile = ({ userData = {}, onContinue }) => {
 
   return (
     <div className="min-h-screen min-w-0 overflow-x-hidden bg-[#f8fbfd] text-slate-900 dark:bg-[#f8fbfd]">
-      <main className="information-page profile-readable mx-auto min-w-0 w-full max-w-6xl space-y-7 overflow-x-hidden px-5 py-10 pb-12 leading-relaxed sm:px-8 lg:px-10">
+      <main className="information-page profile-readable mx-auto min-w-0 w-full max-w-6xl space-y-7 overflow-x-hidden px-5 py-10 pb-12 font-sans leading-relaxed sm:px-8 lg:px-10">
         <header className="space-y-3 text-center">
-          <h1 className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">Personal Profile Setup</h1>
-          <p className="mx-auto max-w-xl text-sm font-medium leading-6 text-slate-600 sm:text-base">
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">Personal Profile Setup</h1>
+          <p className="mx-auto mt-2 max-w-2xl text-sm font-normal leading-relaxed text-slate-600 sm:text-base">
             Add your experience and preferences so we can find roles that fit your strengths.
           </p>
         </header>
@@ -515,12 +553,12 @@ const Profile = ({ userData = {}, onContinue }) => {
         {isSaved && <div id="success-banner" role="status" className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-bold text-emerald-700"><CheckCircle2 className="h-5 w-5" />your profile saved succussfuly</div>}
 
       {/* Personal Information */}
-      <div className="space-y-6 rounded-3xl border border-slate-200/80 bg-white p-6 shadow-xl transition-shadow duration-300 hover:shadow-2xl dark:border-slate-800 dark:bg-white sm:p-10">
-        <div className="flex flex-col items-center border-b-2 border-slate-300 pb-4 text-center">
-          <h3 className="text-lg font-bold text-slate-800">Personal Information</h3>
+      <div className="space-y-6 rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm sm:p-10">
+        <div className="my-6 flex justify-center">
+          <h3 className="inline-flex items-center justify-center rounded-full border border-blue-200/80 bg-blue-50 px-4 py-1.5 text-xs font-bold tracking-wide text-blue-900 shadow-xs sm:text-sm">Personal Information</h3>
         </div>
 
-        <div className="grid grid-cols-1 gap-6 text-sm md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-x-5 gap-y-7 text-sm md:grid-cols-2">
           <div className="md:col-span-2">
             <label className={labelClass}>Full Name</label>
             <input data-profile-field="fullName" aria-invalid={Boolean(errors.fullName)} type="text" placeholder="Your full name" value={profileData.fullName} onChange={(e) => updateProfileField('fullName', e.target.value)} onBlur={() => validateField('fullName')} className={inputClass('fullName')} />
@@ -551,16 +589,22 @@ const Profile = ({ userData = {}, onContinue }) => {
 
           <div>
             <label className={labelClass}>Phone Number</label>
-            <div>
-              <input data-profile-field="phone"
-                type="text" aria-invalid={Boolean(errors.phone)}
-                placeholder="+251 9XX XXX XXX"
-                value={profileData.phone} 
-                onChange={(e) => updateProfileField('phone', e.target.value)}
-                className={inputClass('phone')}
-                onBlur={() => validateField('phone')}
-              />
-            </div>
+            <PhoneInputWithCountry
+              id="phone"
+              countryCode={profileData.country_code}
+              phoneNumber={profileData.phone_number}
+              error={Boolean(errors.phone)}
+              onChange={({ countryCode, phoneNumber, phone }) => {
+                setProfileData((current) => ({
+                  ...current,
+                  country_code: countryCode,
+                  phone_number: phoneNumber,
+                  phone,
+                }));
+                setErrors((current) => ({ ...current, phone: undefined }));
+              }}
+              onBlur={() => validateField('phone')}
+            />
             {errors.phone && (
               <p className="text-xs text-rose-600 font-medium mt-1.5 flex items-center gap-1">
                 <span>⚠️</span>
@@ -570,7 +614,7 @@ const Profile = ({ userData = {}, onContinue }) => {
           </div>
 
           <div className="hidden">
-            <label className={labelClass}>Date of Birth <span className="italic font-normal text-slate-500">(Optional)</span></label>
+            <label className={labelClass}>Date of Birth <span className="ml-1.5 text-xs font-medium text-slate-500">(Optional)</span></label>
             <input 
               type="date" 
               value={profileData.dob} 
@@ -580,7 +624,7 @@ const Profile = ({ userData = {}, onContinue }) => {
           </div>
 
           <div className="hidden">
-            <label className={labelClass}>Gender <span className="italic font-normal text-slate-500">(Optional)</span></label>
+            <label className={labelClass}>Gender <span className="ml-1.5 text-xs font-medium text-slate-500">(Optional)</span></label>
             <SearchableSelect
               value={profileData.gender}
               onChange={(value) => setProfileData({ ...profileData, gender: value })}
@@ -597,21 +641,107 @@ const Profile = ({ userData = {}, onContinue }) => {
           </div>
         </div>
 
-      <div className="space-y-6 rounded-2xl p-5 sm:ml-4 sm:p-7">
-        <div className="border-b border-slate-200 pb-3 text-center">
-          <h3 className="text-lg font-bold text-slate-800">Job Preferences</h3>
-          <p className="mt-1 text-sm text-slate-500">These details help us calculate accurate job matches.</p>
+      <div className="space-y-6 rounded-2xl border border-slate-200 bg-slate-50/70 p-5 sm:ml-4 sm:p-7">
+        <div className="text-center">
+          <div className="my-6 flex justify-center">
+            <h3 className="inline-flex items-center justify-center rounded-full border border-blue-200/80 bg-blue-50 px-4 py-1.5 text-xs font-bold tracking-wide text-blue-900 shadow-xs sm:text-sm">Job Preferences</h3>
+          </div>
+          <p className="mt-2 max-w-2xl text-sm font-normal leading-relaxed text-slate-600 sm:text-base">These details help us calculate accurate job matches.</p>
         </div>
-        <div className="grid grid-cols-1 gap-6 text-sm md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-x-5 gap-y-7 text-sm md:grid-cols-2">
+          <div>
+            <label className={labelClass}>Industry / Sector</label>
+            <SearchableSelect data-profile-field="jobCategory" aria-invalid={Boolean(errors.jobCategory)} value={profileData.jobCategory} onChange={handleJobCategoryChange} onBlur={() => validateField('jobCategory')} options={ETHIOPIAN_SECTORS} placeholder="Select an industry / sector" className={`${inputClass('jobCategory')} profile-job-preference-select !text-sm`} />
+            <FieldError message={errors.jobCategory} />
+          </div>
+          <div className={`relative ${subSectorDropdownOpen ? 'z-50' : ''}`} ref={subSectorDropdownRef}>
+            <label className={labelClass}>Specialization / Sub-sectors (Select up to 4)</label>
+            <div className="relative">
+              <button
+                type="button"
+                data-profile-field="subSectors"
+                aria-invalid={Boolean(errors.subSectors)}
+                aria-expanded={subSectorDropdownOpen}
+                aria-haspopup="listbox"
+                disabled={!profileData.jobCategory}
+                onClick={() => setSubSectorDropdownOpen((open) => !open)}
+                className={`${inputClass('subSectors')} flex items-center justify-between gap-3 text-left disabled:cursor-not-allowed disabled:opacity-60`}
+              >
+                <span className={profileData.subSectors.length ? 'truncate text-slate-900' : 'truncate text-slate-500'}>
+                  {profileData.subSectors.length
+                    ? `${profileData.subSectors.length} of 4 selected`
+                    : 'Select up to 4 Sub-sectors'}
+                </span>
+                <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${subSectorDropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {subSectorDropdownOpen && (
+                <div className="absolute left-0 top-full z-50 mt-2 w-full rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="search"
+                      value={subSectorSearch}
+                      onChange={(event) => setSubSectorSearch(event.target.value)}
+                      placeholder="Search..."
+                      aria-label="Search sub-sectors"
+                      className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+                    />
+                  </div>
+                  <div className="mt-2 max-h-60 overflow-y-auto" role="listbox" aria-multiselectable="true">
+                    {filteredSubSectors.map((subSector) => {
+                        const checked = profileData.subSectors.includes(subSector);
+                        const atLimit = profileData.subSectors.length >= 4 && !checked;
+                        return (
+                          <label
+                            key={subSector}
+                            className={`flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-slate-800 hover:bg-blue-50 ${atLimit ? 'cursor-not-allowed opacity-50' : ''}`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              disabled={atLimit}
+                              onChange={() => updateProfileField(
+                                'subSectors',
+                                checked
+                                  ? profileData.subSectors.filter((item) => item !== subSector)
+                                  : [...profileData.subSectors, subSector],
+                              )}
+                              className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <span>{subSector}</span>
+                          </label>
+                        );
+                      })}
+                    {filteredSubSectors.length === 0 && (
+                      <p className="px-2.5 py-3 font-sans text-sm font-medium leading-relaxed text-slate-600">No matching sub-sectors.</p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+            {profileData.subSectors.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {profileData.subSectors.map((subSector) => (
+                  <span key={subSector} className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-800">
+                    {subSector}
+                    <button
+                      type="button"
+                      aria-label={`Remove ${subSector}`}
+                      onClick={() => updateProfileField('subSectors', profileData.subSectors.filter((item) => item !== subSector))}
+                      className="rounded-full text-blue-700 hover:text-blue-950"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <FieldError message={errors.subSectors} />
+          </div>
           <div>
             <label className={labelClass}>Desired Job Title</label>
             <input data-profile-field="desiredPosition" aria-invalid={Boolean(errors.desiredPosition)} type="text" placeholder="e.g. Frontend Developer, Software Engineer..." value={cleanDesiredJobTitle(profileData.preferredJob) || ""} onChange={(e) => updateProfileField('preferredJob', e.target.value)} onBlur={() => validateField('desiredPosition')} className={inputClass('desiredPosition')} />
             <FieldError message={errors.desiredPosition} />
-          </div>
-          <div>
-            <label className={labelClass}>Primary Job Category</label>
-            <SearchableSelect data-profile-field="jobCategory" aria-invalid={Boolean(errors.jobCategory)} value={profileData.jobCategory} onChange={(value) => updateProfileField('jobCategory', value)} onBlur={() => validateField('jobCategory')} options={jobCategories} placeholder="Select a primary job category" className={`${inputClass('jobCategory')} profile-job-preference-select !text-sm`} />
-            <FieldError message={errors.jobCategory} />
           </div>
           <div>
             <label className={labelClass}>Experience Level</label>
@@ -633,25 +763,50 @@ const Profile = ({ userData = {}, onContinue }) => {
             <SearchableSelect value={profileData.educationLevel} onChange={(value) => updateProfileField('educationLevel', value)} options={educationLevels} placeholder="Select education level" className={`${fieldClass} profile-job-preference-select !text-sm`} />
           </div>
           <div className="md:col-span-2 pt-5">
-            <label className={labelClass}>Skills</label>
+            <label className={labelClass}>Skills ({skills.length})</label>
+            {profileData.jobCategory && suggestedSkills.length > 0 && (
+              <div className="mb-4">
+                <p className="mt-2.5 mb-2 font-sans text-sm font-medium leading-relaxed text-slate-600">Suggested skills for {profileData.jobCategory} — click to add:</p>
+                <div className="flex flex-wrap gap-2">
+                  {suggestedSkills.map((skill) => {
+                    const alreadySelected = skills.some((selectedSkill) => selectedSkill.toLowerCase() === skill.toLowerCase());
+                    return (
+                      <button
+                        key={skill}
+                        type="button"
+                        disabled={alreadySelected}
+                        onClick={() => addSkills([skill])}
+                        className={`rounded-lg border px-3 py-1.5 text-xs font-bold transition ${alreadySelected ? 'cursor-default border-slate-200 bg-slate-100 text-slate-600' : 'border-blue-200 bg-blue-50 text-blue-700 hover:border-blue-300 hover:bg-blue-100'}`}
+                      >
+                        {skill}{alreadySelected ? ' Added' : ' +'}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             <div className="mb-3 flex flex-wrap gap-2">
-              {skills.map((skill, index) => (
-                <span key={`${skill}-${index}`} className="flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
+              {skills.map((skill) => (
+                <span key={skill.toLowerCase()} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1 text-sm font-bold text-blue-800">
                   {skill}
+                  <button type="button" onClick={() => handleRemoveSkill(skill)} aria-label={`Remove ${skill}`} className="rounded-full text-blue-600 hover:text-blue-900">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
                 </span>
               ))}
             </div>
-            <div className="flex gap-4">
-              <input data-profile-field="skills" aria-invalid={Boolean(errors.skills)} type="text" placeholder="Add a skill (e.g. React, Accounting)" value={newSkill} onChange={(e) => setNewSkill(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddSkill())} onBlur={() => validateField('skills')} className={`${fieldClass} flex-1`} />
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <input data-profile-field="skills" aria-invalid={Boolean(errors.skills)} type="text" placeholder="Type skills separated by commas, or enter one skill" value={newSkill} onChange={(e) => handleSkillInputChange(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddSkill())} onBlur={() => validateField('skills')} className={`${fieldClass} flex-1`} />
+              <button type="button" onClick={handleAddSkill} className="rounded-xl border border-blue-200 bg-blue-50 px-5 py-3 text-sm font-semibold text-blue-700 transition hover:bg-blue-100">Add</button>
             </div>
             <FieldError message={errors.skills} />
           </div>
 
           <div className="md:col-span-2 pt-5">
-            <label className={labelClass}>Languages <span className="italic font-normal text-slate-500">(Optional)</span></label>
+            <label className={labelClass}>Languages <span className="ml-1.5 text-xs font-medium text-slate-500">(Optional)</span></label>
             <div className="mb-3 flex flex-wrap gap-2">
               {languages.map((lang, index) => (
-                <span key={`${lang}-${index}`} className="flex items-center gap-1.5 rounded-full border border-purple-200 bg-purple-100 px-3 py-1 text-xs font-semibold text-purple-700">
+                <span key={`${lang}-${index}`} className="flex items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 px-3 py-1 text-xs font-bold text-purple-800">
                   {lang}
                 </span>
               ))}
@@ -662,7 +817,7 @@ const Profile = ({ userData = {}, onContinue }) => {
           </div>
 
           <div className="md:col-span-2 pt-5">
-            <label className={labelClass}>Job Type / Employment Type * :</label>
+            <label className={labelClass}>Job Type / Employment Type <span className="ml-0.5 text-rose-500">*</span></label>
             <SearchableSelect
               data-profile-field="jobType"
               aria-invalid={Boolean(errors.jobType)}
@@ -677,7 +832,7 @@ const Profile = ({ userData = {}, onContinue }) => {
           </div>
 
           <div className="md:col-span-2 pt-5">
-            <label className={labelClass}>Professional Bio <span className="italic font-normal text-slate-500">(Optional, max 500 characters)</span></label>
+            <label className={labelClass}>Professional Bio <span className="ml-1.5 text-xs font-medium text-slate-500">(Optional, max 500 characters)</span></label>
             <textarea rows={4} maxLength={500} placeholder="Briefly describe your professional strengths..." value={profileData.bio} onChange={(e) => updateProfileField('bio', e.target.value)} onBlur={() => validateField('bio')} className={`${inputClass('bio')} h-auto`} />
             <div className="mt-1 flex justify-between"><FieldError message={errors.bio} /><span className="text-xs text-slate-400">{profileData.bio.length}/500</span></div>
           </div>
@@ -704,7 +859,7 @@ const Profile = ({ userData = {}, onContinue }) => {
 
       {/* Portfolio Links */}
       <div className="hidden bg-slate-50/90 rounded-2xl border border-slate-200/80 p-5 space-y-3 shadow-sm">
-        <h3 className="text-sm font-bold text-slate-800 border-b pb-2 border-slate-200">Portfolio &amp; Links <span className="italic font-normal text-slate-500">(Optional)</span></h3>
+        <h3 className="text-sm font-bold text-slate-800 border-b pb-2 border-slate-200">Portfolio &amp; Links <span className="ml-1.5 text-xs font-medium text-slate-500">(Optional)</span></h3>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
           <div>
@@ -740,7 +895,7 @@ const Profile = ({ userData = {}, onContinue }) => {
       </div>
       {/* Job Preferences */}
       <div className="hidden space-y-6 rounded-2xl border border-slate-200/80 bg-slate-50/90 p-8 shadow-sm">
-        <h3 className="text-sm font-bold text-slate-800 border-b pb-2 border-slate-200">Job Preferences <span className="italic font-normal text-slate-500">(Optional)</span></h3>
+        <h3 className="text-sm font-bold text-slate-800 border-b pb-2 border-slate-200">Job Preferences <span className="ml-1.5 text-xs font-medium text-slate-500">(Optional)</span></h3>
 
         <div className="grid grid-cols-1 gap-6 text-sm md:grid-cols-2">
           <div>

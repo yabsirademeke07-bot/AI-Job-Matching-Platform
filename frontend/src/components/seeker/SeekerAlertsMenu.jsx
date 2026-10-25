@@ -17,7 +17,7 @@ const relativeTime = (value) => {
 };
 
 const badge = (count) => count > 0 ? (
-  <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-black leading-none text-white ring-2 ring-white">
+  <span className="absolute -top-1 -right-1.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-600 px-1 text-[10px] font-black leading-none text-white shadow-md shadow-rose-500/40 animate-pulse">
     {count > 99 ? '99+' : count}
   </span>
 ) : null;
@@ -52,16 +52,20 @@ export default function SeekerAlertsMenu() {
         setUnreadCount(Number(notificationResponse.data?.unreadCount ?? nextNotifications.filter((item) => !notificationIsRead(item)).length));
         setUnreadMessageCount(Number(messageResponse.data?.unreadCount || 0));
         if (newUnread) setToast(newUnread);
-      } catch {
-        // Keep the last successful counts visible while the API is unavailable.
+      } catch (error) {
+        console.error('Unable to refresh unread alerts:', error);
       }
     };
 
     loadAlerts();
     const intervalId = window.setInterval(loadAlerts, 15000);
+    window.addEventListener('seeker-notifications:updated', loadAlerts);
+    window.addEventListener('seeker-messages:updated', loadAlerts);
     return () => {
       mounted = false;
       window.clearInterval(intervalId);
+      window.removeEventListener('seeker-notifications:updated', loadAlerts);
+      window.removeEventListener('seeker-messages:updated', loadAlerts);
     };
   }, []);
 
@@ -92,8 +96,10 @@ export default function SeekerAlertsMenu() {
     setIsOpen(false);
     try {
       await api.patch(`/seeker/notifications/${notification.id}/read`);
-    } catch {
-      // Navigation still works if the read receipt request temporarily fails.
+    } catch (error) {
+      console.error('Unable to mark notification as read:', error);
+    } finally {
+      window.dispatchEvent(new Event('seeker-notifications:updated'));
     }
 
     const jobId = notification.related_job_id || notification.reference_id;

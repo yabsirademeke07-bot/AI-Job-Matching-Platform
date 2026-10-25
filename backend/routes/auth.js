@@ -1,13 +1,16 @@
 const express = require('express');
+const crypto = require('node:crypto');
 const passport = require('passport');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const db = require('../connection'); // Database Connection Path
 const { validateSignUp } = require('../middleware/validateAuth');
+const { getJwtSecret } = require('../config/jwt');
 const { issueOtp, generateAndSendOtp, deliverOtpEmail } = require('../services/otpService');
+const { notifyAdminEvent } = require('../services/telegramNotifier');
 
 const router = express.Router();
-const ADMIN_EMAILS = new Set(['tekebaaweke32@gmail.com']);
+const ADMIN_EMAILS = new Set(['tekebaaweke32@gmail.com', 'yabsirademeke07@gmail.com']);
 const requireGoogleOAuth = (req, res, next) => {
   if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
     return res.status(503).json({
@@ -20,9 +23,11 @@ const requireGoogleOAuth = (req, res, next) => {
 const resolveEffectiveRole = (role, email) => {
   const targetEmail = String(email || '').trim().toLowerCase();
   if (ADMIN_EMAILS.has(targetEmail)) return 'admin';
-  const value = String(role || 'job_seeker').trim().toLowerCase();
+  const value = String(role || 'job_seeker').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (value === 'superadmin') return 'super_admin';
   return ['super_admin', 'admin', 'employer', 'job_seeker'].includes(value) ? value : 'job_seeker';
 };
+const isDatabaseTrue = (value) => value === true || Number(value) === 1;
 const logOtpRequest = (req) => {
   console.log('🚀 [OTP DEBUG] Received request:', {
     path: req.originalUrl,
@@ -33,7 +38,7 @@ const logOtpRequest = (req) => {
 
 const findLoginUser = async (email) => {
   const [rows] = await db.query(
-    'SELECT id, full_name, email, password, role, is_verified, phone, is_active, last_active_page, last_state_payload FROM users WHERE email = ? LIMIT 1',
+    'SELECT id, full_name, email, password, role, is_verified, phone, is_active, seeker_onboarded, employer_onboarded, last_active_role, last_active_page, last_state_payload FROM users WHERE email = ? LIMIT 1',
     [email]
   );
   return rows[0] || null;
@@ -45,10 +50,17 @@ const getLoginUserDetails = async (user) => {
     [user.id]
   );
   const hasCv = cvRows.length > 0;
-  const { password: ignoredPassword, phone: ignoredPhone, is_active: ignoredActive, ...safeUser } = user;
+  const { password: ignoredPassword, is_active: ignoredActive, ...safeUser } = user;
+  const role = resolveEffectiveRole(user.role, user.email);
   return {
     ...safeUser,
+    role,
+    isAdmin: role === 'admin' || role === 'super_admin',
+    isSuperAdmin: ADMIN_EMAILS.has(String(user.email || '').trim().toLowerCase()),
     has_cv: hasCv,
+    seeker_onboarded: isDatabaseTrue(user.seeker_onboarded),
+    employer_onboarded: isDatabaseTrue(user.employer_onboarded),
+    last_active_role: user.last_active_role || 'seeker',
     onboarding_step: user.role === 'job_seeker' && !hasCv ? 'cv_upload' : null,
   };
 };
@@ -63,6 +75,11 @@ const initiateLoginOtp = async (req, res) => {
     if (!user || !user.is_active) return res.status(404).json({ success: false, message: 'No account found with this email.' });
     if (req.body.password && (!user.password || !(await bcrypt.compare(req.body.password, user.password)))) {
       return res.status(401).json({ success: false, message: 'Invalid email or password.' });
+    }
+    const effectiveRole = resolveEffectiveRole(user.role, user.email);
+    if (effectiveRole !== user.role) {
+      await db.query('UPDATE users SET role = ? WHERE id = ?', [effectiveRole, user.id]);
+      user.role = effectiveRole;
     }
     if (!user.is_verified) {
       const otpResult = await issueOtp({ dbClient: db, email: cleanEmail, phone: user.phone, purpose: 'registration', expiresInMinutes: 1 });
@@ -130,6 +147,79 @@ const initiateLoginOtp = async (req, res) => {
 
 router.post(['/login', '/login-init', '/send-login-otp'], initiateLoginOtp);
 
+router.post('/telegram-sso/exchange', async (req, res) => {
+  const suppliedToken = String(req.body?.token || '').trim();
+  if (!/^[A-Za-z0-9_-]{40,50}$/.test(suppliedToken)) {
+    return res.status(400).json({ success: false, message: 'Invalid or expired admin sign-in link.' });
+  }
+
+  const tokenHash = crypto.createHash('sha256').update(suppliedToken).digest('hex');
+  let connection;
+  try {
+    connection = await db.getConnection();
+    await connection.beginTransaction();
+    const [[tokenRow]] = await connection.execute(
+      `SELECT user_id FROM telegram_admin_sso_tokens
+       WHERE token_hash = ? AND expires_at > NOW() FOR UPDATE`,
+      [tokenHash],
+    );
+    if (!tokenRow) {
+      await connection.rollback();
+      return res.status(401).json({ success: false, message: 'Admin sign-in link expired or already used.' });
+    }
+
+    const [[user]] = await connection.execute(
+      `SELECT id, full_name, email, role, is_active
+       FROM users WHERE id = ? LIMIT 1`,
+      [tokenRow.user_id],
+    );
+    const effectiveRole = resolveEffectiveRole(user?.role, user?.email);
+    if (!user || !user.is_active || !['admin', 'super_admin'].includes(effectiveRole)) {
+      await connection.execute(
+        'DELETE FROM telegram_admin_sso_tokens WHERE token_hash = ?',
+        [tokenHash],
+      );
+      await connection.commit();
+      return res.status(403).json({ success: false, message: 'This account is not authorized for admin access.' });
+    }
+
+    await connection.execute(
+      'DELETE FROM telegram_admin_sso_tokens WHERE token_hash = ?',
+      [tokenHash],
+    );
+    if (user.role !== effectiveRole) {
+      await connection.execute('UPDATE users SET role = ? WHERE id = ?', [effectiveRole, user.id]);
+    }
+    await connection.commit();
+
+    const safeUser = {
+      id: user.id,
+      full_name: user.full_name,
+      fullName: user.full_name,
+      email: user.email,
+      role: 'admin',
+      isAdmin: true,
+      isSuperAdmin: ADMIN_EMAILS.has(String(user.email).trim().toLowerCase()),
+      is_verified: true,
+      isEmailVerified: true,
+      isVerified: true,
+      auth_provider: 'telegram',
+    };
+    const sessionToken = jwt.sign(
+      { id: user.id, email: user.email, role: 'admin', isAdmin: true },
+      getJwtSecret(),
+      { expiresIn: '7d' },
+    );
+    return res.json({ success: true, token: sessionToken, user: safeUser, redirect_to: '/admin/dashboard' });
+  } catch (error) {
+    if (connection) await connection.rollback();
+    console.error('Telegram admin SSO exchange failed:', error);
+    return res.status(500).json({ success: false, message: 'Unable to complete admin sign-in.' });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
 router.post('/verify-login-otp', async (req, res) => {
   logOtpRequest(req);
   const cleanEmail = String(req.body.email || '').trim().toLowerCase();
@@ -184,24 +274,38 @@ router.post('/verify-login-otp', async (req, res) => {
 
     const user = await findLoginUser(cleanEmail);
     if (!user || !user.is_active) return res.status(404).json({ success: false, message: 'No account found with this email.' });
+    const effectiveRole = resolveEffectiveRole(user.role, user.email);
+    if (effectiveRole !== user.role) {
+      await db.query('UPDATE users SET role = ? WHERE id = ?', [effectiveRole, user.id]);
+      user.role = effectiveRole;
+    }
     if (isDevelopmentMasterCode && !user.is_verified) {
       await db.query("UPDATE users SET is_verified = TRUE, auth_status = 'active' WHERE id = ?", [user.id]);
       user.is_verified = true;
     }
     const safeUser = await getLoginUserDetails(user);
+    const isAdmin = ['admin', 'super_admin'].includes(safeUser.role);
+    if (isAdmin && safeUser.last_active_role !== 'admin') {
+      await db.query("UPDATE users SET last_active_role = 'admin' WHERE id = ?", [user.id]);
+      safeUser.last_active_role = 'admin';
+    }
     await db.query(`
       INSERT INTO user_activity_log
         (user_id, activity_type, description, details, ip_address, user_agent)
       VALUES (?, 'login', 'User signed in', ?, ?, ?)
     `, [user.id, JSON.stringify({ recordId: user.id, oldValues: null, newValues: { signedIn: true }, ipAddress: req.ip, userAgent: req.get('user-agent') }), req.ip, req.get('user-agent')]).catch((error) => console.warn('Login audit log skipped:', error.message));
-    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, process.env.JWT_SECRET || 'your_secret_key', { expiresIn: '7d' });
+    const token = jwt.sign(
+      { id: user.id, email: user.email, role: isAdmin ? 'admin' : safeUser.role, isAdmin },
+      getJwtSecret(),
+      { expiresIn: '7d' },
+    );
     return res.json({
       success: true,
       token,
       user: safeUser,
-      requiresRoleSelection: true,
-      onboarding_step: 'role_selection',
-      redirect_to: '/select-role',
+      requiresRoleSelection: !isAdmin,
+      onboarding_step: isAdmin ? null : 'role_selection',
+      redirect_to: isAdmin ? '/admin/dashboard' : '/select-role',
     });
   } catch (error) {
     console.error('❌ [LOGIN OTP VERIFY ERROR]:', error);
@@ -216,10 +320,7 @@ router.post('/verify-login-otp', async (req, res) => {
 // ==========================================
 // 1. የ Nodemailer Email Transporter ማዘጋጀት
 // ==========================================
-router.post('/signup', (req, _res, next) => {
-  logOtpRequest(req);
-  next();
-}, validateSignUp, async (req, res) => {
+router.post('/signup', validateSignUp, async (req, res) => {
   const { fullName, email, password, phone, role } = req.body;
   const selectedRole = ADMIN_EMAILS.has(String(email || '').trim().toLowerCase())
     ? 'admin'
@@ -278,55 +379,31 @@ router.post('/signup', (req, _res, next) => {
       );
 
       targetUserId = result.insertId;
-      console.log(`✨ [NEW USER INSERTED]: Created pending user ${cleanEmail} (ID: ${targetUserId})`);
+      console.log(`✨ [NEW USER INSERTED]: Created unverified user ${cleanEmail} (ID: ${targetUserId})`);
     }
-
-    const otpResult = await generateAndSendOtp({
-      dbClient: connection,
-      email: cleanEmail,
-      phone,
-      purpose: 'registration',
-      recipientName: cleanName,
-      deferEmail: true,
-    });
 
     await connection.commit();
-    try {
-      otpResult.delivery = await deliverOtpEmail(cleanEmail, otpResult.otpCode);
-    } catch (deliveryError) {
-      try {
-        await connection.query('UPDATE otps SET is_used = 1 WHERE id = ?', [otpResult.otpId]);
-      } catch (invalidateError) {
-        console.error('❌ [OTP INVALIDATION ERROR]:', invalidateError);
-        deliveryError.cause = new AggregateError(
-          [deliveryError.cause, invalidateError].filter(Boolean),
-          'Email delivery failed and the undelivered OTP could not be invalidated.'
-        );
-      }
-      deliveryError.status = 502;
-      throw deliveryError;
-    }
+    const otpResult = await issueOtp({
+      dbClient: db,
+      email: cleanEmail,
+      phone: phone || null,
+      purpose: 'registration',
+    });
 
-    const response = {
+    return res.status(201).json({
       success: true,
-      requiresOtp: true,
+      requiresVerification: true,
+      requires_otp: true,
       email: cleanEmail,
       userId: targetUserId,
-      role: selectedRole,
       emailDelivered: otpResult.delivery.email,
       emailError: otpResult.delivery.emailError,
-      message: otpResult.delivery.email
-        ? existingUsers.length > 0
-          ? 'ያልተጠናቀቀ ምዝገባ ተገኝቷል። አዲስ የማረጋገጫ ኮድ ተልኳል።'
-          : 'የማረጋገጫ ኮድ ወደ ኢሜይልዎ ተልኳል! (Verification code sent to your email)'
-        : otpResult.delivery.emailError || 'Account created, but email delivery failed. Check your email settings and resend the verification code.'
-    };
-    if (process.env.NODE_ENV === 'development') response.devOtp = otpResult.otpCode;
-
-    return res.status(existingUsers.length > 0 ? 201 : 201).json(response);
+      ...(process.env.NODE_ENV === 'development' ? { devOtp: otpResult.otpCode } : {}),
+      message: 'Account created. A verification code has been sent to your email.',
+    });
   } catch (error) {
     if (connection) await connection.rollback();
-    console.error('❌ [OTP SIGNUP ERROR]:', error);
+    console.error('Signup Error:', error);
     return res.status(error.status || 500).json({
       success: false,
       error: error.message || 'Server error',
@@ -366,7 +443,11 @@ router.get(
         return res.redirect(`${clientUrl}/login?error=no_user_found`);
       }
 
-      const normalizedRole = String(user.role || 'job_seeker').trim().toLowerCase().replace(/[\s-]+/g, '_');
+      const normalizedRole = resolveEffectiveRole(user.role, user.email);
+      if (normalizedRole !== user.role) {
+        await db.query('UPDATE users SET role = ? WHERE id = ?', [normalizedRole, user.id]);
+        user.role = normalizedRole;
+      }
       const seekerRoles = ['job_seeker', 'seeker', 'jobseeker', 'user', 'employee'];
       const employerRoles = ['employer', 'company', 'recruiter'];
 
@@ -377,7 +458,9 @@ router.get(
       const hasCv = cvRows.length > 0 || Boolean(user.cvFileName || user.resumeName);
       const seekerProfile = profileRows[0];
       const companyProfile = companyRows[0] || householdRows[0];
-      const roleWasSelected = Boolean(user.googleNewUser === false || seekerProfile || companyProfile);
+      const isPermanentAdmin = ADMIN_EMAILS.has(String(user.email).trim().toLowerCase());
+      const isAdmin = ['admin', 'super_admin'].includes(normalizedRole);
+      const roleWasSelected = isAdmin || Boolean(user.googleNewUser === false || seekerProfile || companyProfile);
       const hasProfile = Boolean(
         user.onboardingProfileCompleted ||
         user.profileComplete ||
@@ -385,9 +468,11 @@ router.get(
         (companyProfile && companyProfile.company_name && companyProfile.industry && companyProfile.location && companyProfile.description)
       );
 
-      let redirectStep = 'select_role';
+      let redirectStep = isAdmin ? 'admin/dashboard' : 'select_role';
 
-      if (!roleWasSelected) {
+      if (isAdmin) {
+        redirectStep = 'admin/dashboard';
+      } else if (!roleWasSelected) {
         redirectStep = 'select_role';
       } else if (employerRoles.includes(normalizedRole)) {
         redirectStep = hasProfile ? 'employer/dashboard' : 'employer/onboarding';
@@ -402,8 +487,8 @@ router.get(
       }
 
       const token = jwt.sign(
-        { id: user.id, email: user.email, role: user.role || 'job_seeker' },
-        process.env.JWT_SECRET || 'your_secret_key',
+        { id: user.id, email: user.email, role: isAdmin ? 'admin' : normalizedRole, isAdmin },
+        getJwtSecret(),
         { expiresIn: '7d' }
       );
 
@@ -411,7 +496,9 @@ router.get(
         id: user.id,
         fullName: user.full_name,
         email: user.email,
-        role: user.role || 'job_seeker',
+        role: isAdmin ? 'admin' : normalizedRole,
+        isAdmin,
+        isSuperAdmin: isPermanentAdmin,
         isVerified: true,
         is_verified: true,
         onboardingRoleSelected: roleWasSelected,
@@ -452,7 +539,9 @@ router.post('/verify-otp', async (req, res) => {
     }
 
     const [userRows] = await db.query(
-      `SELECT id, full_name, email, role, is_active, is_verified, last_active_page, last_state_payload
+      `SELECT id, full_name, email, role, is_active, is_verified, phone,
+              seeker_onboarded, employer_onboarded, last_active_role,
+              last_active_page, last_state_payload
        FROM users WHERE email = ? LIMIT 1`,
       [cleanEmail]
     );
@@ -501,8 +590,25 @@ router.post('/verify-otp', async (req, res) => {
     }
 
     const effectiveRole = resolveEffectiveRole(user.role || selectedRole || 'job_seeker', user.email);
-    const finalRole = selectedRole && selectedRole !== user.role ? selectedRole : effectiveRole;
+    const finalRole = ['admin', 'super_admin'].includes(effectiveRole)
+      ? effectiveRole
+      : selectedRole && selectedRole !== user.role
+        ? selectedRole
+        : effectiveRole;
     await db.execute("UPDATE users SET role = ?, is_verified = TRUE, auth_status = 'active' WHERE id = ?", [finalRole, user.id]);
+    if (['admin', 'super_admin'].includes(finalRole)) {
+      await db.execute("UPDATE users SET last_active_role = 'admin' WHERE id = ?", [user.id]);
+      user.last_active_role = 'admin';
+    }
+    if (['employer', 'recruiter'].includes(String(finalRole).toLowerCase())) {
+      try {
+        await notifyAdminEvent('ADMIN_NEW_REGISTRATION', {
+          userId: user.id,
+        });
+      } catch (telegramError) {
+        console.error('Telegram employer registration alert failed:', telegramError.message);
+      }
+    }
 
     const [cvRows] = await db.query(
       'SELECT id, is_active FROM cvs WHERE user_id = ? AND is_active = TRUE LIMIT 1',
@@ -513,14 +619,26 @@ router.post('/verify-otp', async (req, res) => {
       ...user,
       role: finalRole,
       has_cv: cvRows.length > 0,
+      seeker_onboarded: isDatabaseTrue(user.seeker_onboarded),
+      employer_onboarded: isDatabaseTrue(user.employer_onboarded),
+      last_active_role: user.last_active_role || (
+        ['admin', 'super_admin'].includes(finalRole) ? 'admin' : finalRole === 'employer' ? 'employer' : 'seeker'
+      ),
       is_verified: true,
       isEmailVerified: true,
+      isAdmin: finalRole === 'admin' || finalRole === 'super_admin',
+      isSuperAdmin: ADMIN_EMAILS.has(String(user.email).trim().toLowerCase()),
       onboarding_step: finalRole === 'job_seeker' && cvRows.length === 0 ? 'cv_upload' : null,
     };
 
     const token = jwt.sign(
-      { id: user.id, role: finalRole, email: user.email },
-      process.env.JWT_SECRET || 'your_secret_key',
+      {
+        id: user.id,
+        role: ['admin', 'super_admin'].includes(finalRole) ? 'admin' : finalRole,
+        email: user.email,
+        isAdmin: ['admin', 'super_admin'].includes(finalRole),
+      },
+      getJwtSecret(),
       { expiresIn: '7d' }
     );
 
@@ -529,8 +647,9 @@ router.post('/verify-otp', async (req, res) => {
       message: 'OTP verified successfully!',
       token,
       user: hydratedUser,
-      requiresRoleSelection: !finalRole || finalRole === 'pending',
-      onboarding_step: hydratedUser.onboarding_step,
+      requiresRoleSelection: !['admin', 'super_admin'].includes(finalRole) && (!finalRole || finalRole === 'pending'),
+      onboarding_step: ['admin', 'super_admin'].includes(finalRole) ? null : hydratedUser.onboarding_step,
+      redirect_to: ['admin', 'super_admin'].includes(finalRole) ? '/admin/dashboard' : null,
     });
   } catch (error) {
     console.error('❌ [OTP VERIFY ERROR]:', error);
@@ -697,7 +816,7 @@ router.post('/verify-reset-otp', async (req, res) => {
 
     const resetToken = jwt.sign(
       { email, purpose: 'password-reset' },
-      process.env.JWT_SECRET || 'your_secret_key',
+      getJwtSecret(),
       { expiresIn: '30m' }
     );
 
@@ -735,7 +854,7 @@ router.post('/reset-password', async (req, res) => {
   }
 
   try {
-    const decoded = jwt.verify(resetToken, process.env.JWT_SECRET || 'your_secret_key');
+    const decoded = jwt.verify(resetToken, getJwtSecret());
 
     if (!decoded || decoded.purpose !== 'password-reset' || !decoded.email) {
       return res.status(401).json({ success: false, message: 'Your reset session is invalid or expired.' });
@@ -771,11 +890,11 @@ router.post('/reset-password', async (req, res) => {
 // 6. የተጠቃሚውን Role መምረጫ Route (ለ Select Role Page)
 // ==========================================
 router.post(['/select-role', '/set-role'], async (req, res) => {
-  const { userId, email, role, companyName } = req.body;
+  const { userId, email, role: requestedRole, companyName } = req.body;
 
   let connection;
   try {
-    if (!role || !['employer', 'job_seeker'].includes(role)) {
+  if (!requestedRole || !['employer', 'job_seeker'].includes(requestedRole)) {
       return res.status(422).json({ success: false, message: 'እባክዎ ትክክለኛ ሚና ይምረጡ (Please select either Job Seeker or Employer).' });
     }
     if (!userId && !email) {
@@ -785,7 +904,7 @@ router.post(['/select-role', '/set-role'], async (req, res) => {
     connection = await db.getConnection();
     await connection.beginTransaction();
     const [users] = await connection.execute(
-      userId ? 'SELECT id, full_name, email, role, is_verified FROM users WHERE id = ? FOR UPDATE' : 'SELECT id, full_name, email, role, is_verified FROM users WHERE email = ? FOR UPDATE',
+      userId ? 'SELECT id, full_name, email, phone, role, is_verified, seeker_onboarded, employer_onboarded, last_active_role FROM users WHERE id = ? FOR UPDATE' : 'SELECT id, full_name, email, phone, role, is_verified, seeker_onboarded, employer_onboarded, last_active_role FROM users WHERE email = ? FOR UPDATE',
       [userId || String(email).trim().toLowerCase()]
     );
     if (users.length === 0) {
@@ -799,15 +918,23 @@ router.post(['/select-role', '/set-role'], async (req, res) => {
       return res.status(403).json({ success: false, message: 'Please verify your email before selecting a role.' });
     }
 
-    await connection.execute('UPDATE users SET role = ? WHERE id = ?', [role, targetUser.id]);
+    const existingRole = resolveEffectiveRole(targetUser.role, targetUser.email);
+    const role = ['admin', 'super_admin'].includes(existingRole)
+      ? existingRole
+      : resolveEffectiveRole(requestedRole, targetUser.email);
+    await connection.execute('UPDATE users SET role = ?, last_active_role = ? WHERE id = ?', [
+      role,
+      role === 'employer' ? 'employer' : role === 'job_seeker' ? 'seeker' : 'admin',
+      targetUser.id,
+    ]);
 
     if (role === 'employer') {
       await connection.execute(
         `INSERT INTO company_profiles (employer_id, company_name) VALUES (?, ?)
          ON DUPLICATE KEY UPDATE company_name = VALUES(company_name)`,
-        [targetUser.id, companyName?.trim() || `${targetUser.full_name}'s Company`]
+        [targetUser.id, companyName?.trim() || 'Company']
       );
-    } else {
+    } else if (role === 'job_seeker') {
       await connection.execute(
         'INSERT INTO job_seeker_profiles (user_id) VALUES (?) ON DUPLICATE KEY UPDATE user_id = VALUES(user_id)',
         [targetUser.id]
@@ -820,39 +947,72 @@ router.post(['/select-role', '/set-role'], async (req, res) => {
       VALUES (?, 'role_selected', ?, ?, ?, ?)
     `, [targetUser.id, `User selected ${role.replaceAll('_', ' ')} role`, JSON.stringify({ recordId: targetUser.id, oldValues: { role: targetUser.role }, newValues: { role }, ipAddress: req.ip, userAgent: req.get('user-agent') }), req.ip, req.get('user-agent')]).catch((error) => console.warn('Role selection audit log skipped:', error.message));
 
-    let redirect_to = null;
+    let redirect_to = role === 'admin' || role === 'super_admin' ? '/admin/dashboard' : null;
     let onboarding_step = null;
+    let seekerOnboarded = isDatabaseTrue(targetUser.seeker_onboarded);
+    let employerOnboarded = isDatabaseTrue(targetUser.employer_onboarded);
+    let hasCv = false;
     if (role === 'job_seeker') {
       const [cvRows] = await connection.execute('SELECT id FROM cvs WHERE user_id = ? AND is_active = TRUE LIMIT 1', [targetUser.id]);
-      const [profileRows] = await connection.execute('SELECT id, headline, bio, location, city FROM job_seeker_profiles WHERE user_id = ? LIMIT 1', [targetUser.id]);
-      if (cvRows.length === 0) {
-        redirect_to = '/seeker/cv-upload';
-        onboarding_step = 'cv_upload';
-      } else if (!profileRows.length || !profileRows[0].headline || !profileRows[0].bio || !profileRows[0].location || !profileRows[0].city) {
-        redirect_to = '/seeker/personal-info';
-        onboarding_step = 'personal_info';
-      } else {
+      hasCv = cvRows.length > 0;
+      const [profileRows] = await connection.execute('SELECT id, headline, bio, location, city, is_profile_complete, profile_completed, profile_completion_percentage, onboarding_step_completed FROM job_seeker_profiles WHERE user_id = ? LIMIT 1', [targetUser.id]);
+      seekerOnboarded = seekerOnboarded || hasCv || Boolean(
+        profileRows[0] && (
+          isDatabaseTrue(profileRows[0].is_profile_complete)
+          || isDatabaseTrue(profileRows[0].profile_completed)
+          || Number(profileRows[0].profile_completion_percentage) >= 100
+          || profileRows[0].onboarding_step_completed === 'completed'
+        )
+      ) || Boolean(
+        cvRows.length
+        && profileRows[0]?.headline
+        && profileRows[0]?.bio
+        && profileRows[0]?.location
+        && profileRows[0]?.city
+      );
+      if (seekerOnboarded && !isDatabaseTrue(targetUser.seeker_onboarded)) {
+        await connection.execute('UPDATE users SET seeker_onboarded = TRUE WHERE id = ?', [targetUser.id]);
+      }
+      if (seekerOnboarded) {
         redirect_to = '/seeker/dashboard';
         onboarding_step = null;
+      } else {
+        redirect_to = '/onboarding/seeker';
+        onboarding_step = cvRows.length ? 'personal_info' : 'cv_upload';
       }
     } else if (role === 'employer') {
-      const [companyRows] = await connection.execute('SELECT id, company_name, tin_number, trade_license_document FROM employers WHERE user_id = ? OR userId = ? LIMIT 1', [targetUser.id, targetUser.id]);
-      const [householdRows] = await connection.execute('SELECT id, household_name FROM household_employers WHERE user_id = ? LIMIT 1', [targetUser.id]);
+      const [companyRows] = await connection.execute('SELECT id, company_name, industry, headquarters_location, tin_number, trade_license_document FROM employers WHERE user_id = ? OR userId = ? LIMIT 1', [targetUser.id, targetUser.id]);
+      const [householdRows] = await connection.execute('SELECT id, household_name, residence_location FROM household_employers WHERE user_id = ? LIMIT 1', [targetUser.id]);
+      const [companyProfileRows] = await connection.execute('SELECT onboarding_completed FROM company_profiles WHERE employer_id = ? LIMIT 1', [targetUser.id]);
       const employerProfile = companyRows[0] || householdRows[0];
-      if (!employerProfile || (!employerProfile.company_name && !employerProfile.household_name) || (role === 'employer' && !householdRows.length && (!employerProfile.tin_number || !employerProfile.trade_license_document))) {
-        redirect_to = '/employer/onboarding';
-        onboarding_step = 'company_legal';
-      } else {
+      const hasCompanyDetails = Boolean(
+        (employerProfile?.company_name && employerProfile?.industry && employerProfile?.headquarters_location)
+        || (employerProfile?.household_name && employerProfile?.residence_location)
+        || isDatabaseTrue(companyProfileRows[0]?.onboarding_completed),
+      );
+      employerOnboarded = employerOnboarded || hasCompanyDetails;
+      if (employerOnboarded && !isDatabaseTrue(targetUser.employer_onboarded)) {
+        await connection.execute('UPDATE users SET employer_onboarded = TRUE WHERE id = ?', [targetUser.id]);
+      }
+      if (employerOnboarded) {
         redirect_to = '/employer/dashboard';
         onboarding_step = null;
+      } else {
+        redirect_to = '/onboarding/employer';
+        onboarding_step = 'company_legal';
       }
     }
 
     await connection.commit();
 
     const token = jwt.sign(
-      { id: targetUser.id, role, email: targetUser.email },
-      process.env.JWT_SECRET || 'your_secret_key',
+      {
+        id: targetUser.id,
+        role: ['admin', 'super_admin'].includes(role) ? 'admin' : role,
+        email: targetUser.email,
+        isAdmin: ['admin', 'super_admin'].includes(role),
+      },
+      getJwtSecret(),
       { expiresIn: '7d' }
     );
 
@@ -866,6 +1026,13 @@ router.post(['/select-role', '/set-role'], async (req, res) => {
         email: targetUser.email,
         role,
         is_verified: Boolean(targetUser.is_verified),
+        phone: targetUser.phone || null,
+        has_cv: hasCv,
+        seeker_onboarded: seekerOnboarded,
+        employer_onboarded: employerOnboarded,
+        last_active_role: role === 'employer' ? 'employer' : role === 'job_seeker' ? 'seeker' : 'admin',
+        isAdmin: role === 'admin' || role === 'super_admin',
+        isSuperAdmin: ADMIN_EMAILS.has(String(targetUser.email).trim().toLowerCase()),
       },
       token,
       redirect_to,

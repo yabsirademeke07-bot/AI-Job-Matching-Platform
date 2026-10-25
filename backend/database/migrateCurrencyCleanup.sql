@@ -1,0 +1,2 @@
+ALTER TABLE jobs DROP COLUMN IF EXISTS compensation_currency;
+ALTER TABLE jobs MODIFY COLUMN currency VARCHAR(10) DEFAULT 'ETB';

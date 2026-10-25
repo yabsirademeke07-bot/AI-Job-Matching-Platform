@@ -1,6 +1,5 @@
 import { Navigate, useLocation } from 'react-router-dom';
-import { getNextOnboardingStep } from '../utils/applicationFlow';
-import { normalizeRole } from '../utils/authSession';
+import { normalizeRole, resolveUserRole } from '../utils/authSession';
 
 const ProtectedRoute = ({ 
   children, 
@@ -26,8 +25,12 @@ const ProtectedRoute = ({
 
   const { token, user } = getAuthData();
   const rawUserRole = user?.role || user?.userType || '';
-  const userRole = normalizeRole(rawUserRole);
-  const isEmailVerified = user?.isEmailVerified === true || user?.is_verified === true || user?.isVerified === true;
+  const userRole = resolveUserRole(user);
+  const isPermanentAdmin = userRole === 'admin' && (
+    String(user?.email || '').trim().toLowerCase() === 'yabsirademeke07@gmail.com'
+    || String(user?.email || '').trim().toLowerCase() === 'tekebaaweke32@gmail.com'
+  );
+  const isEmailVerified = user?.isEmailVerified === true || user?.is_verified === true || user?.isVerified === true || isPermanentAdmin;
   const isAdminRoute = location.pathname.startsWith('/admin') || location.pathname === '/admin-dashboard';
 
   // 2. ተጠቃሚው ካልገባ ወይም Token/User ከሌለ ወደ Login ይመለስ
@@ -36,15 +39,10 @@ const ProtectedRoute = ({
   }
 
   // Admins always enter the restricted workspace; other roles cannot enter it.
-  if (userRole === 'admin' || userRole === 'super_admin') {
+  if (userRole === 'admin' || userRole === 'super_admin' || isPermanentAdmin) {
     if (!isAdminRoute) return <Navigate to="/admin/dashboard" replace />;
   } else if (isAdminRoute) {
-    const destination = ['employer', 'company', 'recruiter'].includes(userRole)
-      ? '/employer/dashboard'
-      : ['job_seeker', 'seeker', 'jobseeker', 'user', 'employee'].includes(userRole)
-        ? '/seeker/dashboard'
-        : '/login';
-    return <Navigate to={destination} replace />;
+    return <Navigate to="/" replace />;
   }
 
   if (!isEmailVerified) {

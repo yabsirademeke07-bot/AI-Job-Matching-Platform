@@ -126,10 +126,10 @@ const AiMatchResultsPage = ({ jobs = [], candidateProfile = {} }) => {
 
                     <button
                       type="button"
-                      onClick={() => navigate(`/job-details/${job.id}`)}
+                      onClick={() => navigate(`/jobs/${job.id ?? job.jobId ?? job.job_id}/apply`, { state: { job } })}
                       className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-6 py-3 text-xs font-black text-white shadow-lg shadow-blue-500/20 transition hover:bg-blue-700 active:scale-95"
                     >
-                      <span>View Details &amp; Apply</span>
+                      <span>Apply →</span>
                       <ArrowRight className="h-4 w-4" />
                     </button>
                   </div>

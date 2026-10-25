@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Mail, Phone, MapPin } from 'lucide-react';
+import { Mail, Phone, MapPin, Send } from 'lucide-react';
 import logoImage from '../pages/images/logo1.png';
 
 function Footer() {
@@ -31,7 +31,18 @@ function Footer() {
             <p className="max-w-sm text-xs leading-relaxed text-slate-300 md:text-sm">
               An AI-powered job-matching platform connecting people with the right opportunities across every industry—from agriculture and technology to healthcare, business, and beyond.
             </p>
-
+            <div className="flex items-center gap-2 pt-1" aria-label="Social media links">
+              <a
+                href="https://t.me/yabsira_job_matcher_bot"
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Join our Telegram Channel"
+                aria-label="Join our Telegram Channel"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full text-slate-300 transition hover:bg-sky-500/10 hover:text-sky-400"
+              >
+                <Send className="h-5 w-5 text-sky-400" aria-hidden="true" />
+              </a>
+            </div>
           </div>
 
           {/* Quick Links */}

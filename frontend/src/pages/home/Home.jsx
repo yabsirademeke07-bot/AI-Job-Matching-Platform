@@ -1,18 +1,19 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
+import liyuImg from '../images/liyu.jpg';
 import peopleImg from '../images/peoples.jpg';
-import homeImg from '../images/home.jpg';
 import aboutHeroImg from '../images/ab out.jpg';
 import TrustedBy from '../../components/home/TrustedBy';
 import HowItWorksCards from '../../components/HowItWorksCards';
+import { searchJobs } from '../../services/jobService';
 
-const heroImages = [peopleImg, homeImg, aboutHeroImg];
+const heroImages = [liyuImg, peopleImg, aboutHeroImg];
 
 const aiFeatures = [
   ['Semantic Skill Extraction', 'Analyzes real demonstrated expertise rather than relying on exact keyword phrasing.'],
   ['Explainable Match Scoring', 'Delivers transparent compatibility scores breaking down skills, seniority, and preferences.'],
-  ['Automated Requirements Mapping', 'Maps candidate depth directly against nuanced employer job requirements in real-time.'],
+  ['Automated Requirements Mapping', 'Shows how your experience aligns with the skills and qualifications requested for each role.'],
 ];
 
 const seekerBenefits = [
@@ -22,12 +23,6 @@ const seekerBenefits = [
   ['One-Click Easy Apply', 'Apply seamlessly to top companies with complete profile context and zero friction.'],
   ['Unified Application Tracking', 'Monitor your application progress, interview stages, and feedback all in one place.'],
 ];
-const employerPipeline = [
-  ['Post Jobs', 'Publish roles in minutes with AI-assisted requirements and candidate criteria.'],
-  ['AI Candidate Matching & Ranking', 'Instantly surface verified talent ranked by actual skill proficiency.'],
-  ['Application Management & Shortlisting', 'Review curated applicant pools and shortlist top contenders collaboratively.'],
-  ['Interview & Hiring Decisions', 'Schedule interviews, share evaluations, and make confident hires.'],
-];
 const trustPoints = [
   ['AI-Powered Matching', 'Find stronger fit with intelligent skill and requirement analysis that cuts through keyword noise.'],
   ['Faster Hiring & Screening', 'Reduce screening time drastically and move qualified candidates forward sooner.'],
@@ -35,42 +30,31 @@ const trustPoints = [
   ['Secure & Frictionless Workflow', 'Your data and application journey remain fully protected at every single step.'],
 ];
 
-const fallbackJobs = [
-  { id: 'featured-full-stack-engineer', title: 'Senior Full Stack Software Engineer', company: 'EthioFinTech Labs', location: 'Addis Ababa', type: 'Full-time', workplace: 'Hybrid' },
-  { id: 'featured-ai-research-engineer', title: 'AI / LLM Research Engineer', company: 'Technology Company', location: 'Remote', type: 'Full-time', workplace: 'Remote' },
-  { id: 'featured-react-developer', title: 'Frontend React Developer', company: 'Growing Tech Team', location: 'Addis Ababa', type: 'Contract', workplace: 'On-site' },
-];
-
 export default function Home() {
   const navigate = useNavigate();
-  const headline = 'Find Your Dream Tech Job With AI Matching Precision';
-  const [typedHeadline, setTypedHeadline] = useState('');
   const [searchTitle, setSearchTitle] = useState('');
   const [searchError, setSearchError] = useState('');
-  const [publishedJobs] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('employerJobs') || '[]');
-    } catch {
-      return [];
-    }
-  });
-  const allJobs = publishedJobs.length ? publishedJobs : fallbackJobs;
-  const [visibleJobs, setVisibleJobs] = useState(allJobs);
+  const [jobs, setJobs] = useState([]);
+  const [visibleJobs, setVisibleJobs] = useState([]);
+  const [jobsLoading, setJobsLoading] = useState(true);
+  const [jobsError, setJobsError] = useState('');
   const [activeQuery, setActiveQuery] = useState('');
   const [activeHeroImage, setActiveHeroImage] = useState(0);
 
   useEffect(() => {
-    let characterIndex = 0;
-    const timer = window.setInterval(() => {
-      characterIndex += 1;
-      setTypedHeadline(headline.slice(0, characterIndex));
-
-      if (characterIndex >= headline.length) {
-        window.clearInterval(timer);
-      }
-    }, 55);
-
-    return () => window.clearInterval(timer);
+    let active = true;
+    searchJobs()
+      .then((results) => {
+        if (!active) return;
+        setJobs(results);
+        setVisibleJobs(results);
+      })
+      .catch((error) => {
+        if (!active) return;
+        setJobsError(error.response?.data?.message || 'Unable to load current jobs.');
+      })
+      .finally(() => active && setJobsLoading(false));
+    return () => { active = false; };
   }, []);
 
   useEffect(() => {
@@ -89,10 +73,14 @@ export default function Home() {
       setSearchError('Please enter a job title or skill to search.');
       return;
     }
+    if (jobsLoading || jobsError) {
+      setSearchError(jobsError || 'Jobs are still loading. Please try again.');
+      return;
+    }
 
     setSearchError('');
     const normalizedQuery = query.toLowerCase().trim();
-    const matches = allJobs.filter((job) => {
+    const matches = jobs.filter((job) => {
       const company = typeof job.company === 'string' ? job.company : job.company?.name;
       const skills = Array.isArray(job.skills) ? job.skills : [];
       const tags = Array.isArray(job.tags) ? job.tags : [];
@@ -117,26 +105,22 @@ export default function Home() {
     setSearchTitle('');
     setSearchError('');
     setActiveQuery('');
-    setVisibleJobs(allJobs);
+    setVisibleJobs(jobs);
   };
 
   return (
     <div className="min-h-screen bg-white text-slate-800 font-sans">
-      <section className="relative m-0 w-full overflow-hidden bg-slate-50 p-0" aria-label="AI job matching hero">
-        <div className="relative m-0 h-[360px] w-full overflow-hidden bg-slate-50 p-0 sm:h-[440px] md:h-[500px] lg:h-[540px]">
-          {heroImages.map((image, index) => <img key={image} src={image} alt="Team using AI for job matching" className={`absolute inset-0 h-full w-full object-cover object-top transition-opacity duration-1000 ease-in-out ${index === activeHeroImage ? 'opacity-100' : 'opacity-0'}`} />)}
-          <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-gradient-to-b from-slate-900/25 via-slate-800/10 to-slate-900/30" />
-          <div className="absolute inset-x-0 top-4 z-10 px-4 text-center sm:top-6">
-            <div className="mx-auto flex max-w-5xl flex-col items-center">
-              <p className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-white/40 bg-white/15 px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-white shadow-lg backdrop-blur-sm sm:text-xs">
-                <span aria-hidden="true">✨</span>
-                <span>#1 Ethiopian AI-Powered Tech Career Platform</span>
-              </p>
-              <h1 className="min-h-[2.5em] max-w-5xl text-[clamp(2rem,4vw,5rem)] font-black leading-[0.9] tracking-[-0.06em] text-white drop-shadow-[0_8px_28px_rgba(15,23,42,0.45)]">
-                {typedHeadline}
-                {typedHeadline.length < headline.length && <span className="ml-1 text-sky-200" aria-hidden="true">|</span>}
-              </h1>
-            </div>
+      <section className="relative flex min-h-[95vh] w-full flex-col justify-center overflow-hidden bg-slate-900 pb-24 sm:pb-32" aria-label="AI job matching hero">
+        <div className="absolute inset-0">
+          {heroImages.map((image, index) => <img key={image} src={image} alt="Team using AI for job matching" className={`absolute inset-0 h-full w-full object-cover object-center transition-opacity duration-1000 ease-in-out ${index === activeHeroImage ? 'opacity-100' : 'opacity-0'}`} />)}
+        </div>
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/15 via-transparent to-black/20" />
+        <div className="relative z-10 mx-auto flex min-h-[95vh] w-full max-w-[1600px] items-center justify-start px-5 text-left sm:px-8 lg:px-16">
+          <div className="relative w-full max-w-xl lg:w-1/2">
+            <h1 className="animate-in fade-in slide-in-from-bottom-4 text-4xl font-black italic leading-snug tracking-tight drop-shadow-[0_2px_12px_rgba(15,23,42,0.18)] duration-700 ease-out sm:text-5xl lg:text-6xl">
+              <span className="block bg-gradient-to-r from-slate-950 via-blue-950 to-slate-900 bg-clip-text text-transparent">Find Your Dream Tech Job</span>
+              <span className="block bg-gradient-to-r from-blue-600 via-sky-500 to-cyan-500 bg-clip-text text-transparent">With AI Matching Precision</span>
+            </h1>
           </div>
         </div>
       </section>
@@ -203,22 +187,31 @@ export default function Home() {
 
           {activeQuery && <div id="explore-job-results" className="mb-8 flex flex-col items-start justify-between gap-3 rounded-2xl border border-slate-200/80 bg-white px-5 py-4 text-sm shadow-sm sm:flex-row sm:items-center"><p className="font-bold text-slate-700">Showing results for: <span className="text-slate-900">'{activeQuery}'</span> ({visibleJobs.length} {visibleJobs.length === 1 ? 'job' : 'jobs'} found)</p><button type="button" onClick={clearExploreSearch} className="font-extrabold text-[var(--brand-deep)] underline-offset-4 hover:underline">Clear Search</button></div>}
 
-          {activeQuery && visibleJobs.length === 0 ? (
+          {jobsLoading ? (
+            <p role="status" className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-sm font-semibold text-slate-500">Loading current job opportunities...</p>
+          ) : jobsError ? (
+            <p role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 p-10 text-center text-sm font-semibold text-rose-700">{jobsError}</p>
+          ) : activeQuery && visibleJobs.length === 0 ? (
             <div id="explore-job-results" className="rounded-[26px] border border-slate-200/90 bg-white p-10 text-center shadow-[0_16px_36px_-10px_rgba(0,0,0,0.12),0_6px_16px_-4px_rgba(0,0,0,0.06)] sm:p-14">
               <h3 className="text-2xl font-black text-slate-900">No jobs found matching '{activeQuery}'.</h3>
               <button type="button" onClick={() => navigate('/jobs')} className="mt-6 rounded-full bg-blue-600 px-6 py-3 text-sm font-extrabold text-white transition hover:bg-indigo-700">View All Jobs</button>
+            </div>
+          ) : visibleJobs.length === 0 ? (
+            <div className="rounded-[26px] border border-dashed border-slate-300 bg-white p-10 text-center">
+              <h3 className="text-xl font-black text-slate-900">No job opportunities are available right now.</h3>
+              <p className="mt-2 text-sm text-slate-500">Check back later for newly posted jobs.</p>
             </div>
           ) : <div id="explore-job-results" className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
             {visibleJobs.map((job, index) => (
               <article key={job.id || `${job.title}-${index}`} className="card-floating flex flex-col justify-between">
                 <div>
                   <div className="flex items-start justify-end gap-4">
-                    <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-extrabold text-emerald-700">{job.workplace || job.work_mode || 'Hybrid'}</span>
+                    <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-extrabold text-emerald-700">{job.workplace || job.work_mode || 'Work arrangement not specified'}</span>
                   </div>
                   <h3 className="mb-2 mt-7 text-xl font-extrabold text-slate-900">{job.title}</h3>
-                  <p className="font-bold text-slate-600">{typeof job.company === 'string' ? job.company : job.company?.name || 'Verified company'}</p>
+                  <p className="font-bold text-slate-600">{typeof job.company === 'string' ? job.company : job.company?.name || job.company_name || 'Company not provided'}</p>
                   <div className="mt-5 flex flex-wrap gap-x-4 gap-y-2 text-sm text-slate-500">
-                    <span>{job.location || job.locationValue || 'Flexible location'}</span>
+                    <span>{job.location || job.locationValue || 'Location not specified'}</span>
                     {job.salary && <span className="font-bold text-slate-700">{job.salary}</span>}
                   </div>
                 </div>
@@ -243,27 +236,6 @@ export default function Home() {
                 <div key={title} className="relative rounded-2xl border border-slate-200/80 bg-white/90 p-6 transition-all duration-300 hover:border-blue-500/40 hover:bg-white hover:shadow-md sm:p-7">
                   <h3 className="mb-1 text-lg font-bold text-slate-900">{title}</h3>
                   <p className="text-sm leading-6 text-slate-600">{description}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section id="for-employers" className="scroll-mt-20 w-full border-b border-slate-200/80 bg-slate-50 py-24 sm:py-32">
-        <div className="mx-auto grid w-full max-w-[1550px] grid-cols-1 items-center gap-12 px-6 sm:px-10 lg:grid-cols-12 lg:gap-16 lg:px-14">
-          <div className="lg:col-span-5">
-            <p className="mb-3 text-xs font-extrabold uppercase tracking-wider text-blue-600">FOR EMPLOYERS</p>
-            <h2 className="mb-3 text-2xl font-extrabold leading-tight tracking-tight text-slate-900 sm:text-3xl md:text-3xl lg:text-4xl xl:text-[40px]">Hire with a sharper view of talent</h2>
-            <p className="mb-8 max-w-xl text-base leading-relaxed text-slate-600 sm:text-lg">Bring your role, candidates, and hiring decisions into a workspace designed for momentum.</p>
-            <Link to="/employer/post-job" className="inline-flex w-full items-center justify-center rounded-2xl bg-blue-600 px-8 py-4 font-bold text-white shadow-lg transition-all duration-300 hover:bg-blue-700 hover:shadow-blue-500/25 sm:w-auto">Post a Job</Link>
-          </div>
-          <div className="relative lg:col-span-7">
-            <div className="space-y-4">
-              {employerPipeline.map(([title, description]) => (
-                <div key={title} className="relative ml-0 rounded-2xl border border-slate-200/70 bg-white/80 p-6 transition-all duration-300 hover:border-blue-500/40 hover:bg-white hover:shadow-lg">
-                  <h3 className="text-lg font-extrabold text-slate-900">{title}</h3>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
                 </div>
               ))}
             </div>

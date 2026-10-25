@@ -4,7 +4,9 @@ const path = require('path');
 const authMiddleware = require('../middleware/authMiddleware');
 const {
   getProfile, updateProfile, saveProfile, listCollection, addCollectionItem,
-  deleteCollectionItem, getApplications, uploadCv, updatePersonalInfo, updateSkills
+  deleteCollectionItem, getApplications, getApplicationDetails, withdrawApplication,
+  saveApplicationNote, getApplicationInterview, requestInterviewReschedule,
+  uploadCv, updatePersonalInfo, updateSkills, uploadProfileAvatar, removeProfileAvatar
 } = require('../controllers/jobSeekerController');
 
 const router = express.Router();
@@ -16,6 +18,13 @@ const upload = multer({
     callback(null, allowedTypes.includes(file.mimetype));
   },
 });
+const avatarUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 2 * 1024 * 1024 },
+  fileFilter: (_req, file, callback) => {
+    callback(null, ['image/jpeg', 'image/png', 'image/gif'].includes(file.mimetype));
+  },
+});
 
 router.use(authMiddleware);
 router.get('/profile', getProfile);
@@ -24,8 +33,15 @@ router.put('/profile', updateProfile);
 router.post('/profile', updateProfile);
 router.post('/profile/save', saveProfile);
 router.put('/profile/personal', updatePersonalInfo);
+router.post('/profile/avatar', avatarUpload.single('avatar'), uploadProfileAvatar);
+router.delete('/profile/avatar', removeProfileAvatar);
 router.put('/profile/skills', updateSkills);
 router.get('/applications', getApplications);
+router.get('/applications/:applicationId', getApplicationDetails);
+router.post('/applications/:applicationId/withdraw', withdrawApplication);
+router.post('/applications/:applicationId/notes', saveApplicationNote);
+router.get('/applications/:applicationId/interview', getApplicationInterview);
+router.post('/applications/:applicationId/interview/reschedule', requestInterviewReschedule);
 router.post('/upload-cv', upload.single('cv'), uploadCv);
 router.get('/:collection', listCollection);
 router.post('/:collection', addCollectionItem);

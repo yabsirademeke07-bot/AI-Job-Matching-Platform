@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { ArrowLeft, LogIn, Send, Sparkles, Loader2, Bookmark, ShieldAlert } from "lucide-react";
+import { ArrowLeft, LogIn, Send, Bookmark, ShieldAlert } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import UniversalReportModal from "../components/UniversalReportModal";
-import { beginApplication, getApplicationForJob, getApplyButtonState, getApplicationRequirements } from "../utils/applicationFlow";
+import { beginApplication, getApplyButtonState } from "../utils/applicationFlow";
 import api from "../services/api";
 
 const getReadableDescription = (description) => {
@@ -49,79 +49,55 @@ const JobDetails = () => {
   const [job, setJob] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [matchLoading] = useState(false);
-  const [matchScore] = useState(null);
   const [isSaved, setIsSaved] = useState(false);
+  const [existingApplication, setExistingApplication] = useState(null);
   const [reportOpen, setReportOpen] = useState(false);
   const [platformReportOpen, setPlatformReportOpen] = useState(false);
 
-  // Job details are passed from Explore Jobs and kept in frontend storage.
   useEffect(() => {
     if (!id) return;
-
-    try {
-      const previewJob = location.state?.job || JSON.parse(localStorage.getItem("jobDetailsPreview") || "null");
-      if (previewJob && String(previewJob.id) === String(id)) {
-        // The route preview is external browser state, so sync it into the page model.
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setJob(previewJob);
-        api.get(`/jobs/${id}`).then(({ data }) => setJob((current) => ({ ...current, ...(data.job || {}) }))).catch(() => {});
-      } else {
-        api.get(`/jobs/${id}`).then(({ data }) => setJob(data.job)).catch(() => setError("The job details could not be loaded."));
-      }
-    } catch {
-      setError("The job details could not be loaded.");
-    } finally {
-      setLoading(false);
-      try {
-        const savedJobs = JSON.parse(localStorage.getItem("savedJobs") || "[]");
-        setIsSaved(savedJobs.some((savedId) => String(savedId) === String(id)));
-      } catch {
-        setIsSaved(false);
-      }
-    }
-  }, [id, location.state]);
+    let active = true;
+    setLoading(true);
+    setError(null);
+    api.get(`/jobs/${encodeURIComponent(id)}`)
+      .then(async ({ data }) => {
+        if (!active) return;
+        setJob(data?.job || null);
+        if (isAuthenticated && !isEmployerRole) {
+          const [applicationsResponse, savedJobsResponse] = await Promise.all([
+            api.get('/seeker/applications'),
+            api.get('/seeker/saved-jobs'),
+          ]);
+          if (!active) return;
+          const applications = Array.isArray(applicationsResponse.data?.applications) ? applicationsResponse.data.applications : [];
+          const savedJobs = Array.isArray(savedJobsResponse.data?.jobs) ? savedJobsResponse.data.jobs : [];
+          setExistingApplication(applications.find((application) => String(application.job_id || application.jobId) === String(id)) || null);
+          setIsSaved(savedJobs.some((savedJob) => String(savedJob.id) === String(id)));
+        }
+      })
+      .catch((requestError) => {
+        if (active) setError(requestError.response?.data?.message || "The job details could not be loaded.");
+      })
+      .finally(() => active && setLoading(false));
+    return () => { active = false; };
+  }, [id, isAuthenticated, isEmployerRole]);
 
   // 2. Click Logic for "Login to Apply" / "Apply Now"
   const handleApplyAction = () => {
-    beginApplication(id, job, navigate, { isAuthenticated: currentAuthentication, role: currentUser.role, sourcePage: location.pathname, returnPath: location.pathname });
+    beginApplication(id, navigate, { isAuthenticated: currentAuthentication, role: currentUser.role, sourcePage: location.pathname, returnPath: location.pathname });
   };
 
-  const handleCheckMatch = () => {
-    if (!isAuthenticated) {
-      navigate("/login", {
-        state: { from: location.pathname, intent: "match", jobId: id },
-      });
-      return;
-    }
-
-    navigate("/match-results", {
-      state: { sourceJob: job },
-    });
-  };
-
-  const handleToggleSave = () => {
+  const handleToggleSave = async () => {
     try {
-      const savedJobs = JSON.parse(localStorage.getItem("savedJobs") || "[]");
-      const nextSavedJobs = isSaved
-        ? savedJobs.filter((savedId) => String(savedId) !== String(id))
-        : [...savedJobs, id];
-      localStorage.setItem("savedJobs", JSON.stringify(nextSavedJobs));
+      if (isSaved) await api.delete(`/seeker/saved-jobs/${encodeURIComponent(id)}`);
+      else await api.post('/seeker/saved-jobs', { jobId: id });
       setIsSaved(!isSaved);
-    } catch {
-      setIsSaved(!isSaved);
+    } catch (requestError) {
+      setError(requestError.response?.data?.message || 'Unable to update saved jobs.');
     }
   };
 
-  const matchBreakdown = job && {
-    overall: job.matchBreakdown?.overall ?? job.matchScore ?? job.score ?? job.aiMatchScore,
-    skills: job.matchBreakdown?.skills ?? job.skillsMatch,
-    experience: job.matchBreakdown?.experience ?? job.experienceMatch,
-    matchingSkills: job.matchBreakdown?.matchingSkills ?? job.matchingSkills ?? [],
-    skillsToImprove: job.matchBreakdown?.skillsToImprove ?? job.skillsToImprove ?? [],
-  };
   const backLabel = "Back to Find Jobs";
-  const existingApplication = job && getApplicationForJob(id);
   const applyButtonState = getApplyButtonState({
     isAuthenticated: currentAuthentication,
     role: currentUser.role,
@@ -137,27 +113,46 @@ const JobDetails = () => {
   const responsibilities = asList(job?.responsibilities);
   const requirements = asList(job?.requirements);
   const skills = asList(job?.skills || job?.requiredSkills || job?.tags);
+  const subSectors = asList(job?.sub_sectors || job?.subSectors);
   const benefits = asList(job?.benefits);
   const companyName = job?.companyName || job?.company || "Company";
   const department = job?.department || job?.sector;
   const jobType = job?.jobType || job?.job_type || job?.type;
   const workMode = job?.workMode || job?.work_mode || job?.workplace;
   const locationName = job?.location || job?.locationValue;
+  const workAddress = job?.work_address || job?.workAddress;
+  const educationValue = job?.education_qualification || job?.required_education || job?.education;
+  const educationQualification = ({
+    any: "Any / Not Specified",
+    "high-school": "High School",
+    associate: "Diploma / TVET",
+    bachelor: "Bachelor's Degree",
+    master: "Master's Degree",
+    phd: "PhD / Doctorate",
+  }[String(educationValue || "").toLowerCase()] || educationValue);
+  const applicantNeed = job?.applicants_needed || job?.applicantsNeeded;
+  const vacancies = job?.vacancies;
   const salaryCurrency = job?.currency || "";
   const salaryMinimum = job?.minSalary || job?.salaryMin;
   const salaryMaximum = job?.maxSalary || job?.salaryMax;
-  const salary = job?.salary || [salaryCurrency, salaryMinimum && `${salaryMinimum} –`, salaryMaximum]
-    .filter(Boolean)
-    .join(" ") || "Not specified";
+  const salaryType = job?.salary_type || ({
+    hourly: "Hourly",
+    monthly: "Monthly",
+    yearly: "Yearly",
+  }[String(job?.salary_period || "").toLowerCase()] || "");
+  const salaryTypeLabel = salaryType === "Fixed" ? "Fixed / Project-based" : salaryType;
+  const salaryBase = job?.salary || [
+    [salaryCurrency, salaryMinimum && `${salaryMinimum} –`, salaryMaximum].filter(Boolean).join(" "),
+  ].filter(Boolean).join(" ") || (salaryType === "Negotiable" ? "Negotiable" : "Not specified");
+  const salary = salaryTypeLabel && salaryBase !== "Negotiable" && !String(salaryBase).toLowerCase().includes(salaryType.toLowerCase())
+    ? `${salaryBase} (${salaryTypeLabel})`
+    : salaryBase;
   const deadlineLabel = job?.deadline || job?.application_deadline || job?.deadlineDate;
   const formattedDeadline = deadlineLabel
     ? new Date(deadlineLabel).toString() !== "Invalid Date"
       ? new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric" }).format(new Date(deadlineLabel))
       : deadlineLabel
     : "Not specified";
-  const applicationRequirements = getApplicationRequirements();
-  const canShowMatch = isAuthenticated && applicationRequirements.hasResume && applicationRequirements.profileCompleted;
-  const matchValue = canShowMatch ? matchBreakdown?.overall : null;
   const postedDate = job?.postedAt || job?.postedDate;
 
   if (loading) {
@@ -192,7 +187,6 @@ const JobDetails = () => {
         <div className="grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
           <div className="min-w-0 bg-white pb-6">
             <header className="border-b border-slate-200 pb-8">
-              <p className="text-sm font-bold text-[#0871D1]">{jobType || "Job opportunity"}</p>
               <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-900 sm:text-4xl">{job.title}</h1>
               <p className="mt-3 text-lg font-semibold text-slate-700">{companyName}</p>
               <p className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-sm font-medium text-slate-500">
@@ -203,23 +197,41 @@ const JobDetails = () => {
               {postedDate && <p className="mt-3 text-sm text-slate-500">Posted {postedDate}</p>}
             </header>
 
-            <section className="border-b border-slate-200 py-8" aria-labelledby="job-overview-heading">
-              <h2 id="job-overview-heading" className="text-xl font-black text-slate-900">Job Overview</h2>
-              <dl className="mt-6 grid gap-x-8 gap-y-5 text-sm sm:grid-cols-2">
+            <section className="py-8" aria-labelledby="job-overview-heading">
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                <h2 id="job-overview-heading" className="text-xl font-black text-slate-900">Job Overview</h2>
+                <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
                 {[
-                  ["Department", department],
+                  ["Industry / Sector", department],
                   ["Employment Type", jobType],
                   ["Work Mode", workMode],
                   ["Location", locationName],
+                  ["Work Address", workAddress],
                   ["Salary", salary],
+                  ["Education Qualification", educationQualification],
+                  ["Positions Available", vacancies ? `${vacancies} ${Number(vacancies) === 1 ? "position" : "positions"}` : null],
+                  ["Applicants Needed", applicantNeed],
                   ["Application Deadline", formattedDeadline],
                 ].filter(([, value]) => value).map(([label, value]) => (
-                  <div key={label}>
+                  <div key={label} className="rounded-xl border border-slate-100 bg-slate-50/70 p-4">
                     <dt className="font-semibold text-slate-500">{label}</dt>
                     <dd className="mt-1 font-bold text-slate-900">{value}</dd>
                   </div>
                 ))}
-              </dl>
+                </dl>
+                {subSectors.length > 0 && (
+                  <div className="mt-5 border-t border-slate-200 pt-4">
+                    <h3 className="text-sm font-semibold text-slate-500">Sub-sectors</h3>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {subSectors.map((subSector) => (
+                        <span key={subSector} className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-800">
+                          {subSector}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             </section>
 
             <section className="py-8 rounded-2xl border border-slate-100 bg-gradient-to-br from-[#f0f7fc]/50 via-white to-[#eaf4fb]/30 p-6" aria-labelledby="description-heading">
@@ -304,28 +316,6 @@ const JobDetails = () => {
               : <button type="button" onClick={handleApplyAction} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-[#0871D1] px-5 py-3.5 font-bold text-white shadow-sm transition hover:bg-[#075EAE]">
                 {applyButtonState.key === "login" ? <LogIn size={18} /> : <Send size={18} />}{applyButtonState.label}
               </button>}
-            </div>
-
-            <div className="mt-5 rounded-2xl border border-slate-200 bg-[#F4F7FA] p-6">
-              <h2 className="text-lg font-black text-slate-900">AI Match</h2>
-              {matchValue != null ? <>
-                <p className="mt-3 text-4xl font-black text-[#0871D1]">{matchValue}%</p>
-                <p className="mt-1 text-sm font-semibold text-slate-500">AI Match Score</p>
-                <p className="mt-3 text-sm leading-6 text-slate-600">Your skills and profile are a strong match for this position.</p>
-                {matchBreakdown.matchingSkills.length > 0 && <div className="mt-4 border-t border-slate-100 pt-4">
-                  <p className="text-sm font-bold text-slate-700">Matching Skills</p>
-                  <p className="mt-1 text-sm leading-6 text-slate-600">{matchBreakdown.matchingSkills.join(" • ")}</p>
-                </div>}
-                {matchBreakdown.skillsToImprove.length > 0 && <div className="mt-3">
-                  <p className="text-sm font-bold text-slate-700">Skills to Improve</p>
-                  <p className="mt-1 text-sm leading-6 text-slate-600">{matchBreakdown.skillsToImprove.join(" • ")}</p>
-                </div>}
-              </> : <>
-                <p className="mt-3 text-sm leading-6 text-slate-600">{isAuthenticated ? "Check your profile against this role." : "Sign in to see your personalized match."}</p>
-                <button type="button" onClick={handleCheckMatch} disabled={matchLoading} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[#0871D1] px-4 py-3 font-bold text-white transition hover:bg-[#075EAE] disabled:opacity-70">
-                  {matchLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}{matchLoading ? "Checking..." : isAuthenticated ? "Check Your Match" : "Sign In to Continue"}
-                </button>
-              </>}
             </div>
 
             {!isExpired && !existingApplication && <button type="button" onClick={handleToggleSave} className={`mt-5 flex w-full items-center justify-center gap-2 rounded-xl border px-5 py-3 text-sm font-bold transition ${isSaved ? "border-[#0871D1] bg-[#EAF3FF] text-[#075EAE]" : "border-slate-300 bg-white text-slate-700 hover:border-[#0871D1] hover:text-[#075EAE]"}`}>

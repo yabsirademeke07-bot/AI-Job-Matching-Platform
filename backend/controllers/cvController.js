@@ -1,13 +1,33 @@
 const fs = require('fs/promises');
 const path = require('path');
+const { randomUUID } = require('crypto');
 const db = require('../config/db');
-const { extractText, classifyAndExtract, calculateScores, calculateJobMatches, validateCvContent, CV_CONTENT_ERROR } = require('../services/cvAnalysisService');
+const { extractText, classifyAndExtract, calculateScores, calculateJobMatches, calculateAtsMatchWithGemini, validateCvContent, CV_CONTENT_ERROR } = require('../services/cvAnalysisService');
 
 const INVALID_CV_MESSAGE = 'We could not identify enough CV content. Please upload a readable resume with your name or contact details and work history, projects, internships, or education.';
 const SUCCESS_MESSAGE = 'Your CV was analyzed successfully.';
+const CV_UPLOAD_DIRECTORY = path.join(__dirname, '..', 'uploads', 'cvs');
 
 async function removeFile(file) {
-  if (file?.path) await fs.unlink(file.path).catch(() => {});
+  if (file?.path) {
+    await fs.unlink(file.path).catch((error) => {
+      if (error.code !== 'ENOENT') console.warn('Unable to remove temporary CV upload:', error.message);
+    });
+  }
+}
+
+async function persistUploadedFile(file) {
+  if (file.path && file.filename) return file.path;
+  if (!Buffer.isBuffer(file.buffer)) throw new Error('The uploaded CV file buffer is unavailable.');
+
+  const extension = path.extname(file.originalname).toLowerCase();
+  const filename = `${randomUUID()}${extension}`;
+  const filePath = path.join(CV_UPLOAD_DIRECTORY, filename);
+  await fs.mkdir(CV_UPLOAD_DIRECTORY, { recursive: true });
+  await fs.writeFile(filePath, file.buffer, { flag: 'wx' });
+  file.filename = filename;
+  file.path = filePath;
+  return filePath;
 }
 
 async function syncExtractedProfile(connection, userId, extracted, parsedText, fileUrl) {
@@ -59,64 +79,149 @@ async function syncExtractedProfile(connection, userId, extracted, parsedText, f
   await connection.execute(
     `UPDATE users
      SET full_name = COALESCE(NULLIF(?, ''), full_name),
-         email = COALESCE(NULLIF(?, ''), email),
          phone = COALESCE(NULLIF(?, ''), phone),
          cv_url = ?,
          cv_status = 'uploaded',
          onboarding_step_completed = 'manual_profile'
      WHERE id = ?`,
-    [fullName, extracted.email || '', extracted.phone || '', fileUrl, userId]
+    [fullName, extracted.phone || '', fileUrl, userId]
   );
 }
 
-async function getPublishedJobMatches(candidate) {
-  const [jobs] = await db.execute(
-    `SELECT j.id, j.title, j.company_name,
-            COALESCE(cp.company_name, j.company_name, u.full_name, 'Company') AS employer_name,
-            j.description, j.category, j.job_type, j.experience_level, j.location,
-            j.work_mode, j.salary_min, j.salary_max, j.currency, j.is_negotiable,
-            j.is_salary_negotiable, j.benefits, j.vacancies, j.required_skills,
-            j.required_education, j.min_experience, j.years_of_experience_min,
-            j.application_deadline, j.created_at
-     FROM jobs j
-     JOIN users u ON u.id = j.employer_id
-     LEFT JOIN company_profiles cp ON cp.employer_id = j.employer_id
-     WHERE LOWER(j.status) IN ('published', 'active')
-       AND j.approval_status = 'approved'
-     ORDER BY j.created_at DESC`
-  );
-  if (!jobs.length) return [];
+const DEFAULT_JOB_PROFILE = {
+  id: null,
+  title: 'General job profile',
+  sector: 'General',
+  required_skills: '',
+  education_qualification: 'any',
+  experience_level: 'entry-level',
+};
 
-  const [requiredSkills] = await db.query(
-    'SELECT job_id, skill_name FROM job_required_skills WHERE job_id IN (?) ORDER BY id',
-    [jobs.map((job) => job.id)]
-  );
-  const skillsByJob = new Map();
-  requiredSkills.forEach(({ job_id, skill_name }) => {
-    const skills = skillsByJob.get(job_id) || [];
-    skills.push(skill_name);
-    skillsByJob.set(job_id, skills);
-  });
+function getFallbackJobMatches(candidate, reason) {
+  return calculateJobMatches(candidate, [{
+    ...DEFAULT_JOB_PROFILE,
+    is_fallback: true,
+    fallback_reason: reason,
+  }]);
+}
 
-  return calculateJobMatches(candidate, jobs.map((job) => ({
-    ...job,
-    company_name: job.employer_name,
-    additional_required_skills: skillsByJob.get(job.id) || [],
-  })));
+async function getPublishedJobMatches(candidate, requestedJobId) {
+  const jobId = requestedJobId === undefined || requestedJobId === null || requestedJobId === ''
+    ? null
+    : Number(requestedJobId);
+  if (jobId !== null && (!Number.isSafeInteger(jobId) || jobId < 1)) {
+    return getFallbackJobMatches(candidate, 'invalid_job_id');
+  }
+
+  try {
+    if (jobId !== null) {
+      const [jobs] = await db.execute(
+        `SELECT id, title, sector, required_skills, education_qualification, experience_level
+         FROM jobs
+         WHERE id = ?
+         LIMIT 1`,
+        [jobId]
+      );
+      if (!jobs[0]) return getFallbackJobMatches(candidate, 'job_not_found');
+      let job = jobs[0];
+      try {
+        const [skillRows] = await db.execute(
+          'SELECT skill_name FROM job_required_skills WHERE job_id = ? ORDER BY id',
+          [jobId]
+        );
+        job = { ...job, additional_required_skills: skillRows.map(({ skill_name }) => skill_name) };
+      } catch (error) {
+        console.warn('Additional job skills unavailable for Gemini CV matching:', error.code || error.message);
+      }
+      const atsMatch = await calculateAtsMatchWithGemini(candidate, job, candidate.rawText || candidate.rawCvText);
+      return [{
+        ...job,
+        required_skills: [...atsMatch.matchedSkills, ...atsMatch.missingSkills],
+        matched_skills: atsMatch.matchedSkills,
+        missing_skills: atsMatch.missingSkills,
+        match_breakdown: atsMatch.breakdown,
+        match_score: atsMatch.score,
+        ats_provider: atsMatch.provider || 'evidence-based',
+      }];
+    }
+
+    const [jobs] = await db.execute(
+      `SELECT j.id, j.title, j.company_name,
+              COALESCE(
+                NULLIF(NULLIF(j.company_name, ''), CONCAT(u.full_name, CHAR(39), 's Company')),
+                NULLIF(NULLIF(cp.company_name, ''), CONCAT(u.full_name, CHAR(39), 's Company')),
+                'Company'
+              ) AS employer_name,
+              j.description, j.sector AS category, j.job_type, j.experience_level, j.location,
+              j.work_mode, j.salary_min, j.salary_max, j.currency, j.salary_period, j.is_salary_negotiable,
+              j.benefits, j.vacancies, j.required_skills, j.education_qualification, j.deadline, j.created_at
+       FROM jobs j
+       JOIN users u ON u.id = j.employer_id
+       LEFT JOIN company_profiles cp ON cp.employer_id = j.employer_id
+       WHERE j.status = 'active'
+         AND j.approval_status = 'approved'
+         AND j.is_approved = TRUE
+         AND j.is_active = TRUE
+         AND (j.deadline IS NULL OR j.deadline >= CURDATE())
+         AND (j.scheduled_date IS NULL OR j.scheduled_date <= NOW())
+       ORDER BY j.created_at DESC`
+    );
+    if (!jobs.length) return [];
+
+    let requiredSkills = [];
+    try {
+      [requiredSkills] = await db.query(
+        'SELECT job_id, skill_name FROM job_required_skills WHERE job_id IN (?) ORDER BY id',
+        [jobs.map((job) => job.id)]
+      );
+    } catch (error) {
+      console.warn('Additional job skills unavailable for CV matching:', error.code || error.message);
+    }
+    const skillsByJob = new Map();
+    requiredSkills.forEach(({ job_id, skill_name }) => {
+      const skills = skillsByJob.get(job_id) || [];
+      skills.push(skill_name);
+      skillsByJob.set(job_id, skills);
+    });
+
+    return calculateJobMatches(candidate, jobs.map((job) => ({
+      ...job,
+      company_name: job.employer_name,
+      additional_required_skills: skillsByJob.get(job.id) || [],
+    })));
+  } catch (error) {
+    console.warn('Job lookup failed during CV analysis; using default job profile:', error.code || error.message);
+    return getFallbackJobMatches(candidate, 'job_lookup_failed');
+  }
 }
 
 async function uploadAndAnalyze(req, res) {
-  if (!req.file) return res.status(400).json({ success: false, message: 'Please select a PDF, DOCX, or image CV file.' });
+  if (!req.file) {
+    console.error('[CV Error] No file received in req.files or req.file');
+    return res.status(400).json({ success: false, message: 'Please select a PDF, DOCX, or image CV file.' });
+  }
+  let phase = 'account verification';
   try {
+    const [users] = await db.execute('SELECT id FROM users WHERE id = ? LIMIT 1', [req.user.id]);
+    if (!users[0]) {
+      return res.status(401).json({ success: false, message: 'Your sign-in session is no longer valid. Please sign in again and upload your CV.' });
+    }
+
+    phase = 'PDF and document text extraction';
     const parsedText = await extractText(req.file);
+    if (path.extname(req.file.originalname).toLowerCase() === '.pdf') {
+      console.log('Extracted PDF text length:', parsedText?.length);
+    }
     if (!parsedText || !parsedText.trim()) {
       await removeFile(req.file);
       return res.status(422).json({ success: false, is_cv: false, message: 'We could not read any text from this document. Please upload a text-based PDF or DOCX, not a blank or image-only file.' });
     }
 
+    phase = 'CV content validation';
     const contentValidation = validateCvContent(parsedText);
     let extracted;
     if (contentValidation.valid || contentValidation.needsAiReview) {
+      phase = 'candidate profile extraction';
       extracted = await classifyAndExtract(contentValidation.normalizedText);
     }
     if (!contentValidation.valid && !contentValidation.needsAiReview) {
@@ -168,8 +273,10 @@ async function uploadAndAnalyze(req, res) {
       });
     }
 
+    phase = 'job matching';
     const scores = calculateScores(extracted, parsedText);
-    const jobMatches = await getPublishedJobMatches(extracted);
+    const requestedJobId = req.body?.jobId || req.query?.jobId;
+    const jobMatches = await getPublishedJobMatches(extracted, requestedJobId);
     const bestMatch = jobMatches.find((job) => job.match_score !== null);
     scores.matchScore = bestMatch?.match_score ?? null;
     scores.bestMatchJob = bestMatch ? {
@@ -178,7 +285,10 @@ async function uploadAndAnalyze(req, res) {
       company_name: bestMatch.company_name,
     } : null;
     const analyzedData = { ...extracted, ...scores, jobMatches };
+    phase = 'uploaded CV file persistence';
+    await persistUploadedFile(req.file);
     const fileUrl = `/uploads/cvs/${path.basename(req.file.filename)}`;
+    phase = 'CV database persistence';
     const connection = await db.getConnection();
     let cvId;
     try {
@@ -208,11 +318,20 @@ async function uploadAndAnalyze(req, res) {
   } catch (error) {
     await removeFile(req.file);
     const databaseUnavailable = ['ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND'].includes(error.code);
-    const status = error.statusCode || (databaseUnavailable ? 503 : 500);
-    const message = databaseUnavailable
-      ? 'The database is unavailable. Start the configured MySQL server and try again.'
-      : status === 500 ? 'Unable to analyze your CV.' : error.message;
-    console.error('CV upload and analysis failed:', error.code || status, error.message);
+    const expiredAccount = ['ER_NO_REFERENCED_ROW', 'ER_NO_REFERENCED_ROW_2'].includes(error.code);
+    const status = error.statusCode || (expiredAccount ? 401 : databaseUnavailable ? 503 : 500);
+    const message = expiredAccount
+      ? 'Your sign-in session is no longer valid. Please sign in again and upload your CV.'
+      : databaseUnavailable
+        ? 'The database is unavailable. Start the configured MySQL server and try again.'
+        : status === 500 ? 'Unable to analyze your CV.' : error.message;
+    console.error('CV upload and analysis failed:', {
+      phase,
+      status,
+      code: error.code || null,
+      message: error.message,
+      stack: error.stack,
+    });
     return res.status(status).json({ success: false, message });
   }
 }

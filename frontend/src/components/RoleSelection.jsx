@@ -2,6 +2,7 @@
 import { useNavigate } from "react-router-dom";
 import { UserCheck, Building2, Check, ArrowRight, Sparkles } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import API from "../services/api";
 
 const RoleSelection = () => {
   const navigate = useNavigate();
@@ -10,9 +11,8 @@ const RoleSelection = () => {
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const API_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000/api";
-
   const handleRoleCardSelect = (roleToSubmit) => {
+    if (isSubmitting) return;
     setSelectedRole(roleToSubmit);
     setError("");
     handleRoleSubmit(roleToSubmit);
@@ -23,7 +23,7 @@ const RoleSelection = () => {
     const existingUser = storedUser ? JSON.parse(storedUser) : {};
     const email = String(existingUser?.email || '').trim().toLowerCase();
 
-    if (email === 'tekebaaweke32@gmail.com') {
+    if (['tekebaaweke32@gmail.com', 'yabsirademeke07@gmail.com'].includes(email)) {
       const adminUser = {
         ...existingUser,
         role: 'admin',
@@ -50,30 +50,45 @@ const RoleSelection = () => {
     }
 
     const normalizedRole = role === "seeker" ? "job_seeker" : role;
-    const storedUser = localStorage.getItem("user");
-    const existingUser = storedUser ? JSON.parse(storedUser) : {};
-    const updatedUser = {
-      ...existingUser,
-      role: normalizedRole,
-      userType: normalizedRole,
-      onboardingRoleSelected: true,
-      is_verified: existingUser.is_verified ?? existingUser.isVerified ?? true,
-    };
-    const token = localStorage.getItem("token");
+    setIsSubmitting(true);
+    try {
+      const storedUser = localStorage.getItem("user");
+      const existingUser = storedUser ? JSON.parse(storedUser) : null;
+      const userId = existingUser?.id || existingUser?.userId;
+      if (!userId) throw new Error("Your account session is missing. Please sign in again.");
 
-    console.log("--> Navigating with Role:", normalizedRole);
-    localStorage.setItem("user", JSON.stringify(updatedUser));
-    setSession({ token, user: updatedUser });
-    navigate(normalizedRole === "employer" ? "/employer/onboarding" : "/seeker/cv-upload", { replace: true });
+      const { data } = await API.post("/auth/select-role", {
+        userId,
+        role: normalizedRole,
+      });
+      if (!data?.success || !data.user || !data.token) {
+        throw new Error(data?.message || "Unable to save your account type.");
+      }
 
-    // Persist the role in the background; navigation must not depend on this request.
-    const userId = existingUser.id || existingUser.userId;
-    if (userId && token) {
-      fetch(`${API_URL.replace(/\/$/, "")}/auth/select-role`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ userId, role: normalizedRole }),
-      }).catch((error) => console.warn("Background role persistence failed:", error.message));
+      const updatedUser = {
+        ...existingUser,
+        ...data.user,
+        role: normalizedRole,
+        userType: normalizedRole,
+        onboardingRoleSelected: true,
+        is_verified: data.user.is_verified ?? existingUser?.is_verified ?? existingUser?.isVerified ?? true,
+        isEmailVerified: true,
+      };
+      setSession({ token: data.token, user: updatedUser });
+      if (
+        normalizedRole === "job_seeker" &&
+        (data.user.seeker_onboarded === true || data.user.has_cv === true)
+      ) {
+        console.log("[Smart Routing] Returning Job Seeker detected. Skipping onboarding!");
+        navigate("/dashboard", { replace: true });
+        return;
+      }
+      console.log("[Smart Routing] New Job Seeker detected. Proceeding to onboarding.");
+      navigate(data.redirect_to || (normalizedRole === "employer" ? "/onboarding/employer" : "/onboarding/seeker"), { replace: true });
+    } catch (submitError) {
+      console.error("Role selection failed:", submitError);
+      setError(submitError.response?.data?.message || submitError.message || "Unable to save your account type. Please try again.");
+      setIsSubmitting(false);
     }
   };
 
@@ -123,6 +138,11 @@ const RoleSelection = () => {
 
           {/* Right: Role Cards */}
           <div className="lg:col-span-7">
+            {error && (
+              <p role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                {error}
+              </p>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
               {/* Job Seeker Card */}

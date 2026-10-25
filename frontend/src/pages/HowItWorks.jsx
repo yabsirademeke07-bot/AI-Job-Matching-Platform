@@ -32,7 +32,6 @@ import {
   X,
 } from 'lucide-react';
 import matchingTeamImage from './images/peoples.jpg';
-import seekerWorkflowImage from './images/images.jpg';
 import platformLogoImage from './images/logo.jpg';
 import api from '../services/api';
 
@@ -306,7 +305,6 @@ function Illustration({ type }) {
 
 export default function HowItWorks() {
   const navigate = useNavigate();
-  const [audience, setAudience] = useState('seekers');
   const [activeSlide, setActiveSlide] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
   const [activeInteraction, setActiveInteraction] = useState(null);
@@ -325,7 +323,7 @@ export default function HowItWorks() {
     let isActive = true;
     setStepsLoading(true);
     setStepsError('');
-    api.get('/how-it-works', { params: { audience } })
+    api.get('/how-it-works', { params: { audience: 'seekers' } })
       .then(({ data }) => {
         if (!isActive) return;
         setDatabaseSteps(data.steps.map((step) => ({
@@ -341,7 +339,7 @@ export default function HowItWorks() {
         if (isActive) setStepsLoading(false);
       });
     return () => { isActive = false; };
-  }, [audience]);
+  }, []);
 
   const addSkill = () => {
     const nextSkill = skillInput.trim();
@@ -377,11 +375,6 @@ export default function HowItWorks() {
     openInteraction(step.type);
   };
 
-  const openProfileSetup = () => {
-    const profilePath = '/seeker/personal-info';
-    navigate(localStorage.getItem('token') ? profilePath : '/login', localStorage.getItem('token') ? undefined : { state: { from: profilePath } });
-  };
-
   useEffect(() => {
     if (!isPlaying) return undefined;
     const interval = window.setInterval(() => {
@@ -400,11 +393,7 @@ export default function HowItWorks() {
           <div className="max-w-xl">
             <div className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white px-4 py-2 text-xs font-bold tracking-[0.18em] text-blue-700 shadow-sm"><Sparkles className="h-4 w-4" /> HOW IT WORKS</div>
             <h1 className="mt-7 text-2xl font-black leading-[1.1] tracking-tight text-slate-950 sm:text-3xl lg:text-4xl">How <span className="text-blue-600">JobMatch AI</span> Works</h1>
-            <p className="mt-6 max-w-lg text-base leading-8 text-slate-600 sm:text-lg">Discover talent, match with precision, and move toward the right opportunity with a workflow built around people.</p>
-            <div className="mt-8 inline-flex self-start rounded-2xl border border-slate-200 bg-white p-1.5 shadow-lg shadow-blue-100/60">
-              <button type="button" onClick={() => setAudience('seekers')} className={`rounded-xl px-4 py-2.5 text-sm font-bold transition sm:px-6 ${audience === 'seekers' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/25' : 'text-slate-600 hover:bg-slate-50'}`}>For Job Seekers</button>
-              <button type="button" onClick={() => setAudience('employers')} className={`rounded-xl px-4 py-2.5 text-sm font-bold transition sm:px-6 ${audience === 'employers' ? 'bg-blue-600 text-white shadow-md shadow-blue-500/25' : 'text-slate-600 hover:bg-slate-50'}`}>For Employers</button>
-            </div>
+            <p className="mt-6 max-w-lg text-base leading-8 text-slate-600 sm:text-lg">Explore relevant opportunities, understand your match, and move confidently through your job search.</p>
           </div>
 
           <div className="relative mx-auto w-full max-w-2xl">
@@ -426,47 +415,6 @@ export default function HowItWorks() {
         </div>
 
         <div className="mx-auto max-w-6xl">
-          {/* For Job Seekers - Card Layout */}
-          {audience === '__legacy_seekers__' && (
-            <div>
-              <div className="mx-auto grid max-w-6xl gap-1 md:grid-cols-2 xl:grid-cols-4">
-                <article onClick={() => navigate('/signup')} role="link" tabIndex={0} onKeyDown={(event) => event.key === 'Enter' && navigate('/signup')} className="min-h-[200px] cursor-pointer rounded-2xl border border-blue-100 bg-white p-4 shadow-lg shadow-slate-200/50 transition hover:-translate-y-1 hover:shadow-xl">
-                  <h3 className="text-lg font-black tracking-tight text-slate-900">Create an Account</h3>
-                  <p className="mt-2 text-sm leading-5 text-slate-600">Sign up with your name, email, and password to start your personalized job search.</p>
-                </article>
-                <article onClick={openProfileSetup} role="link" tabIndex={0} onKeyDown={(event) => event.key === 'Enter' && openProfileSetup()} className="min-h-[200px] cursor-pointer rounded-2xl border border-blue-100 bg-white p-4 shadow-lg shadow-slate-200/50 transition hover:-translate-y-1 hover:shadow-xl">
-                  <h3 className="text-lg font-black tracking-tight text-slate-900">Complete Your Profile</h3>
-                  <p className="mt-2 text-sm leading-5 text-slate-600">Add your personal information, skills, work experience, education, and CV.</p>
-                </article>
-                <article onClick={() => navigate('/match-results')} role="link" tabIndex={0} onKeyDown={(event) => event.key === 'Enter' && navigate('/match-results')} className="min-h-[200px] cursor-pointer rounded-2xl border border-blue-100 bg-white p-4 shadow-lg shadow-slate-200/50 transition hover:-translate-y-1 hover:shadow-xl">
-                  <h3 className="text-lg font-black tracking-tight text-slate-900">AI Analyzes Your Profile</h3>
-                  <p className="mt-2 text-sm leading-5 text-slate-600">AI compares your skills, experience, and education with job requirements.</p>
-                </article>
-                <article onClick={() => navigate('/match-results')} role="link" tabIndex={0} onKeyDown={(event) => event.key === 'Enter' && navigate('/match-results')} className="min-h-[200px] cursor-pointer rounded-2xl border border-blue-100 bg-white p-4 shadow-lg shadow-slate-200/50 transition hover:-translate-y-1 hover:shadow-xl">
-                  <h3 className="text-lg font-black tracking-tight text-slate-900">Find Matching Jobs</h3>
-                  <p className="mt-2 text-sm leading-5 text-slate-600">Browse opportunities selected for your goals, skills, location, and work style.</p>
-                </article>
-                <article onClick={() => navigate('/match-score-details')} role="link" tabIndex={0} onKeyDown={(event) => event.key === 'Enter' && navigate('/match-score-details')} className="min-h-[200px] cursor-pointer rounded-2xl border border-blue-100 bg-white p-4 shadow-lg shadow-slate-200/50 transition hover:-translate-y-1 hover:shadow-xl md:col-span-2 xl:col-span-1">
-                  <h3 className="text-lg font-black tracking-tight text-slate-900">View Your Match Score</h3>
-                  <p className="mt-2 text-sm leading-5 text-slate-600">Understand the skills, experience, and education behind every match score.</p>
-                </article>
-                <article onClick={() => openInteraction('apply')} className="min-h-[200px] cursor-pointer rounded-2xl border border-blue-100 bg-white p-4 shadow-lg shadow-slate-200/50 transition hover:-translate-y-1 hover:shadow-xl">
-                  <h3 className="text-lg font-black tracking-tight text-slate-900">Apply for a Job</h3>
-                  <p className="mt-2 text-sm leading-5 text-slate-600">Review the role and submit your application with your profile and CV.</p>
-                  <Link to="/explore-jobs" onClick={(event) => event.stopPropagation()} className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-blue-700">Explore jobs <ArrowRight className="h-3 w-3" /></Link>
-                </article>
-                <article onClick={() => openInteraction('track')} className="min-h-[200px] cursor-pointer rounded-2xl border border-blue-100 bg-white p-4 shadow-lg shadow-slate-200/50 transition hover:-translate-y-1 hover:shadow-xl md:col-span-2 xl:col-span-1">
-                  <h3 className="text-lg font-black tracking-tight text-slate-900">Track Your Application</h3>
-                  <p className="mt-2 text-sm leading-5 text-slate-600">Follow progress from Applied to Under Review, Shortlisted, Interview, and Hired.</p>
-                  <Link to="/applications" onClick={(event) => event.stopPropagation()} className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-blue-700">My applications <ArrowRight className="h-3 w-3" /></Link>
-                </article>
-                <div className="min-h-[200px] overflow-hidden rounded-2xl border border-blue-100 bg-white shadow-lg shadow-slate-200/50">
-                  <img src={seekerWorkflowImage} alt="Professional job seeker working with a laptop" className="h-full min-h-[200px] w-full object-cover" />
-                </div>
-              </div>
-            </div>
-          )}
-
           {stepsLoading && <p className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500">Loading workflow steps...</p>}
           {stepsError && <p className="rounded-2xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">{stepsError}</p>}
           {!stepsLoading && !stepsError && (
@@ -484,19 +432,6 @@ export default function HowItWorks() {
             </div>
           )}
 
-          {/* For Employers & Admins - Traditional Grid Layout */}
-          {audience === '__legacy_employers__' && (
-            <div>
-              <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-                {steps.map((step) => (
-                  <button type="button" onClick={() => handleStepAction(step)} key={step.number} className="min-h-[125px] cursor-pointer rounded-2xl border border-blue-100 bg-white p-3 text-left shadow-sm transition hover:-translate-y-1 hover:border-blue-300 hover:shadow-lg">
-                    <h2 className="text-lg font-black tracking-tight text-slate-900">{step.title}</h2>
-                    <p className="mt-1.5 text-sm leading-5 text-slate-600">{step.description}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       </section>
 
@@ -504,7 +439,7 @@ export default function HowItWorks() {
         <div className="mx-auto max-w-6xl"><div className="mx-auto max-w-2xl text-center"><p className="text-xs font-black uppercase tracking-[0.2em] text-indigo-600">Built around you</p><h2 className="mt-3 text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">A smarter way to move forward</h2></div><div className="mt-10 grid items-stretch gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.8fr)]"><div className="grid gap-4 sm:grid-cols-2">{pillars.map(({ title, description }) => <button type="button" onClick={() => openInteraction(`pillar-${title}`)} key={title} className="rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:shadow-lg"><h3 className="font-black text-slate-900">{title}</h3><p className="mt-2 text-sm leading-6 text-slate-600">{description}</p><span className="mt-4 block text-xs font-bold text-indigo-600">View system details</span></button>)}</div><div className="flex h-full w-full"><img src={platformLogoImage} alt="AI-powered job matching platform" className="h-64 w-full rounded-2xl object-cover lg:h-full" /></div></div></div>
       </section>
 
-      <section className="px-4 py-16 sm:px-6 lg:px-8 lg:py-24"><div className="brand-cta relative mx-auto max-w-6xl overflow-hidden rounded-[2rem] px-6 py-12 text-white shadow-2xl sm:px-12 lg:px-16"><div className="pointer-events-none absolute -right-8 -top-10 text-white/10"><Rocket className="h-56 w-56 rotate-12" /></div><div className="relative max-w-2xl"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15"><Rocket className="h-6 w-6" /></div><h2 className="mt-6 text-3xl font-black tracking-tight sm:text-4xl">Ready to experience smarter job matching?</h2><p className="mt-4 max-w-xl text-white/85">Join thousands of job seekers and employers using JobMatch AI.</p><div className="mt-8 flex flex-wrap gap-3"><Link to="/find-jobs" className="inline-flex items-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-bold brand-text transition hover:bg-[#eaf4fb]">Find Jobs <ArrowRight className="h-4 w-4" /></Link><Link to="/company" className="inline-flex items-center gap-2 rounded-xl border border-white/40 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/10">Post a Job <Send className="h-4 w-4" /></Link></div></div></div></section>
+      <section className="px-4 py-16 sm:px-6 lg:px-8 lg:py-24"><div className="brand-cta relative mx-auto max-w-6xl overflow-hidden rounded-[2rem] px-6 py-12 text-white shadow-2xl sm:px-12 lg:px-16"><div className="pointer-events-none absolute -right-8 -top-10 text-white/10"><Rocket className="h-56 w-56 rotate-12" /></div><div className="relative max-w-2xl"><div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15"><Rocket className="h-6 w-6" /></div><h2 className="mt-6 text-3xl font-black tracking-tight sm:text-4xl">Ready to experience smarter job matching?</h2><p className="mt-4 max-w-xl text-white/85">Explore opportunities and build your next career step with JobMatch AI.</p><div className="mt-8 flex flex-wrap gap-3"><Link to="/find-jobs" className="inline-flex items-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-bold brand-text transition hover:bg-[#eaf4fb]">Find Jobs <ArrowRight className="h-4 w-4" /></Link></div></div></div></section>
 
       {activeInteraction && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/45 p-4 sm:items-center" onClick={() => setActiveInteraction(null)}>

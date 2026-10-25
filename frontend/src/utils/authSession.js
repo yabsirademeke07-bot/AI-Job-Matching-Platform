@@ -2,11 +2,29 @@ const ACTIVE_USER_KEY = 'user';
 const ACTIVE_TOKEN_KEY = 'token';
 const ACCOUNTS_KEY = 'frontendAuthAccounts';
 
-const ADMIN_EMAILS = new Set(['tekebaaweke32@gmail.com']);
+const ADMIN_EMAILS = new Set(['tekebaaweke32@gmail.com', 'yabsirademeke07@gmail.com']);
+
+export const isPermanentAdmin = (user) =>
+  ADMIN_EMAILS.has(String(user?.email || '').trim().toLowerCase());
+
+export const normalizePermanentAdmin = (user) => {
+  if (!user || !isPermanentAdmin(user)) return user;
+  return {
+    ...user,
+    role: 'admin',
+    userType: 'admin',
+    isAdmin: true,
+    isSuperAdmin: true,
+    is_verified: true,
+    isEmailVerified: true,
+    isVerified: true,
+  };
+};
 
 export const normalizeRole = (role) => {
   const value = String(role || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
   if (value === 'admin') return 'admin';
+  if (value === 'superadmin') return 'super_admin';
   return value;
 };
 
@@ -18,7 +36,12 @@ export const resolveUserRole = (user) => {
 
 export const readStoredUser = () => {
   try {
-    return JSON.parse(localStorage.getItem(ACTIVE_USER_KEY) || 'null');
+    const user = normalizePermanentAdmin(JSON.parse(localStorage.getItem(ACTIVE_USER_KEY) || 'null'));
+    if (user && isPermanentAdmin(user)) {
+      localStorage.setItem(ACTIVE_USER_KEY, JSON.stringify(user));
+      localStorage.setItem('currentUser', JSON.stringify(user));
+    }
+    return user;
   } catch {
     return null;
   }
@@ -53,7 +76,6 @@ export const clearUserWorkspace = () => {
     'cvUploaded',
     'lastAnalyzedCvId',
     'savedJobs',
-    'mockApplications',
     'pendingApplication',
     'pendingApplicationJob',
   ].forEach((key) => localStorage.removeItem(key));
@@ -79,6 +101,7 @@ export const getUserDestination = (user) => {
     );
 
     if (!role || role === 'pending') return '/select-role';
+    if (user?.seeker_onboarded === true || user?.has_cv === true || user?.onboardingCvUploaded === true) return '/dashboard';
     if (user?.has_cv === false || user?.onboarding_step === 'cv_upload' || user?.onboardingCvUploaded === false || (!user?.onboardingCvUploaded && !hasResume)) return '/seeker/cv-upload';
     if (user?.onboardingProfileCompleted === false || (!user?.onboardingProfileCompleted && !hasProfile)) return '/seeker/personal-info';
 
@@ -91,13 +114,14 @@ export const getUserDestination = (user) => {
 export const persistSession = ({ token, user }) => {
   if (token) localStorage.setItem(ACTIVE_TOKEN_KEY, token);
   if (user) {
-    localStorage.setItem(ACTIVE_USER_KEY, JSON.stringify(user));
-    localStorage.setItem('currentUser', JSON.stringify(user));
-    saveAccount(user);
+    const normalizedUser = normalizePermanentAdmin(user);
+    localStorage.setItem(ACTIVE_USER_KEY, JSON.stringify(normalizedUser));
+    localStorage.setItem('currentUser', JSON.stringify(normalizedUser));
+    saveAccount(normalizedUser);
   }
 };
 
 export const clearActiveSession = () => {
   [ACTIVE_TOKEN_KEY, ACTIVE_USER_KEY, 'currentUser', 'job_matching_auth_user', 'hasEnteredDashboard'].forEach((key) => localStorage.removeItem(key));
-  ['token', 'user'].forEach((key) => sessionStorage.removeItem(key));
+  ['token', 'user', 'adminAccessToken'].forEach((key) => sessionStorage.removeItem(key));
 };
